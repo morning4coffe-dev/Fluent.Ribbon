@@ -1,0 +1,36 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:RibbonContextualTabGroup">
+        <Setter Property="Background" Value="{ThemeResource RibbonAccentBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:RibbonContextualTabGroup">
+                    <Border
+                        x:Name="RootBorder"
+                        Background="{TemplateBinding Background}"
+                        Padding="{TemplateBinding Padding}"
+                        CornerRadius="2"
+                        Visibility="{TemplateBinding InnerVisibility}">
+                        <TextBlock
+                            Text="{TemplateBinding Header}"
+                            Foreground="{TemplateBinding Foreground}"
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            TextTrimming="CharacterEllipsis"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

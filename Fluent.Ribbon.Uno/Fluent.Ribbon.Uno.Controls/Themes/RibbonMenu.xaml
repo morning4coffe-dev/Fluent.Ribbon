@@ -1,0 +1,25 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:RibbonMenu">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:RibbonMenu">
+                    <Border
+                        Background="{ThemeResource RibbonContentBrush}"
+                        BorderBrush="{ThemeResource RibbonBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="2">
+                        <StackPanel
+                            x:Name="PART_ItemsPanel"
+                            Orientation="Vertical" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

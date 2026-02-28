@@ -1,0 +1,10 @@
+{
+  "background_color": "#ffffff",
+  "description": "Fluent.Ribbon.Uno.Showcase",
+  "display": "standalone",
+  "name": "Fluent.Ribbon.Uno.Showcase",
+  "short_name": "Fluent.Ribbon.Uno.Showcase",
+  "start_url": "/index.html",
+  "theme_color": "#ffffff",
+  "scope": "/"
+}

@@ -1,0 +1,54 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:StartScreen">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:StartScreen">
+                    <Grid x:Name="RootGrid" IsHitTestVisible="{TemplateBinding IsOpen}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="OpenStates">
+                                <VisualState x:Name="Closed">
+                                    <VisualState.Setters>
+                                        <Setter Target="StartScreenPopup.IsOpen" Value="False" />
+                                        <Setter Target="RootGrid.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Open">
+                                    <VisualState.Setters>
+                                        <Setter Target="StartScreenPopup.IsOpen" Value="True" />
+                                        <Setter Target="RootGrid.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Popup x:Name="StartScreenPopup" IsOpen="{TemplateBinding IsOpen}">
+                            <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                                  Width="{Binding ActualWidth, ElementName=RootGrid}"
+                                  Height="{Binding ActualHeight, ElementName=RootGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="{TemplateBinding LeftPaneWidth}" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left Pane -->
+                                <Border Background="{ThemeResource RibbonBackstageBackgroundBrush}" Padding="20">
+                                    <ContentPresenter x:Name="PART_LeftPane" Content="{TemplateBinding LeftPaneContent}" />
+                                </Border>
+
+                                <!-- Right Pane -->
+                                <Border Grid.Column="1" Padding="40">
+                                    <ContentPresenter x:Name="PART_RightPane" Content="{TemplateBinding Content}" />
+                                </Border>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

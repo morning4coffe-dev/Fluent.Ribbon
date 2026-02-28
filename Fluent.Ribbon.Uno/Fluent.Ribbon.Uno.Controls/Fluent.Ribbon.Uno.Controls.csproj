@@ -1,0 +1,59 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-ios;net10.0-android;net10.0-windows10.0.26100;net10.0-browserwasm;net10.0-desktop</TargetFrameworks>
+    <UnoSingleProject>true</UnoSingleProject>
+    <OutputType>Library</OutputType>
+    <!-- Ensures the .xr.xml files are generated in a proper layout folder -->
+    <GenerateLibraryLayout>true</GenerateLibraryLayout>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Fluent</RootNamespace>
+    <AssemblyName>Fluent.Ribbon.Uno</AssemblyName>
+
+    <!-- Package Info -->
+    <PackageId>Fluent.Ribbon.Uno</PackageId>
+    <Description>Cross-platform Ribbon UI controls for Uno Platform, inspired by Fluent.Ribbon for WPF</Description>
+    <Authors>Fluent.Ribbon Contributors</Authors>
+    <PackageTags>ribbon;fluent;uno;uno-platform;winui;cross-platform;controls</PackageTags>
+
+    <!--
+      UnoFeatures let's you quickly add and manage implicit package references based on the features you want to use.
+      https://aka.platform.uno/singleproject-features
+    -->
+    
+    <UnoFeatures>
+      SkiaRenderer;
+    </UnoFeatures>
+    <!-- Ensure this Uno library is not affected by repository-wide WPF/WinForms settings -->
+    <UseWpf>false</UseWpf>
+    <UseWindowsForms>false</UseWindowsForms>
+    <!-- Disable Roslyn analyzers during build for the Uno port project to avoid StyleCop/WpfAnalyzers errors -->
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+    <!-- Disable strong-name signing since Uno Platform assemblies are not signed -->
+    <SignAssembly>false</SignAssembly>
+    <PublicSign>false</PublicSign>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+    <!--
+    If you encounter this error message:
+
+      error NETSDK1148: A referenced assembly was compiled using a newer version of Microsoft.Windows.SDK.NET.dll.
+      Please update to a newer .NET SDK in order to reference this assembly.
+
+    This means that the two packages below must be aligned with the "build" version number of
+    the "Microsoft.Windows.SDK.BuildTools" package above, and the "revision" version number
+    must be the highest found in https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref.
+    -->
+    <!-- <FrameworkReference Update="Microsoft.Windows.SDK.NET.Ref" RuntimeFrameworkVersion="10.0.22621.28" />
+    <FrameworkReference Update="Microsoft.Windows.SDK.NET.Ref" TargetingPackVersion="10.0.22621.28" /> -->
+  </ItemGroup>
+  <!-- Exclude repository-wide shared WPF assembly attributes not applicable to Uno projects -->
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <None Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <!-- Remove GitVersion.MsBuild inherited from Directory.build.props as it doesn't work with Uno SDK projects -->
+    <PackageReference Remove="GitVersion.MsBuild" />
+  </ItemGroup>
+</Project>

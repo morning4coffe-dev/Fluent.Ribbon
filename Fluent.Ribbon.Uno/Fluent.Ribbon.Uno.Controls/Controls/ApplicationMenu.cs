@@ -1,0 +1,277 @@
+namespace Fluent;
+
+/// <summary>
+/// Represents the application menu (File menu) with a two-pane layout.
+/// The left pane contains menu items and the right pane shows additional content.
+/// This is the classic "big button" file menu that appeared in Office 2007/2010.
+/// </summary>
+[ContentProperty(Name = nameof(Items))]
+[TemplatePart(Name = PART_Button, Type = typeof(Button))]
+public partial class ApplicationMenu : Control
+{
+    private const string PART_Button = "PART_Button";
+
+    private Button? _button;
+    private Flyout? _flyout;
+
+    #region Dependency Properties
+
+    /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
+    public static readonly DependencyProperty HeaderProperty =
+        DependencyProperty.Register(
+            nameof(Header),
+            typeof(object),
+            typeof(ApplicationMenu),
+            new PropertyMetadata("File"));
+
+    /// <summary>
+    /// Gets or sets the header text displayed on the application menu button.
+    /// </summary>
+    public object? Header
+    {
+        get => GetValue(HeaderProperty);
+        set => SetValue(HeaderProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
+    public static readonly DependencyProperty ItemsProperty =
+        DependencyProperty.Register(
+            nameof(Items),
+            typeof(ObservableCollection<UIElement>),
+            typeof(ApplicationMenu),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets the collection of menu items in the left pane.
+    /// </summary>
+    public ObservableCollection<UIElement> Items
+    {
+        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        private set => SetValue(ItemsProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="RightPaneContent"/> dependency property.</summary>
+    public static readonly DependencyProperty RightPaneContentProperty =
+        DependencyProperty.Register(
+            nameof(RightPaneContent),
+            typeof(object),
+            typeof(ApplicationMenu),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets or sets the content displayed in the right pane.
+    /// </summary>
+    public object? RightPaneContent
+    {
+        get => GetValue(RightPaneContentProperty);
+        set => SetValue(RightPaneContentProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="RightPaneWidth"/> dependency property.</summary>
+    public static readonly DependencyProperty RightPaneWidthProperty =
+        DependencyProperty.Register(
+            nameof(RightPaneWidth),
+            typeof(double),
+            typeof(ApplicationMenu),
+            new PropertyMetadata(300.0));
+
+    /// <summary>
+    /// Gets or sets the width of the right pane.
+    /// </summary>
+    public double RightPaneWidth
+    {
+        get => (double)GetValue(RightPaneWidthProperty);
+        set => SetValue(RightPaneWidthProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="FooterPaneContent"/> dependency property.</summary>
+    public static readonly DependencyProperty FooterPaneContentProperty =
+        DependencyProperty.Register(
+            nameof(FooterPaneContent),
+            typeof(object),
+            typeof(ApplicationMenu),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets or sets the content displayed in the footer pane.
+    /// </summary>
+    public object? FooterPaneContent
+    {
+        get => GetValue(FooterPaneContentProperty);
+        set => SetValue(FooterPaneContentProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="IsDropDownOpen"/> dependency property.</summary>
+    public static readonly DependencyProperty IsDropDownOpenProperty =
+        DependencyProperty.Register(
+            nameof(IsDropDownOpen),
+            typeof(bool),
+            typeof(ApplicationMenu),
+            new PropertyMetadata(false));
+
+    /// <summary>
+    /// Gets or sets whether the dropdown is open.
+    /// </summary>
+    public bool IsDropDownOpen
+    {
+        get => (bool)GetValue(IsDropDownOpenProperty);
+        set => SetValue(IsDropDownOpenProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="IconGlyph"/> dependency property.</summary>
+    public static readonly DependencyProperty IconGlyphProperty =
+        DependencyProperty.Register(
+            nameof(IconGlyph),
+            typeof(string),
+            typeof(ApplicationMenu),
+            new PropertyMetadata(string.Empty));
+
+    /// <summary>
+    /// Gets or sets the icon glyph for the menu button.
+    /// </summary>
+    public string IconGlyph
+    {
+        get => (string)GetValue(IconGlyphProperty);
+        set => SetValue(IconGlyphProperty, value);
+    }
+
+    #endregion
+
+    #region Constructor
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ApplicationMenu"/> class.
+    /// </summary>
+    public ApplicationMenu()
+    {
+        DefaultStyleKey = typeof(ApplicationMenu);
+        Items = new ObservableCollection<UIElement>();
+    }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        if (_button is not null)
+        {
+            _button.Click -= OnButtonClick;
+        }
+
+        _button = GetTemplateChild(PART_Button) as Button;
+
+        if (_button is not null)
+        {
+            _button.Click += OnButtonClick;
+        }
+    }
+
+    #endregion
+
+    #region Methods
+
+    private void OnButtonClick(object sender, RoutedEventArgs e)
+    {
+        ShowDropDown();
+    }
+
+    private void ShowDropDown()
+    {
+        // Build the two-pane dropdown content
+        var rootPanel = new Grid { MinWidth = 400 };
+        rootPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        rootPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var mainPanel = new Grid();
+        mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        // Left pane — menu items
+        var leftPane = new StackPanel { MinWidth = 200 };
+        foreach (var item in Items)
+        {
+            // Reparent items into the flyout
+            if (item is FrameworkElement fe && fe.Parent is Panel panel)
+            {
+                panel.Children.Remove(item);
+            }
+
+            leftPane.Children.Add(item);
+        }
+
+        Grid.SetColumn(leftPane, 0);
+        mainPanel.Children.Add(leftPane);
+
+        // Right pane — additional content
+        if (RightPaneContent is not null)
+        {
+            mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) }); // separator
+            mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(RightPaneWidth) });
+
+            var separator = new Rectangle
+            {
+                Width = 1,
+                VerticalAlignment = VerticalAlignment.Stretch,
+            };
+            Grid.SetColumn(separator, 1);
+            mainPanel.Children.Add(separator);
+
+            var rightPane = new ContentPresenter
+            {
+                Content = RightPaneContent,
+                VerticalAlignment = VerticalAlignment.Stretch,
+            };
+            Grid.SetColumn(rightPane, 2);
+            mainPanel.Children.Add(rightPane);
+        }
+
+        Grid.SetRow(mainPanel, 0);
+        rootPanel.Children.Add(mainPanel);
+
+        // Footer pane
+        if (FooterPaneContent is not null)
+        {
+            var footerSep = new Rectangle
+            {
+                Height = 1,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            Grid.SetRow(footerSep, 0);
+            rootPanel.Children.Add(footerSep);
+
+            var footer = new ContentPresenter
+            {
+                Content = FooterPaneContent,
+                Padding = new Thickness(12, 8),
+            };
+            Grid.SetRow(footer, 1);
+            rootPanel.Children.Add(footer);
+        }
+
+        if (_flyout is null)
+        {
+            _flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom };
+            _flyout.Closed += (s, e) =>
+            {
+                IsDropDownOpen = false;
+                // Reparent items back
+                RestoreItems();
+            };
+        }
+
+        _flyout.Content = rootPanel;
+        IsDropDownOpen = true;
+        _flyout.ShowAt((FrameworkElement?)_button ?? this);
+    }
+
+    private void RestoreItems()
+    {
+        // Items will be re-added to the flyout next time it opens
+    }
+
+    #endregion
+}

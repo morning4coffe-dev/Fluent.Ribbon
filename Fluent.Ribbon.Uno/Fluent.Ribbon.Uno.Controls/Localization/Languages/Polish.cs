@@ -1,0 +1,40 @@
+#pragma warning disable
+
+namespace Fluent.Localization.Languages;
+
+[RibbonLocalization("Polish", "pl")]
+public class Polish : RibbonLocalizationBase
+{
+    public override string Automatic { get; } = "Automatyczne";
+    public override string BackstageBackButtonUid { get; } = "Close Backstage";
+    public override string BackstageButtonKeyTip { get; } = "P";
+    public override string BackstageButtonText { get; } = "Plik";
+    public override string CustomizeStatusBar { get; } = "Customize Status Bar";
+    public override string DisplayOptionsButtonScreenTipText { get; } = "Configure Ribbon display options.";
+    public override string DisplayOptionsButtonScreenTipTitle { get; } = "Ribbon Display Options";
+    public override string ExpandRibbon { get; } = "Expand the Ribbon";
+    public override string MinimizeRibbon { get; } = "Minimize the Ribbon";
+    public override string MoreColors { get; } = "Więcej kolorów...";
+    public override string NoColor { get; } = "Brak koloru";
+    public override string QuickAccessToolBarDropDownButtonTooltip { get; } = "Dostosuj pasek narzędzi Szybki dostęp";
+    public override string QuickAccessToolBarMenuHeader { get; } = "Dostosuj pasek narzędzi Szybki dostęp";
+    public override string QuickAccessToolBarMenuShowAbove { get; } = "Pokaż powyżej Wstążki";
+    public override string QuickAccessToolBarMenuShowBelow { get; } = "Pokaż poniżej Wstążki";
+    public override string QuickAccessToolBarMoreControlsButtonTooltip { get; } = "Więcej poleceń...";
+    public override string RibbonContextMenuAddGallery { get; } = "Dodaj Galerię do paska narzędzi Szybki dostęp";
+    public override string RibbonContextMenuAddGroup { get; } = "Dodaj Grupę do paska narzędzi Szybki dostęp";
+    public override string RibbonContextMenuAddItem { get; } = "Dodaj do paska narzędzi Szybki dostęp";
+    public override string RibbonContextMenuAddMenu { get; } = "Dodaj do paska narzędzi Szybki dostęp";
+    public override string RibbonContextMenuCustomizeQuickAccessToolBar { get; } = "Dostosuj pasek narzędzi Szybki dostęp...";
+    public override string RibbonContextMenuCustomizeRibbon { get; } = "Dostosuj Wstążkę...";
+    public override string RibbonContextMenuMinimizeRibbon { get; } = "Minimalizuj Wstążkę";
+    public override string RibbonContextMenuRemoveItem { get; } = "Usuń z paska narzędzi Szybki dostęp";
+    public override string RibbonContextMenuShowAbove { get; } = "Pokaż pasek Szybki dostęp powyżej Wstążki";
+    public override string RibbonContextMenuShowBelow { get; } = "Pokaż pasek Szybki dostęp poniżej Wstążki";
+    public override string RibbonLayout { get; } = "Ribbon Layout";
+    public override string ScreenTipDisableReasonHeader { get; } = "This command is currently disabled.";
+    public override string ScreenTipF1LabelHeader { get; } = "Press F1 for help";
+    public override string ShowRibbon { get; } = "Show Ribbon";
+    public override string UseClassicRibbon { get; } = "_Użyj wstążki klasycznej";
+    public override string UseSimplifiedRibbon { get; } = "_Użyj wstążki uproszczonej";
+}

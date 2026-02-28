@@ -1,0 +1,95 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:RibbonComboBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:RibbonComboBox">
+                    <Border
+                        x:Name="RootBorder"
+                        Background="{TemplateBinding Background}"
+                        Padding="{TemplateBinding Padding}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="SizeStates">
+                                <VisualState x:Name="Large">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                        <Setter Target="HeaderText.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Medium">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                        <Setter Target="HeaderText.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Small">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.FontSize" Value="14" />
+                                        <Setter Target="HeaderText.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Glyph Icon -->
+                            <FontIcon
+                                x:Name="GlyphIcon"
+                                Glyph="{TemplateBinding IconGlyph}"
+                                FontSize="16"
+                                Foreground="{ThemeResource RibbonIconBrush}"
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
+
+                            <!-- Image Icon -->
+                            <Image
+                                Source="{TemplateBinding MediumIcon}"
+                                Width="16"
+                                Height="16"
+                                Stretch="Uniform"
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+
+                            <!-- Header -->
+                            <TextBlock
+                                x:Name="HeaderText"
+                                Text="{TemplateBinding Header}"
+                                Foreground="{ThemeResource RibbonTextBrush}"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Margin="0,0,6,0"
+                                Visibility="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+
+                            <!-- ComboBox input area -->
+                            <ComboBox
+                                x:Name="PART_ComboBox"
+                                Width="{TemplateBinding InputWidth}"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                MinHeight="24"
+                                Padding="4,2"
+                                Background="{ThemeResource TextControlBackground}"
+                                BorderBrush="{ThemeResource TextControlBorderBrush}"
+                                BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
+                                CornerRadius="{ThemeResource ControlCornerRadius}"
+                                ItemsSource="{TemplateBinding ItemsSource}"
+                                SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                SelectedIndex="{Binding SelectedIndex, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                MaxDropDownHeight="{TemplateBinding DropDownHeight}" />
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

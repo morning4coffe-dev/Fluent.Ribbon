@@ -1,0 +1,65 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:ScreenTip">
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="MaxWidth" Value="318" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:ScreenTip">
+                    <Border
+                        Background="{ThemeResource FlyoutPresenterBackground}"
+                        BorderBrush="{ThemeResource RibbonBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="{TemplateBinding Padding}"
+                        MaxWidth="{TemplateBinding MaxWidthOverride}">
+                        <StackPanel>
+                            <!-- Title -->
+                            <TextBlock
+                                Text="{TemplateBinding Title}"
+                                FontWeight="SemiBold"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Margin="0,0,0,4" />
+
+                            <!-- Separator -->
+                            <Rectangle
+                                Fill="{ThemeResource RibbonBorderBrush}"
+                                Height="1"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,2,0,6" />
+
+                            <!-- Image -->
+                            <Image
+                                Source="{TemplateBinding Image}"
+                                MaxWidth="292"
+                                Stretch="Uniform"
+                                HorizontalAlignment="Left"
+                                Margin="0,0,0,6" />
+
+                            <!-- Description Text -->
+                            <TextBlock
+                                Text="{TemplateBinding Text}"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <!-- Disable Reason -->
+                            <TextBlock
+                                Text="{TemplateBinding DisableReason}"
+                                FontSize="11"
+                                FontStyle="Italic"
+                                TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                                Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
