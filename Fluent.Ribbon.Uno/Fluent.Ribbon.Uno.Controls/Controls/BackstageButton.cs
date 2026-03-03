@@ -103,6 +103,23 @@ public partial class BackstageButton : Control
         set => SetValue(KeyTipProperty, value);
     }
 
+    /// <summary>Identifies the <see cref="IconGlyph"/> dependency property.</summary>
+    public static readonly DependencyProperty IconGlyphProperty =
+        DependencyProperty.Register(
+            nameof(IconGlyph),
+            typeof(string),
+            typeof(BackstageButton),
+            new PropertyMetadata(string.Empty));
+
+    /// <summary>
+    /// Gets or sets the icon glyph character (Segoe Fluent Icons / MDL2 Assets).
+    /// </summary>
+    public string IconGlyph
+    {
+        get => (string)GetValue(IconGlyphProperty);
+        set => SetValue(IconGlyphProperty, value);
+    }
+
     /// <summary>Identifies the <see cref="IsEnabled"/> dependency property.</summary>
     public static new readonly DependencyProperty IsEnabledProperty =
         DependencyProperty.Register(

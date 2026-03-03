@@ -24,6 +24,20 @@ public sealed partial class MainPage : Page
             : Visibility.Visible;
     }
 
+    private void OnTogglePictureTools(object sender, RoutedEventArgs e)
+    {
+        PictureToolsGroup.Visibility = PictureToolsGroup.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private void OnToggleChartTools(object sender, RoutedEventArgs e)
+    {
+        ChartToolsGroup.Visibility = ChartToolsGroup.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
     private void OnOpenBackstage(object sender, RoutedEventArgs e)
     {
         BackstageView.IsOpen = true;
