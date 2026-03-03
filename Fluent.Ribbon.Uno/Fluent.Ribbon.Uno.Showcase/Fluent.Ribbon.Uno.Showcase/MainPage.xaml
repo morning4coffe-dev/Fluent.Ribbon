@@ -268,7 +268,14 @@
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonToolBar x:Name="FormatToolBar">
                                     <fluent:RibbonToolBar.Items>
-                                        <fluent:RibbonComboBox x:Name="FontNameCombo" Header="Font:" InputWidth="110" />
+                                        <fluent:RibbonComboBox x:Name="FontNameCombo" Header="Font:" InputWidth="110">
+                                            <ComboBoxItem Content="Segoe UI" IsSelected="True" />
+                                            <ComboBoxItem Content="Arial" />
+                                            <ComboBoxItem Content="Calibri" />
+                                            <ComboBoxItem Content="Consolas" />
+                                            <ComboBoxItem Content="Times New Roman" />
+                                            <ComboBoxItem Content="Verdana" />
+                                        </fluent:RibbonComboBox>
                                         <fluent:RibbonSpinner x:Name="FontSizeSpinner" Header="Size:" Value="11" Minimum="1" Maximum="999" Increment="1" InputWidth="50" />
                                         <fluent:RibbonToggleButton x:Name="FormatBold" Header="Bold" Size="Small" IconGlyph="&#xE8DD;" />
                                         <fluent:RibbonToggleButton x:Name="FormatItalic" Header="Italic" Size="Small" IconGlyph="&#xE8DB;" />
