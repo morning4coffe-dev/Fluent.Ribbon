@@ -125,6 +125,10 @@ public sealed partial class MainPage
             // + filter rebuild + item mutation), which is where the ItemsRepeater ElementManager crash lived.
             await VerifyRibbonGalleryAsync();
 
+            // Regression: hiding the contextual group that owns the currently selected tab must fall back
+            // to a visible tab instead of leaving stale content with no selected header.
+            await VerifyContextualTabRemovalAsync();
+
             AutoLog("COMPLETE");
         }
         catch (Exception ex)
@@ -285,6 +289,55 @@ public sealed partial class MainPage
         }
 
         AutoLog("TOGGLES END");
+    }
+
+    // Regression for the contextual-tab-removal bug: when the currently selected tab belongs to a
+    // contextual group that is toggled off, the ribbon must fall back to a visible tab (like WPF)
+    // instead of leaving the now-hidden tab selected with stale content and no visible header.
+    private async Task VerifyContextualTabRemovalAsync()
+    {
+        AutoLog("CTXTEST BEGIN");
+        try
+        {
+            RibbonTab? designTab = null;
+            foreach (var t in MainRibbon.Tabs)
+            {
+                if (string.Equals(t.Header?.ToString(), "Design", StringComparison.Ordinal))
+                {
+                    designTab = t;
+                    break;
+                }
+            }
+
+            if (designTab is null)
+            {
+                AutoLog("CTXTEST SKIP (no Design contextual tab found)");
+                return;
+            }
+
+            // Show the contextual group and select its tab.
+            TableToolsGroup.Visibility = Visibility.Visible;
+            await SettleAsync();
+            MainRibbon.SelectedTab = designTab;
+            await SettleAsync();
+            AutoLog($"  selected='{MainRibbon.SelectedTab?.Header}' designVisible={designTab.Visibility}");
+
+            // Hide the group -> the selected (Design) tab becomes hidden.
+            TableToolsGroup.Visibility = Visibility.Collapsed;
+            await SettleAsync();
+
+            var selected = MainRibbon.SelectedTab;
+            var ok = selected is not null
+                     && selected != designTab
+                     && selected.Visibility == Visibility.Visible;
+            AutoLog($"CTXTEST after-hide selected='{selected?.Header}' designVisible={designTab.Visibility} => {(ok ? "PASS" : "FAIL")}");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"  CTXTEST THREW {ex.GetType().Name}: {ex.Message}");
+        }
+
+        AutoLog("CTXTEST END");
     }
 
     private static T? FindDescendant<T>(DependencyObject root) where T : class

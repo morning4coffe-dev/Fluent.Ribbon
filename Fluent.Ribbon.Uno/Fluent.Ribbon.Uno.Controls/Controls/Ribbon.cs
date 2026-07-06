@@ -25,6 +25,7 @@ public partial class Ribbon : Control
     private Panel? _toolBarItemsHost;
     private bool _isUpdatingQatLocation;
     private readonly KeyTipService _keyTipService;
+    private readonly HashSet<RibbonTab> _visibilityHookedTabs = new();
 
     #region Events
 
@@ -470,6 +471,7 @@ public partial class Ribbon : Control
         _tabControl.SelectionChanged -= OnTabControlSelectionChanged;
         _tabControl.SelectionChanged += OnTabControlSelectionChanged;
 
+        HookTabVisibility();
         SyncSelectedTab();
     }
 
@@ -580,6 +582,7 @@ public partial class Ribbon : Control
         }
 
         LinkContextualTabGroups();
+        HookTabVisibility();
     }
 
     private void OnTabControlSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -648,6 +651,51 @@ public partial class Ribbon : Control
         if (_tabControl is not null && SelectedTab is not null)
         {
             _tabControl.SelectedItem = SelectedTab;
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to each tab's <see cref="UIElement.Visibility"/> so the ribbon can react when a
+    /// contextual tab is hidden (e.g. its contextual group is toggled off). Registration is tracked
+    /// per tab so repeated syncs don't add duplicate callbacks.
+    /// </summary>
+    private void HookTabVisibility()
+    {
+        foreach (var tab in Tabs)
+        {
+            if (_visibilityHookedTabs.Add(tab))
+            {
+                tab.RegisterPropertyChangedCallback(VisibilityProperty, OnTabVisibilityChanged);
+            }
+        }
+    }
+
+    private void OnTabVisibilityChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        EnsureSelectedTabVisible();
+    }
+
+    /// <summary>
+    /// Ensures the currently selected tab is visible. When the selected tab has been hidden
+    /// (a contextual tab whose group was toggled off), the ribbon falls back to the first visible
+    /// tab instead of leaving stale content with no selected header — matching WPF behaviour.
+    /// </summary>
+    private void EnsureSelectedTabVisible()
+    {
+        if (_tabControl is null)
+        {
+            return;
+        }
+
+        if (_tabControl.SelectedItem is RibbonTab { Visibility: Visibility.Visible })
+        {
+            return;
+        }
+
+        var fallback = Tabs.FirstOrDefault(t => t.Visibility == Visibility.Visible);
+        if (fallback is not null)
+        {
+            _tabControl.SelectedItem = fallback;
         }
     }
 

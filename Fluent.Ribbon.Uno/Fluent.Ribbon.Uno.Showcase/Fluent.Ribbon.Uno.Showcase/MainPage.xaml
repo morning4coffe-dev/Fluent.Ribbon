@@ -109,7 +109,7 @@
                                 <fluent:RibbonToolBar x:Name="FontToolBar">
                                     <fluent:RibbonToolBar.Items>
                                         <fluent:RibbonComboBox x:Name="fontNameCombo" InputWidth="110" />
-                                        <fluent:RibbonComboBox x:Name="fontSizeCombo" InputWidth="52" />
+                                        <fluent:RibbonComboBox x:Name="fontSizeCombo" InputWidth="64" />
                                         <fluent:RibbonButton x:Name="btnGrowFont" Size="Small" IconGlyph="&#xE8E8;" ToolTipService.ToolTip="Grow Font" />
                                         <fluent:RibbonButton x:Name="btnShrinkFont" Size="Small" IconGlyph="&#xE8E7;" ToolTipService.ToolTip="Shrink Font" />
                                         <fluent:RibbonDropDownButton x:Name="btnChangeCase" Size="Small" IconGlyph="&#xE97F;" HasTriangle="True" ToolTipService.ToolTip="Change Case">
@@ -150,7 +150,7 @@
                                                         <fluent:RibbonToolBarControlGroupDefinition>
                                                             <fluent:RibbonToolBarControlGroupDefinition.Children>
                                                                 <fluent:RibbonToolBarControlDefinition Target="fontNameCombo" Width="110" Size="Small" />
-                                                                <fluent:RibbonToolBarControlDefinition Target="fontSizeCombo" Width="52" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="fontSizeCombo" Width="64" Size="Small" />
                                                             </fluent:RibbonToolBarControlGroupDefinition.Children>
                                                         </fluent:RibbonToolBarControlGroupDefinition>
                                                         <fluent:RibbonToolBarControlGroupDefinition>
