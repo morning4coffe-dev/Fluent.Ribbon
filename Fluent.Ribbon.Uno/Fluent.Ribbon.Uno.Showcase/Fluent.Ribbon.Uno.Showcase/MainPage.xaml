@@ -378,9 +378,9 @@
 
                         <fluent:RibbonGroupBox Header="Grouped ToggleButton" IconGlyph="&#xE713;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonToggleButton Header="Toggle 1" Size="Large" IconGlyph="&#xE713;" fluent:KeyTip.Keys="T1" />
-                                <fluent:RibbonToggleButton Header="Toggle 2" Size="Medium" IconGlyph="&#xE713;" fluent:KeyTip.Keys="T2" />
-                                <fluent:RibbonToggleButton Header="Toggle 3" Size="Medium" IconGlyph="&#xE713;" fluent:KeyTip.Keys="T3" />
+                                <fluent:RibbonToggleButton Header="Toggle 1" Size="Large" IconGlyph="&#xE713;" GroupName="GroupedToggle" IsChecked="True" fluent:KeyTip.Keys="T1" />
+                                <fluent:RibbonToggleButton Header="Toggle 2" Size="Medium" IconGlyph="&#xE713;" GroupName="GroupedToggle" fluent:KeyTip.Keys="T2" />
+                                <fluent:RibbonToggleButton Header="Toggle 3" Size="Medium" IconGlyph="&#xE713;" GroupName="GroupedToggle" fluent:KeyTip.Keys="T3" />
                                 <fluent:RibbonDropDownButton Header="Months" Size="Medium" IconGlyph="&#xE787;">
                                     <fluent:RibbonDropDownButton.Items>
                                         <fluent:RibbonMenuItem Header="January" />

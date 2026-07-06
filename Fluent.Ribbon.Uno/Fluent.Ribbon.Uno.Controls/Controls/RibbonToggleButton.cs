@@ -1,3 +1,5 @@
+using Fluent.Helpers;
+
 namespace Fluent;
 
 /// <summary>
@@ -228,9 +230,31 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
         set => SetValue(SimplifiedSizeDefinitionProperty, value);
     }
 
+    /// <summary>Identifies the <see cref="GroupName"/> dependency property.</summary>
+    public static readonly DependencyProperty GroupNameProperty =
+        DependencyProperty.Register(
+            nameof(GroupName),
+            typeof(string),
+            typeof(RibbonToggleButton),
+            new PropertyMetadata(null, OnGroupNameChanged));
+
+    /// <summary>
+    /// Gets or sets the name of the group that this toggle button belongs to.
+    /// Toggle buttons that share a group name behave like radio buttons:
+    /// checking one unchecks the others and a checked button cannot be
+    /// unchecked by clicking it again.
+    /// </summary>
+    public string? GroupName
+    {
+        get => (string?)GetValue(GroupNameProperty);
+        set => SetValue(GroupNameProperty, value);
+    }
+
     #endregion
 
     #region Constructor
+
+    private string? _registeredGroupName;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonToggleButton"/> class.
@@ -239,6 +263,8 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
     {
         DefaultStyleKey = typeof(RibbonToggleButton);
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        Checked += OnCheckedUpdateGroup;
     }
 
     #endregion
@@ -261,7 +287,74 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        RegisterInGroup();
         UpdateScreenTip();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_registeredGroupName))
+        {
+            ToggleButtonHelper.Unregister(_registeredGroupName!, this);
+            _registeredGroupName = null;
+        }
+    }
+
+    private void RegisterInGroup()
+    {
+        if (string.Equals(_registeredGroupName, GroupName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(_registeredGroupName))
+        {
+            ToggleButtonHelper.Unregister(_registeredGroupName!, this);
+        }
+
+        _registeredGroupName = GroupName;
+
+        if (!string.IsNullOrEmpty(_registeredGroupName))
+        {
+            ToggleButtonHelper.Register(_registeredGroupName!, this);
+
+            // Keep the group consistent if this button starts out checked.
+            if (IsChecked == true)
+            {
+                ToggleButtonHelper.UpdateButtonGroup(_registeredGroupName!, this);
+            }
+        }
+    }
+
+    private static void OnGroupNameChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RibbonToggleButton button)
+        {
+            button.RegisterInGroup();
+        }
+    }
+
+    private void OnCheckedUpdateGroup(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(GroupName))
+        {
+            ToggleButtonHelper.UpdateButtonGroup(GroupName!, this);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnToggle()
+    {
+        // Radio-button-like behavior: a checked member of a group cannot be
+        // unchecked by clicking it again. Click/Command have already been
+        // raised by ButtonBase.OnClick before OnToggle runs.
+        if (!string.IsNullOrEmpty(GroupName)
+            && IsChecked == true)
+        {
+            return;
+        }
+
+        base.OnToggle();
     }
 
     /// <summary>
