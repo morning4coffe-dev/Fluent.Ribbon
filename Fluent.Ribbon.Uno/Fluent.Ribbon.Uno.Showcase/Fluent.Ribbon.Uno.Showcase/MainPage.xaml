@@ -194,8 +194,8 @@
                         <!-- WrapPanel Group -->
                         <fluent:RibbonGroupBox Header="WrapPanel" IconGlyph="&#xE8A9;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Green" Size="Medium" IconGlyph="&#xE91F;" />
-                                                                <fluent:RibbonButton Header="Gray" Size="Medium" IconGlyph="&#xE91F;" />
+                                <fluent:RibbonButton Header="Green" Size="Medium" IconGlyph="&#xE91F;" Foreground="#13A10E" />
+                                <fluent:RibbonButton Header="Gray" Size="Medium" IconGlyph="&#xE91F;" Foreground="#9E9E9E" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
@@ -205,10 +205,10 @@
                                 <fluent:RibbonToolBar x:Name="ColorToolBar">
                                     <fluent:RibbonToolBar.Items>
                                         <fluent:RibbonSpinner x:Name="groupSpinner" Value="0" Minimum="0" Maximum="100" Increment="1" InputWidth="90" />
-                                        <fluent:RibbonButton x:Name="btnGreen" Header="Green" Size="Small" IconGlyph="&#xE91F;" />
-                                                                                <fluent:RibbonButton x:Name="btnGray" Header="Gray" Size="Small" IconGlyph="&#xE91F;" />
-                                                                                <fluent:RibbonButton x:Name="btnYellow" Header="Yellow" Size="Small" IconGlyph="&#xE91F;" />
-                                                                                <fluent:RibbonButton x:Name="btnBrown" Header="Brown" Size="Small" IconGlyph="&#xE91F;" />
+                                        <fluent:RibbonButton x:Name="btnGreen" Header="Green" Size="Small" IconGlyph="&#xE91F;" Foreground="#13A10E" />
+                                        <fluent:RibbonButton x:Name="btnGray" Header="Gray" Size="Small" IconGlyph="&#xE91F;" Foreground="#9E9E9E" />
+                                        <fluent:RibbonButton x:Name="btnYellow" Header="Yellow" Size="Small" IconGlyph="&#xE91F;" Foreground="#FFB900" />
+                                        <fluent:RibbonButton x:Name="btnBrown" Header="Brown" Size="Small" IconGlyph="&#xE91F;" Foreground="#A0522D" />
                                     </fluent:RibbonToolBar.Items>
                                     <fluent:RibbonToolBar.LayoutDefinitions>
                                         <fluent:RibbonToolBarLayoutDefinition RowCount="3">

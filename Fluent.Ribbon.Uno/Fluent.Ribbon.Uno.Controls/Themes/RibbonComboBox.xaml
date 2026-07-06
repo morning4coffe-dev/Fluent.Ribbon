@@ -84,7 +84,7 @@
                                 ItemsSource="{TemplateBinding ItemsSource}"
                                 SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                 SelectedIndex="{Binding SelectedIndex, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                MaxDropDownHeight="{TemplateBinding DropDownHeight}" />
+                                MaxDropDownHeight="{Binding DropDownHeight, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NaNFallbackConverter}, ConverterParameter=300}" />
                         </StackPanel>
                     </Border>
                 </ControlTemplate>

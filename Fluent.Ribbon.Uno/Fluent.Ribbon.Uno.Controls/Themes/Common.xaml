@@ -10,6 +10,7 @@
     <converters:OrientationToHeightConverter x:Key="OrientationToHeightConverter" />
     <converters:NullToCollapsedConverter x:Key="NullToCollapsedConverter" />
     <converters:EmptyStringToCollapsedConverter x:Key="EmptyStringToCollapsedConverter" />
+    <converters:NaNFallbackConverter x:Key="NaNFallbackConverter" />
 
     <!-- Theme-aware color resources -->
     <ResourceDictionary.ThemeDictionaries>

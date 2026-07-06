@@ -8,7 +8,7 @@
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="4,2" />
-        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonIconBrush}" />
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -102,7 +102,7 @@
                                 x:Name="PART_GlyphIcon"
                                 Glyph="{TemplateBinding IconGlyph}"
                                 FontSize="28"
-                                Foreground="{ThemeResource RibbonIconBrush}"
+                                Foreground="{TemplateBinding Foreground}"
                                 Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
                             <!-- Image icon - shown when LargeIcon/MediumIcon is set -->
                             <Image
