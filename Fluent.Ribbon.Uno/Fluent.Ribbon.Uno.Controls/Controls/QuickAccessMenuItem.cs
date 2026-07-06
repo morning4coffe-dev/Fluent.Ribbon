@@ -3,7 +3,7 @@ namespace Fluent;
 /// <summary>
 /// Represents a menu item for adding/removing items from the quick access toolbar.
 /// </summary>
-public partial class QuickAccessMenuItem : Control, IHeaderedControl
+public partial class QuickAccessMenuItem : InteractiveMenuItemBase, IHeaderedControl
 {
     #region Dependency Properties
 
@@ -75,12 +75,7 @@ public partial class QuickAccessMenuItem : Control, IHeaderedControl
     #region Methods
 
     /// <inheritdoc/>
-    protected override void OnPointerPressed(PointerRoutedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        IsChecked = !IsChecked;
-        e.Handled = true;
-    }
+    protected override void OnInvoke() => IsChecked = !IsChecked;
 
     #endregion
 }

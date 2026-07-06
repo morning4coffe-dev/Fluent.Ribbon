@@ -30,11 +30,11 @@
                         <fluent:RibbonMenuItem Header="Export" IconGlyph="&#xEDE1;" Description="Export to another format" />
                     </fluent:ApplicationMenu.Items>
                     <fluent:ApplicationMenu.RightPaneContent>
-                        <StackPanel Spacing="8" Padding="12">
-                            <TextBlock Text="Recent Documents" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock Text="Document1.docx" FontSize="12" Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
-                            <TextBlock Text="Report_Q4.docx" FontSize="12" Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
-                            <TextBlock Text="Proposal.docx" FontSize="12" Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                        <StackPanel Spacing="4" Padding="8">
+                            <TextBlock Text="Recent Documents" FontWeight="SemiBold" FontSize="14" Margin="4,4,4,6" />
+                            <fluent:RibbonMenuItem Header="Document1.docx" IconGlyph="&#xE8A5;" />
+                            <fluent:RibbonMenuItem Header="Report_Q4.docx" IconGlyph="&#xE8A5;" />
+                            <fluent:RibbonMenuItem Header="Proposal.docx" IconGlyph="&#xE8A5;" />
                         </StackPanel>
                     </fluent:ApplicationMenu.RightPaneContent>
                     <fluent:ApplicationMenu.FooterPaneContent>

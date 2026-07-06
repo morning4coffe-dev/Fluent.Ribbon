@@ -7,7 +7,7 @@ namespace Fluent;
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
 /// </remarks>
-public partial class StatusBarMenuItem : Control
+public partial class StatusBarMenuItem : InteractiveMenuItemBase
 {
     #region Dependency Properties
 
@@ -89,12 +89,7 @@ public partial class StatusBarMenuItem : Control
     }
 
     /// <inheritdoc/>
-    protected override void OnPointerPressed(PointerRoutedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        IsChecked = !IsChecked;
-        e.Handled = true;
-    }
+    protected override void OnInvoke() => IsChecked = !IsChecked;
 
     #endregion
 }

@@ -5,7 +5,7 @@ namespace Fluent;
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
 [TemplatePart(Name = PART_Icon, Type = typeof(Image))]
-public partial class RibbonMenuItem : Control
+public partial class RibbonMenuItem : InteractiveMenuItemBase
 {
     private const string PART_Icon = "PART_Icon";
 
@@ -219,15 +219,11 @@ public partial class RibbonMenuItem : Control
     #region Methods
 
     /// <inheritdoc/>
-    protected override void OnPointerPressed(PointerRoutedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        InvokeItem();
-    }
+    protected override void OnInvoke() => InvokeItem();
 
     /// <summary>
     /// Executes the menu item's command and raises <see cref="Click"/>.
-    /// Shared by pointer input and the automation (Invoke) peer.
+    /// Shared by pointer/keyboard input and the automation (Invoke) peer.
     /// </summary>
     internal void InvokeItem()
     {
