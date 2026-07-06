@@ -15,6 +15,13 @@ public sealed partial class MainPage : Page
         this.InitializeComponent();
         SampleColorGallery.SelectedColorChanged += OnColorGallerySelectionChanged;
         UpdateLocalizationSample();
+
+        // The RibbonComboBox template hosts an inner ComboBox bound to ItemsSource, so
+        // populate via ItemsSource (not inline items) to mirror the WPF "Toolbars" tab.
+        fontNameCombo.ItemsSource = new[] { "Arial", "Calibri", "Segoe UI", "Tahoma", "Times New Roman" };
+        fontSizeCombo.ItemsSource = new[] { "8", "10", "11", "12", "14", "16", "18", "24", "36", "72" };
+        fontNameCombo.SelectedIndex = 0;
+        fontSizeCombo.SelectedIndex = 3;
     }
 
     private void OnToggleTableTools(object sender, RoutedEventArgs e)

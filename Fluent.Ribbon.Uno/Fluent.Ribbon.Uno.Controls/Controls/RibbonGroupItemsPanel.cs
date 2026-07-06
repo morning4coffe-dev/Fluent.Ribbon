@@ -32,6 +32,9 @@ public partial class RibbonGroupItemsPanel : Panel
         {
             RibbonSeparator => ItemKind.Separator,
             InRibbonGallery => ItemKind.Large,
+            // A RibbonToolBar is a multi-row container; it must own a full-height column
+            // instead of being squished into a single stacked row.
+            RibbonToolBar => ItemKind.Large,
             IScalableRibbonControl { Size: RibbonControlSize.Large } => ItemKind.Large,
             _ => ItemKind.Stacked,
         };
