@@ -354,6 +354,7 @@ public partial class RibbonGallery : Control
     private UniformItemsPanel? _itemsPanel;
     private StackPanel? _groupedPanel;
     private StackPanel? _filterButtons;
+    private readonly List<(string Group, FrameworkElement? Header, UIElement Panel)> _groupEntries = new();
 
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
@@ -420,20 +421,26 @@ public partial class RibbonGallery : Control
         _itemsPanel.ItemWidth = ItemWidth;
         _itemsPanel.ItemHeight = ItemHeight;
 
-        // Clear any previously added group headers/panels (keep the flat items panel).
+        // Detach every item from whichever panel currently hosts it *before* those panels are
+        // removed from the tree. Detaching an item from a panel that has already been removed from
+        // the visual tree leaves the item's native peer in a state where re-adding it elsewhere
+        // throws COMException (0x800F1000) on the WinUI3 head, so the ordering here matters.
+        _itemsPanel.Children.Clear();
+        foreach (var item in Items)
+        {
+            DetachFromParent(item);
+        }
+
+        _groupEntries.Clear();
+
+        // Now remove the previously added group headers/panels (they are empty at this point;
+        // keep the flat items panel).
         for (int i = _groupedPanel.Children.Count - 1; i >= 0; i--)
         {
             if (_groupedPanel.Children[i] != _itemsPanel)
             {
                 _groupedPanel.Children.RemoveAt(i);
             }
-        }
-
-        // Detach every item from whichever panel currently hosts it before redistributing.
-        _itemsPanel.Children.Clear();
-        foreach (var item in Items)
-        {
-            DetachFromParent(item);
         }
 
         if (IsGrouped || !string.IsNullOrEmpty(GroupBy))
@@ -472,6 +479,8 @@ public partial class RibbonGallery : Control
             return;
         }
 
+        _groupEntries.Clear();
+
         // Group items by their Group property
         var groups = new Dictionary<string, List<UIElement>>();
         var ungrouped = new List<UIElement>();
@@ -509,16 +518,14 @@ public partial class RibbonGallery : Control
             }
         }
 
-        // Check if current filter should hide any groups
-        var allowedGroups = GetAllowedGroupNames();
         int insertIndex = 0;
 
-        // Add grouped items with headers
+        // Build every group (headers + item panels). Filter visibility is applied separately by
+        // ApplyGroupFilter so that changing the active filter only toggles Visibility and never
+        // re-parents the live item elements — repeatedly moving shared UIElements between panels
+        // throws COMException (0x800F1000) on the WinUI3 head.
         foreach (var (groupName, items) in groups)
         {
-            // Apply filter
-            var visible = allowedGroups is null || allowedGroups.Contains(groupName);
-
             // Group header
             var header = new TextBlock
             {
@@ -527,7 +534,6 @@ public partial class RibbonGallery : Control
                 FontSize = 11,
                 Margin = new Thickness(4, 8, 4, 4),
                 Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["RibbonSecondaryTextBrush"],
-                Visibility = visible ? Visibility.Visible : Visibility.Collapsed,
             };
             _groupedPanel.Children.Insert(insertIndex++, header);
 
@@ -536,7 +542,6 @@ public partial class RibbonGallery : Control
             {
                 ItemWidth = ItemWidth,
                 ItemHeight = ItemHeight,
-                Visibility = visible ? Visibility.Visible : Visibility.Collapsed,
             };
             foreach (var item in items)
             {
@@ -544,6 +549,8 @@ public partial class RibbonGallery : Control
                 groupPanel.Children.Add(item);
             }
             _groupedPanel.Children.Insert(insertIndex++, groupPanel);
+
+            _groupEntries.Add((groupName, header, groupPanel));
         }
 
         // Add ungrouped items at the end if any
@@ -560,6 +567,34 @@ public partial class RibbonGallery : Control
                 groupPanel.Children.Add(item);
             }
             _groupedPanel.Children.Insert(insertIndex, groupPanel);
+
+            _groupEntries.Add((string.Empty, null, groupPanel));
+        }
+
+        ApplyGroupFilter();
+    }
+
+    // Toggles the visibility of each built group (header + items panel) to match the active filter,
+    // without re-parenting any live item elements.
+    private void ApplyGroupFilter()
+    {
+        var allowedGroups = GetAllowedGroupNames();
+
+        foreach (var (groupName, header, panel) in _groupEntries)
+        {
+            // Ungrouped items (empty group name) and the "no filter" case are always shown.
+            var visible = allowedGroups is null
+                || string.IsNullOrEmpty(groupName)
+                || allowedGroups.Contains(groupName);
+
+            var visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+
+            if (header is not null)
+            {
+                header.Visibility = visibility;
+            }
+
+            panel.Visibility = visibility;
         }
     }
 
@@ -655,7 +690,7 @@ public partial class RibbonGallery : Control
                 continue;
             }
 
-            var isSelected = btn.Tag == SelectedFilter;
+            var isSelected = Equals(btn.Tag, SelectedFilter);
             btn.FontWeight = isSelected
                 ? Microsoft.UI.Text.FontWeights.Bold
                 : Microsoft.UI.Text.FontWeights.Normal;
@@ -792,10 +827,11 @@ public partial class RibbonGallery : Control
             var filter = (GalleryGroupFilter?)e.NewValue;
             gallery.SelectedFilterTitle = filter?.Title ?? string.Empty;
 
-            // Re-sync items to apply the new filter
+            // Re-apply the filter. In grouped mode this only toggles group visibility (no rebuild
+            // / re-parenting); in flat mode it toggles per-item visibility.
             if (gallery.IsGrouped || !string.IsNullOrEmpty(gallery.GroupBy))
             {
-                gallery.SyncItems();
+                gallery.ApplyGroupFilter();
             }
             else
             {

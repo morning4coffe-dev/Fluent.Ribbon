@@ -40,4 +40,29 @@
     <None Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
   </ItemGroup>
 
+  <!--
+    WinUI3 (unpackaged) library-resource fallback.
+    When built with `dotnet build` (Core MSBuild, no full msbuild.exe), Uno cannot
+    emit the Core-MRT library layout for referenced WinUI class libraries
+    (see UNOB0008 / WindowsAppSDK #3548). The Controls library's XAML resources are
+    therefore copied flat into the app output `Themes\` folder and are NOT indexed in
+    resources.pri under the library name, so `ms-appx:///Fluent.Ribbon.Uno/Themes/...`
+    lookups (App.xaml merge + every control's default style) fail at runtime.
+    The unpackaged WinUI3 runtime falls back to loose files on disk, so we mirror
+    `Themes\` into `Fluent.Ribbon.Uno\Themes\` (the library's assembly-name layout) to
+    satisfy those lookups. This runs only when the proper Core-MRT layout was NOT
+    generated, so it is a no-op on a full msbuild/VS build (the PRI takes precedence).
+  -->
+  <Target Name="_MirrorFluentThemesForUnpackagedWinUI"
+          AfterTargets="Build"
+          Condition="$(TargetFramework.Contains('windows10')) AND '$(EnableCoreMrtTooling)' != 'true'">
+    <ItemGroup>
+      <_FluentThemeFiles Include="$(OutDir)Themes\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_FluentThemeFiles)"
+          DestinationFiles="@(_FluentThemeFiles-&gt;'$(OutDir)Fluent.Ribbon.Uno\Themes\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(_FluentThemeFiles)' != ''" />
+  </Target>
+
 </Project>

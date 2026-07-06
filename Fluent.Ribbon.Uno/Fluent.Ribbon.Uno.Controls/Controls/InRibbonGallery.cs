@@ -17,7 +17,9 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     private Button? _upButton;
     private Button? _downButton;
     private ScrollViewer? _scrollViewer;
-    private Flyout? _popupFlyout;
+    private Popup? _popup;
+    private ScrollViewer? _popupScroller;
+    private StackPanel? _popupPanel;
     private bool _isPopupOpen;
 #pragma warning disable CS0169
     private int _scrollOffset;
@@ -528,78 +530,141 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
     private void ShowPopup()
     {
-        if (_galleryPanel is null)
+        if (_galleryPanel is null || _scrollViewer is null)
         {
             return;
         }
 
-        if (_popupFlyout is null)
-        {
-            _popupFlyout = new Flyout
-            {
-                Placement = FlyoutPlacementMode.Bottom,
-            };
-            _popupFlyout.Closed += OnPopupFlyoutClosed;
-        }
+        EnsurePopup();
 
         _isPopupOpen = true;
 
-        // Move the live items out of the inline panel and into the popup's own panel.
-        _galleryPanel.Children.Clear();
-
-        var expandedPanel = new UniformItemsPanel
+        // Move the whole live gallery panel (a single container we own) from the inline
+        // ScrollViewer into a persistent Popup, rather than churning each shared user
+        // UIElement in and out of a Flyout. A Flyout tears its content subtree down on close,
+        // corrupting the items' native peers on the WinUI3 head so that re-adding them throws
+        // COMException (0x800F1000). Moving one container into a Popup (whose child stays alive)
+        // avoids that entirely and behaves the same on the Skia head.
+        _scrollViewer.Content = null;
+        _galleryPanel.MaxColumns = MaxDropDownItemsInRow;
+        if (_popupScroller is not null)
         {
-            ItemWidth = ItemWidth,
-            ItemHeight = ItemHeight,
-            MaxColumns = MaxDropDownItemsInRow,
-        };
-
-        foreach (var item in Items)
-        {
-            DetachFromParent(item);
-            expandedPanel.Children.Add(item);
+            _popupScroller.Content = _galleryPanel;
         }
 
-        var galleryScroller = new ScrollViewer
+        // Rebuild the optional menu items shown beneath the gallery (everything after the scroller).
+        if (_popupPanel is not null)
         {
-            Content = expandedPanel,
+            while (_popupPanel.Children.Count > 1)
+            {
+                _popupPanel.Children.RemoveAt(_popupPanel.Children.Count - 1);
+            }
+
+            if (MenuItems.Count > 0)
+            {
+                _popupPanel.Children.Add(new Rectangle
+                {
+                    Height = 1,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Fill = GetBrush("RibbonBorderBrush", Microsoft.UI.Colors.Gray),
+                    Margin = new Thickness(0, 4, 0, 4),
+                });
+
+                foreach (var menuItem in MenuItems)
+                {
+                    DetachFromParent(menuItem);
+                    _popupPanel.Children.Add(menuItem);
+                }
+            }
+        }
+
+        IsDropDownOpen = true;
+
+        // Anchor the popup just below the gallery. Offsets are relative to the XamlRoot content,
+        // matching the approach used by KeyTipService and working on both heads.
+        if (_popup is not null)
+        {
+            _popup.XamlRoot = this.XamlRoot;
+
+            if (this.XamlRoot?.Content is UIElement root)
+            {
+                try
+                {
+                    var point = this.TransformToVisual(root)
+                        .TransformPoint(new Windows.Foundation.Point(0, this.ActualHeight));
+                    _popup.HorizontalOffset = point.X;
+                    _popup.VerticalOffset = point.Y;
+                }
+                catch
+                {
+                    // Keep the default placement if the transform cannot be computed yet.
+                }
+            }
+
+            _popup.IsOpen = true;
+        }
+    }
+
+    private void EnsurePopup()
+    {
+        if (_popup is not null)
+        {
+            return;
+        }
+
+        _popupScroller = new ScrollViewer
+        {
             MaxHeight = 300,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
 
-        var panel = new StackPanel();
-        panel.Children.Add(galleryScroller);
+        _popupPanel = new StackPanel();
+        _popupPanel.Children.Add(_popupScroller);
 
-        // Menu items
-        if (MenuItems.Count > 0)
+        var border = new Border
         {
-            panel.Children.Add(new Rectangle
-            {
-                Height = 1,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = new Thickness(0, 4, 0, 4),
-            });
+            Background = GetBrush("RibbonBackgroundBrush", Microsoft.UI.Colors.White),
+            BorderBrush = GetBrush("RibbonBorderBrush", Microsoft.UI.Colors.Gray),
+            BorderThickness = new Thickness(1),
+            Child = _popupPanel,
+        };
 
-            foreach (var menuItem in MenuItems)
-            {
-                DetachFromParent(menuItem);
-                panel.Children.Add(menuItem);
-            }
-        }
-
-        _popupFlyout.Content = panel;
-        IsDropDownOpen = true;
-        _popupFlyout.ShowAt(this);
+        _popup = new Popup
+        {
+            IsLightDismissEnabled = true,
+            Child = border,
+        };
+        _popup.Closed += OnPopupClosed;
     }
 
-    private void OnPopupFlyoutClosed(object? sender, object e)
+    private static Microsoft.UI.Xaml.Media.Brush GetBrush(string resourceKey, Windows.UI.Color fallback)
+    {
+        if (Application.Current.Resources.TryGetValue(resourceKey, out var value)
+            && value is Microsoft.UI.Xaml.Media.Brush brush)
+        {
+            return brush;
+        }
+
+        return new Microsoft.UI.Xaml.Media.SolidColorBrush(fallback);
+    }
+
+    private void OnPopupClosed(object? sender, object e)
     {
         IsDropDownOpen = false;
         _isPopupOpen = false;
 
-        // Restore the live items back to the inline gallery panel.
-        SyncInlineChildren();
+        // Return the (unchanged) gallery panel to the inline ScrollViewer.
+        if (_popupScroller is not null)
+        {
+            _popupScroller.Content = null;
+        }
+
+        if (_galleryPanel is not null && _scrollViewer is not null)
+        {
+            _galleryPanel.MaxColumns = MaxItemsInRow;
+            _scrollViewer.Content = _galleryPanel;
+        }
     }
 
     private void UpdateVisualState()

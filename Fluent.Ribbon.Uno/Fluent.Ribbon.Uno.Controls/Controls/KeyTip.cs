@@ -6,9 +6,14 @@ namespace Fluent;
 /// </summary>
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
-/// WPF uses a Label subclass; Uno uses a simple Control with attached properties.
+/// WPF uses a Label subclass. This Uno port keeps <see cref="KeyTip"/> as a
+/// non-visual attached-property holder (deriving from <see cref="DependencyObject"/>)
+/// so the HorizontalAlignment/VerticalAlignment/Margin attached properties don't
+/// collide with the intrinsic <see cref="FrameworkElement"/> properties of the same
+/// name — a collision the WinUI XBF generator rejects (WMC0610 / XBF 0x09c5). The
+/// on-screen chip is rendered by <see cref="KeyTipVisual"/>.
 /// </remarks>
-public partial class KeyTip : Control
+public partial class KeyTip : DependencyObject
 {
     #region Attached Properties
 
@@ -61,7 +66,7 @@ public partial class KeyTip : Control
     }
 
     /// <summary>Identifies the HorizontalAlignment attached property.</summary>
-    public static new readonly DependencyProperty HorizontalAlignmentProperty =
+    public static readonly DependencyProperty HorizontalAlignmentProperty =
         DependencyProperty.RegisterAttached(
             "HorizontalAlignment",
             typeof(HorizontalAlignment),
@@ -85,7 +90,7 @@ public partial class KeyTip : Control
     }
 
     /// <summary>Identifies the VerticalAlignment attached property.</summary>
-    public static new readonly DependencyProperty VerticalAlignmentProperty =
+    public static readonly DependencyProperty VerticalAlignmentProperty =
         DependencyProperty.RegisterAttached(
             "VerticalAlignment",
             typeof(VerticalAlignment),
@@ -109,7 +114,7 @@ public partial class KeyTip : Control
     }
 
     /// <summary>Identifies the Margin attached property.</summary>
-    public static new readonly DependencyProperty MarginProperty =
+    public static readonly DependencyProperty MarginProperty =
         DependencyProperty.RegisterAttached(
             "Margin",
             typeof(Thickness),
@@ -130,47 +135,6 @@ public partial class KeyTip : Control
     public static void SetMargin(DependencyObject element, Thickness value)
     {
         element.SetValue(MarginProperty, value);
-    }
-
-    #endregion
-
-    #region Instance Properties
-
-    /// <summary>Identifies the <see cref="Text"/> dependency property.</summary>
-    public static readonly DependencyProperty TextProperty =
-        DependencyProperty.Register(
-            nameof(Text),
-            typeof(string),
-            typeof(KeyTip),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets or sets the key tip text displayed in the popup.
-    /// </summary>
-    public string? Text
-    {
-        get => (string?)GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="IsEnabled"/> dependency property.</summary>
-    public static new readonly DependencyProperty IsEnabledProperty =
-        DependencyProperty.Register(
-            nameof(IsEnabled),
-            typeof(bool),
-            typeof(KeyTip),
-            new PropertyMetadata(true));
-
-    #endregion
-
-    #region Constructor
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="KeyTip"/> class.
-    /// </summary>
-    public KeyTip()
-    {
-        DefaultStyleKey = typeof(KeyTip);
     }
 
     #endregion

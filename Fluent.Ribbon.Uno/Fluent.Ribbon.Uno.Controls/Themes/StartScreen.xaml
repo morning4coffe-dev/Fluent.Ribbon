@@ -12,39 +12,38 @@
                             <VisualStateGroup x:Name="OpenStates">
                                 <VisualState x:Name="Closed">
                                     <VisualState.Setters>
-                                        <Setter Target="StartScreenPopup.IsOpen" Value="False" />
                                         <Setter Target="RootGrid.Visibility" Value="Collapsed" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Open">
                                     <VisualState.Setters>
-                                        <Setter Target="StartScreenPopup.IsOpen" Value="True" />
                                         <Setter Target="RootGrid.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
-                        <Popup x:Name="StartScreenPopup" IsOpen="{TemplateBinding IsOpen}">
-                            <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-                                  Width="{Binding ActualWidth, ElementName=RootGrid}"
-                                  Height="{Binding ActualHeight, ElementName=RootGrid}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="{TemplateBinding LeftPaneWidth}" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
+                        <!-- Rendered inline (not in a Popup): opening a Popup during the first
+                             measure pass, before the control has a XamlRoot, fails native measure
+                             on the WinUI3 head (E_FAIL). An inline overlay behaves identically on
+                             the Skia and WinUI3 heads. -->
+                        <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                                <!-- Left Pane -->
-                                <Border Background="{ThemeResource RibbonBackstageBackgroundBrush}" Padding="20">
-                                    <ContentPresenter x:Name="PART_LeftPane" Content="{TemplateBinding LeftPaneContent}" />
-                                </Border>
+                            <!-- Left Pane -->
+                            <Border Background="{ThemeResource RibbonBackstageBackgroundBrush}" Padding="20"
+                                    Width="{TemplateBinding LeftPaneWidth}">
+                                <ContentPresenter x:Name="PART_LeftPane" Content="{TemplateBinding LeftPaneContent}" />
+                            </Border>
 
-                                <!-- Right Pane -->
-                                <Border Grid.Column="1" Padding="40">
-                                    <ContentPresenter x:Name="PART_RightPane" Content="{TemplateBinding Content}" />
-                                </Border>
-                            </Grid>
-                        </Popup>
+                            <!-- Right Pane -->
+                            <Border Grid.Column="1" Padding="40">
+                                <ContentPresenter x:Name="PART_RightPane" Content="{TemplateBinding Content}" />
+                            </Border>
+                        </Grid>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

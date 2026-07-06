@@ -4,11 +4,11 @@
     xmlns:fluent="using:Fluent">
 
     <!-- Office-style keyboard-accelerator chip shown while KeyTip navigation is active -->
-    <Style TargetType="fluent:KeyTip">
+    <Style TargetType="fluent:KeyTipVisual">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="fluent:KeyTip">
+                <ControlTemplate TargetType="fluent:KeyTipVisual">
                     <Border
                         Background="{ThemeResource RibbonBackgroundBrush}"
                         BorderBrush="{ThemeResource RibbonBorderBrush}"

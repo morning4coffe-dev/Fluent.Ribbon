@@ -69,6 +69,7 @@ public partial class RibbonToolBar : Control
     #region Fields
 
     private Grid? _layoutPanel;
+    private bool _templateApplied;
 
     #endregion
 
@@ -95,6 +96,7 @@ public partial class RibbonToolBar : Control
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
+        _templateApplied = true;
         RebuildLayout();
     }
 
@@ -117,6 +119,15 @@ public partial class RibbonToolBar : Control
 
     private void RebuildLayout()
     {
+        // Never build layout before the template is applied. Doing so during XAML
+        // parsing reparents items into a transient Grid, which the strict WinUI3
+        // parser rejects ("Element is already the child of another element").
+        // PART_ContentPanel only exists after OnApplyTemplate, so this is also a no-op there.
+        if (!_templateApplied)
+        {
+            return;
+        }
+
         var definition = GetCurrentLayoutDefinition();
 
         if (definition is null)

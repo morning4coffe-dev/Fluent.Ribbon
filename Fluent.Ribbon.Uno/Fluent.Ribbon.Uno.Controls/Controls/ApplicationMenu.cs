@@ -246,7 +246,7 @@ public partial class ApplicationMenu : Control
             var footer = new ContentPresenter
             {
                 Content = FooterPaneContent,
-                Padding = new Thickness(12, 8),
+                Padding = new Thickness(12, 8, 12, 8),
             };
             Grid.SetRow(footer, 1);
             rootPanel.Children.Add(footer);

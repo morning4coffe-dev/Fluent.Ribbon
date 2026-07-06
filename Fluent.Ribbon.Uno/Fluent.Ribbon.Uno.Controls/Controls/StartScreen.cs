@@ -101,6 +101,17 @@ public partial class StartScreen : Control
 
     #region Methods
 
+    /// <inheritdoc />
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        // Apply the initial visual state now that the template is available. IsOpen may have
+        // been set during XAML initialization, before the template was applied, in which case
+        // the OnIsOpenChanged GoToState call was a no-op.
+        VisualStateManager.GoToState(this, this.IsOpen ? "Open" : "Closed", false);
+    }
+
     private static void OnIsOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is StartScreen screen)

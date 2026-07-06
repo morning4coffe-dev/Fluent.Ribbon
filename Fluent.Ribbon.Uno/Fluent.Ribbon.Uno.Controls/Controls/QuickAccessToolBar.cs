@@ -286,7 +286,7 @@ public partial class QuickAccessToolBar : Control
                         HorizontalContentAlignment = HorizontalAlignment.Left,
                         Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                         BorderThickness = new Thickness(0),
-                        Padding = new Thickness(12, 6),
+                        Padding = new Thickness(12, 6, 12, 6),
                     };
 
                     // Click restores original item's click
@@ -337,7 +337,7 @@ public partial class QuickAccessToolBar : Control
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 BorderThickness = new Thickness(0),
-                Padding = new Thickness(12, 8),
+                Padding = new Thickness(12, 8, 12, 8),
             };
 
             locationButton.Click += (s, args) =>

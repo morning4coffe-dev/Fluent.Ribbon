@@ -182,7 +182,7 @@ public sealed partial class MainPage
                     // same way a click would, then hide it.
                     InvokePrivate(gallery, "ShowPopup");
                     await SettleAsync(3);
-                    HidePrivateFlyout(gallery, "_popupFlyout");
+                    HidePrivateFlyout(gallery, "_popup");
                     await SettleAsync(1);
                     AutoLog($"  ENLARGE/REDUCE {kind} '{name}'");
                     gallery.Enlarge();
@@ -246,9 +246,14 @@ public sealed partial class MainPage
         var field = target.GetType().GetField(
             fieldName,
             BindingFlags.Instance | BindingFlags.NonPublic);
-        if (field?.GetValue(target) is FlyoutBase flyout)
+        var value = field?.GetValue(target);
+        if (value is FlyoutBase flyout)
         {
             flyout.Hide();
+        }
+        else if (value is Popup popup)
+        {
+            popup.IsOpen = false;
         }
     }
 

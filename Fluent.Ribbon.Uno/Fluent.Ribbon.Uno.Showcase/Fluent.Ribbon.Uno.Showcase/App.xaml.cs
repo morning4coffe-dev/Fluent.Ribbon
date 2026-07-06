@@ -42,6 +42,26 @@ public partial class App : Application
             LogCrash($"TaskScheduler.UnobservedTaskException: {e.Exception}");
             e.SetObserved();
         };
+
+        // Opt-in deep diagnosis: capture the *real* managed exception at its throw
+        // point (before it is marshaled across the WinRT ABI as an opaque COMException).
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_FIRSTCHANCE")))
+        {
+            AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+            {
+                var ex = e.Exception;
+                // ex.StackTrace is empty at first-chance time; capture the LIVE stack instead.
+                if (ex is System.Runtime.InteropServices.COMException com &&
+                    (uint)com.HResult == 0x80004005)
+                {
+                    var live = Environment.StackTrace;
+                    if (live.Contains("Fluent."))
+                    {
+                        LogCrash($"FirstChance COMException E_FAIL: {ex.Message}\nLIVE STACK:\n{live}");
+                    }
+                }
+            };
+        }
     }
 
     private static void LogCrash(string message)

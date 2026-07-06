@@ -42,7 +42,7 @@ internal sealed partial class KeyTipService
     private readonly KeyEventHandler _keyDownHandler;
     private readonly KeyEventHandler _keyUpHandler;
 
-    private sealed record KeyTipTarget(FrameworkElement Element, string Keys, KeyTip Visual, bool IsTab);
+    private sealed record KeyTipTarget(FrameworkElement Element, string Keys, KeyTipVisual Visual, bool IsTab);
 
     private enum KeyTipScope
     {
@@ -340,14 +340,14 @@ internal sealed partial class KeyTipService
             return;
         }
 
-        var visual = new KeyTip { Text = keys.ToUpperInvariant() };
+        var visual = new KeyTipVisual { Text = keys.ToUpperInvariant() };
         _canvas.Children.Add(visual);
         PositionVisual(element, visual);
 
         _targets.Add(new KeyTipTarget(element, keys.ToUpperInvariant(), visual, isTab));
     }
 
-    private void PositionVisual(FrameworkElement element, KeyTip visual)
+    private void PositionVisual(FrameworkElement element, KeyTipVisual visual)
     {
         if (_ribbon.XamlRoot?.Content is not UIElement root)
         {
