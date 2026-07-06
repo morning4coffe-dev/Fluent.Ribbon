@@ -118,6 +118,8 @@
                                 Foreground="{ThemeResource RibbonTextBrush}"
                                 TextAlignment="Center"
                                 TextWrapping="Wrap"
+                                MaxLines="2"
+                                TextTrimming="CharacterEllipsis"
                                 MaxWidth="60"
                                 Margin="0,2,0,0"
                                 FontSize="11" />

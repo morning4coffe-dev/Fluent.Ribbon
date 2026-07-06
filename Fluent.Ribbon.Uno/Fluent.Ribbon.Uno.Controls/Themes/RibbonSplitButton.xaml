@@ -43,7 +43,7 @@
                                 <VisualState x:Name="Disabled">
                                     <Storyboard>
                                         <DoubleAnimation
-                                            Storyboard.TargetName="ContentPanel"
+                                            Storyboard.TargetName="OuterPanel"
                                             Storyboard.TargetProperty="Opacity"
                                             To="0.5"
                                             Duration="0" />
@@ -66,16 +66,22 @@
                             <VisualStateGroup x:Name="SizeStates">
                                 <VisualState x:Name="Large">
                                     <VisualState.Setters>
+                                        <Setter Target="OuterPanel.Orientation" Value="Vertical" />
                                         <Setter Target="ContentPanel.Orientation" Value="Vertical" />
                                         <Setter Target="GlyphIcon.FontSize" Value="28" />
+                                        <Setter Target="GlyphIcon.Margin" Value="0" />
                                         <Setter Target="PART_Icon.Width" Value="32" />
                                         <Setter Target="PART_Icon.Height" Value="32" />
+                                        <Setter Target="PART_Icon.Margin" Value="0" />
                                         <Setter Target="LabelText.Visibility" Value="Visible" />
+                                        <Setter Target="LabelText.Margin" Value="0,2,0,0" />
+                                        <Setter Target="LabelText.MaxWidth" Value="60" />
                                         <Setter Target="DropDownArrow.Margin" Value="0" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Medium">
                                     <VisualState.Setters>
+                                        <Setter Target="OuterPanel.Orientation" Value="Horizontal" />
                                         <Setter Target="ContentPanel.Orientation" Value="Horizontal" />
                                         <Setter Target="GlyphIcon.FontSize" Value="16" />
                                         <Setter Target="GlyphIcon.Margin" Value="0,0,4,0" />
@@ -83,46 +89,52 @@
                                         <Setter Target="PART_Icon.Height" Value="16" />
                                         <Setter Target="PART_Icon.Margin" Value="0,0,4,0" />
                                         <Setter Target="LabelText.Visibility" Value="Visible" />
+                                        <Setter Target="LabelText.Margin" Value="0" />
+                                        <Setter Target="LabelText.MaxWidth" Value="160" />
+                                        <Setter Target="DropDownArrow.Margin" Value="2,0,0,0" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Small">
                                     <VisualState.Setters>
+                                        <Setter Target="OuterPanel.Orientation" Value="Horizontal" />
                                         <Setter Target="ContentPanel.Orientation" Value="Horizontal" />
                                         <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                        <Setter Target="GlyphIcon.Margin" Value="0" />
                                         <Setter Target="PART_Icon.Width" Value="16" />
                                         <Setter Target="PART_Icon.Height" Value="16" />
                                         <Setter Target="LabelText.Visibility" Value="Collapsed" />
+                                        <Setter Target="DropDownArrow.Margin" Value="2,0,0,0" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
-                        <Grid Padding="4,2">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+                        <StackPanel x:Name="OuterPanel" Orientation="Vertical" Padding="4,2"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
 
                             <!-- Primary button area -->
                             <Button
                                 x:Name="PART_Button"
                                 Background="Transparent"
                                 BorderThickness="0"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
                                 HorizontalContentAlignment="Center"
                                 Padding="0">
-                                <StackPanel x:Name="ContentPanel" Orientation="Vertical" HorizontalAlignment="Center">
+                                <StackPanel x:Name="ContentPanel" Orientation="Vertical"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <FontIcon
                                         x:Name="GlyphIcon"
                                         Glyph="{TemplateBinding IconGlyph}"
                                         FontSize="28"
+                                        VerticalAlignment="Center"
                                         Foreground="{ThemeResource RibbonIconBrush}"
                                         Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
                                     <Image
                                         x:Name="PART_Icon"
                                         Width="32"
                                         Height="32"
+                                        VerticalAlignment="Center"
                                         Source="{TemplateBinding CurrentIcon}"
                                         Stretch="Uniform"
                                         Visibility="{Binding CurrentIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
@@ -131,6 +143,7 @@
                                         Text="{TemplateBinding Header}"
                                         Foreground="{ThemeResource RibbonTextBrush}"
                                         TextAlignment="Center"
+                                        VerticalAlignment="Center"
                                         TextWrapping="Wrap"
                                         MaxWidth="60"
                                         Margin="0,2,0,0"
@@ -138,19 +151,19 @@
                                 </StackPanel>
                             </Button>
 
-                            <!-- Dropdown arrow button -->
+                            <!-- Dropdown arrow button: below the label for Large, inline to the right for Medium/Small -->
                             <Button
                                 x:Name="PART_DropDownButton"
-                                Grid.Row="1"
                                 Background="Transparent"
                                 BorderThickness="0"
-                                HorizontalAlignment="Stretch"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
                                 Padding="2,0"
                                 MinHeight="14">
                                 <FontIcon x:Name="DropDownArrow" Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}"
                                          Visibility="{Binding HasTriangle, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}" />
                             </Button>
-                        </Grid>
+                        </StackPanel>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>

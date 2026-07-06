@@ -44,7 +44,7 @@
                                     VerticalScrollBarVisibility="Hidden"
                                     HorizontalScrollMode="Disabled"
                                     VerticalScrollMode="Enabled">
-                                    <ItemsRepeater
+                                    <fluent:UniformItemsPanel
                                         x:Name="PART_GalleryPanel" />
                                 </ScrollViewer>
 

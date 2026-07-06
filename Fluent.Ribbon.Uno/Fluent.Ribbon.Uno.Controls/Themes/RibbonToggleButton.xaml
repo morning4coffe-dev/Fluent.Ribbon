@@ -105,7 +105,13 @@
                                         <Setter Target="PART_Icon.Height" Value="16" />
                                         <Setter Target="PART_Icon.Margin" Value="0,0,4,0" />
                                         <Setter Target="PART_GlyphIcon.Margin" Value="0,0,4,0" />
+                                        <Setter Target="PART_GlyphIcon.VerticalAlignment" Value="Center" />
                                         <Setter Target="PART_Label.Visibility" Value="Visible" />
+                                        <Setter Target="PART_Label.TextWrapping" Value="NoWrap" />
+                                        <Setter Target="PART_Label.MaxWidth" Value="180" />
+                                        <Setter Target="PART_Label.TextAlignment" Value="Left" />
+                                        <Setter Target="PART_Label.VerticalAlignment" Value="Center" />
+                                        <Setter Target="PART_Label.Margin" Value="0" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Small">
@@ -140,6 +146,8 @@
                                 Foreground="{ThemeResource RibbonTextBrush}"
                                 TextAlignment="Center"
                                 TextWrapping="Wrap"
+                                MaxLines="2"
+                                TextTrimming="CharacterEllipsis"
                                 MaxWidth="60"
                                 Margin="0,2,0,0"
                                 FontSize="11" />

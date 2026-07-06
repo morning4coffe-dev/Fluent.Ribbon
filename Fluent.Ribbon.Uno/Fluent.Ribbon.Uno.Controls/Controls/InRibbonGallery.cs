@@ -6,18 +6,19 @@ namespace Fluent;
 /// to show all items in a popup.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_GalleryPanel, Type = typeof(ItemsRepeater))]
+[TemplatePart(Name = PART_GalleryPanel, Type = typeof(UniformItemsPanel))]
 [TemplatePart(Name = PART_ExpandButton, Type = typeof(Button))]
 [TemplatePart(Name = PART_UpButton, Type = typeof(Button))]
 [TemplatePart(Name = PART_DownButton, Type = typeof(Button))]
 public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeaderedControl
 {
-    private ItemsRepeater? _galleryPanel;
+    private UniformItemsPanel? _galleryPanel;
     private Button? _expandButton;
     private Button? _upButton;
     private Button? _downButton;
     private ScrollViewer? _scrollViewer;
     private Flyout? _popupFlyout;
+    private bool _isPopupOpen;
 #pragma warning disable CS0169
     private int _scrollOffset;
 #pragma warning restore CS0169
@@ -359,7 +360,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     {
         base.OnApplyTemplate();
 
-        _galleryPanel = GetTemplateChild(PART_GalleryPanel) as ItemsRepeater;
+        _galleryPanel = GetTemplateChild(PART_GalleryPanel) as UniformItemsPanel;
 
         if (_expandButton is not null)
         {
@@ -454,31 +455,53 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        SetupGalleryPanel();
+        SyncInlineChildren();
     }
 
-    private void SetupGalleryPanel()
+    // Hosts the live gallery UIElements directly as panel children (non-virtualizing). While the
+    // popup is open the items live in the popup panel, so inline syncing is skipped until it closes.
+    private void SyncInlineChildren()
     {
-        if (_galleryPanel is null) return;
-
-        _galleryPanel.Layout = new UniformGridLayout
+        if (_galleryPanel is null)
         {
-            MinItemWidth = ItemWidth,
-            MinItemHeight = ItemHeight,
-            MaximumRowsOrColumns = MaxItemsInRow,
-            Orientation = Orientation.Horizontal,
-            MinRowSpacing = 0,
-            MinColumnSpacing = 0,
-        };
+            return;
+        }
 
-        _galleryPanel.ItemsSource = Items;
+        _galleryPanel.ItemWidth = ItemWidth;
+        _galleryPanel.ItemHeight = ItemHeight;
+        _galleryPanel.MaxColumns = MaxItemsInRow;
+
+        if (_isPopupOpen)
+        {
+            return;
+        }
+
+        _galleryPanel.Children.Clear();
+        foreach (var item in Items)
+        {
+            DetachFromParent(item);
+            _galleryPanel.Children.Add(item);
+        }
     }
+
+    // Keeps the old method name as a thin wrapper so callers (OnApplyTemplate) stay unchanged.
+    private void SetupGalleryPanel() => SyncInlineChildren();
 
     private void UpdateGalleryLayout()
     {
-        if (_galleryPanel?.Layout is UniformGridLayout layout)
+        if (_galleryPanel is not null)
         {
-            layout.MaximumRowsOrColumns = MaxItemsInRow;
+            _galleryPanel.MaxColumns = MaxItemsInRow;
+        }
+    }
+
+    // A UIElement can only have a single parent; moving items between the inline and popup panels
+    // requires first detaching from whichever panel currently owns them.
+    private static void DetachFromParent(UIElement element)
+    {
+        if (element is FrameworkElement fe && fe.Parent is Panel panel)
+        {
+            panel.Children.Remove(element);
         }
     }
 
@@ -505,6 +528,11 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
     private void ShowPopup()
     {
+        if (_galleryPanel is null)
+        {
+            return;
+        }
+
         if (_popupFlyout is null)
         {
             _popupFlyout = new Flyout
@@ -514,40 +542,33 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             _popupFlyout.Closed += OnPopupFlyoutClosed;
         }
 
-        var panel = new StackPanel();
+        _isPopupOpen = true;
 
-        // Move items from the internal inline collection to the popup list
-        var expandedItems = new List<UIElement>();
+        // Move the live items out of the inline panel and into the popup's own panel.
+        _galleryPanel.Children.Clear();
+
+        var expandedPanel = new UniformItemsPanel
+        {
+            ItemWidth = ItemWidth,
+            ItemHeight = ItemHeight,
+            MaxColumns = MaxDropDownItemsInRow,
+        };
+
         foreach (var item in Items)
         {
-            expandedItems.Add(item);
+            DetachFromParent(item);
+            expandedPanel.Children.Add(item);
         }
-
-        // Temporarily clear inline items so they can join the visual tree of the popup
-        _galleryPanel!.ItemsSource = null;
-
-        var expandedRepeater = new ItemsRepeater
-        {
-            Layout = new UniformGridLayout
-            {
-                MinItemWidth = ItemWidth,
-                MinItemHeight = ItemHeight,
-                MaximumRowsOrColumns = MaxDropDownItemsInRow,
-                Orientation = Orientation.Horizontal,
-                MinRowSpacing = 0,
-                MinColumnSpacing = 0,
-            },
-            ItemsSource = expandedItems,
-        };
 
         var galleryScroller = new ScrollViewer
         {
-            Content = expandedRepeater,
+            Content = expandedPanel,
             MaxHeight = 300,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
 
+        var panel = new StackPanel();
         panel.Children.Add(galleryScroller);
 
         // Menu items
@@ -562,11 +583,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
             foreach (var menuItem in MenuItems)
             {
-                if (menuItem is FrameworkElement mfe && mfe.Parent is Panel parent)
-                {
-                    parent.Children.Remove(menuItem);
-                }
-
+                DetachFromParent(menuItem);
                 panel.Children.Add(menuItem);
             }
         }
@@ -579,9 +596,10 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     private void OnPopupFlyoutClosed(object? sender, object e)
     {
         IsDropDownOpen = false;
-        
-        // Restore items back to the inline gallery repeater
-        SetupGalleryPanel();
+        _isPopupOpen = false;
+
+        // Restore the live items back to the inline gallery panel.
+        SyncInlineChildren();
     }
 
     private void UpdateVisualState()

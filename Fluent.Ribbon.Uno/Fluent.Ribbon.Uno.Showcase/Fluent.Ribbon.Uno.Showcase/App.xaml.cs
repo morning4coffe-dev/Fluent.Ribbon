@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Uno.Resizetizer;
 
@@ -13,6 +15,51 @@ public partial class App : Application
     public App()
     {
         this.InitializeComponent();
+        WireCrashCapture();
+    }
+
+    // Opt-in (SHOWCASE_AUTOTEST): capture otherwise-unhandled exceptions so the auto-test
+    // harness can record layout/dispatcher crashes and keep walking instead of dying.
+    // No effect on normal runs.
+    private void WireCrashCapture()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST")))
+        {
+            return;
+        }
+
+        this.UnhandledException += (_, e) =>
+        {
+            LogCrash($"App.UnhandledException: {e.Exception}");
+            e.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            LogCrash($"AppDomain.UnhandledException: {e.ExceptionObject}");
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            LogCrash($"TaskScheduler.UnobservedTaskException: {e.Exception}");
+            e.SetObserved();
+        };
+    }
+
+    private static void LogCrash(string message)
+    {
+        var line = $"[CRASH] {DateTime.Now:HH:mm:ss.fff} {message}";
+        Console.Error.WriteLine(line);
+        try
+        {
+            var path = Environment.GetEnvironmentVariable("SHOWCASE_CRASH_LOG");
+            if (!string.IsNullOrEmpty(path))
+            {
+                File.AppendAllText(path, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // logging must never throw
+        }
     }
 
     protected Window? MainWindow { get; private set; }
@@ -21,7 +68,12 @@ public partial class App : Application
     {
         MainWindow = new Window();
 #if DEBUG
-        MainWindow.UseStudio();
+        // The Uno Studio / Hot Design dev-server injects extra layout passes and raises its own
+        // background task exceptions; skip it under the auto-test harness so results are clean.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST")))
+        {
+            MainWindow.UseStudio();
+        }
 #endif
 
 

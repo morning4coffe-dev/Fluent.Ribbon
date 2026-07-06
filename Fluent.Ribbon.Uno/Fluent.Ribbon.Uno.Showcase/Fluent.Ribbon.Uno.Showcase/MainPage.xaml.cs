@@ -42,6 +42,7 @@ public sealed partial class MainPage : Page
         fontSizeCombo.SelectedIndex = 3;
 
         InitializeShowcaseTabs();
+        InitializeDiagnostics();
     }
 
     // Seeds the cloned WPF Showcase tabs (Insert/Tests/Galleries/Binding). RibbonComboBox and

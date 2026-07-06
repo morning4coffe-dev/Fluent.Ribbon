@@ -351,9 +351,9 @@ public partial class RibbonGallery : Control
     #region Template
 
     private ScrollViewer? _scrollViewer;
-    private ItemsRepeater? _itemsRepeater;
+    private UniformItemsPanel? _itemsPanel;
     private StackPanel? _groupedPanel;
-    private ItemsRepeater? _filterButtons;
+    private StackPanel? _filterButtons;
 
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
@@ -361,12 +361,12 @@ public partial class RibbonGallery : Control
         base.OnApplyTemplate();
 
         _scrollViewer = GetTemplateChild("PART_ScrollViewer") as ScrollViewer;
-        _itemsRepeater = GetTemplateChild("PART_ItemsPanel") as ItemsRepeater;
+        _itemsPanel = GetTemplateChild("PART_ItemsPanel") as UniformItemsPanel;
         _groupedPanel = GetTemplateChild("PART_GroupedPanel") as StackPanel;
-        _filterButtons = GetTemplateChild("PART_FilterButtons") as ItemsRepeater;
+        _filterButtons = GetTemplateChild("PART_FilterButtons") as StackPanel;
 
-        // Ensure ItemsRepeater isn't left bound while the control is unloading which
-        // can cause collection change events to race with visual tree cleanup in Uno.
+        // Re-sync live children on load/unload so items are never orphaned between panels
+        // (a UIElement can only live under one parent at a time).
         Loaded -= OnGalleryLoaded;
         Unloaded -= OnGalleryUnloaded;
         Loaded += OnGalleryLoaded;
@@ -380,11 +380,7 @@ public partial class RibbonGallery : Control
     {
         try
         {
-            if (_itemsRepeater is not null)
-            {
-                // Rebind the repeater to the current items collection when loaded
-                _itemsRepeater.ItemsSource = Items;
-            }
+            SyncItems();
         }
         catch
         {
@@ -396,12 +392,8 @@ public partial class RibbonGallery : Control
     {
         try
         {
-            if (_itemsRepeater is not null)
-            {
-                // Detach ItemsSource to prevent the repeater from processing
-                // collection change events while the control is being torn down.
-                _itemsRepeater.ItemsSource = null;
-            }
+            // Detach the live children so a subsequent reload can re-parent them cleanly.
+            _itemsPanel?.Children.Clear();
         }
         catch
         {
@@ -420,40 +412,64 @@ public partial class RibbonGallery : Control
 
     private void SyncItems()
     {
-        if (_groupedPanel is null || _itemsRepeater is null) return;
-
-        // Clear any previously added group headers
-        while (_groupedPanel.Children.Count > 1)
+        if (_groupedPanel is null || _itemsPanel is null)
         {
-            // Keep only the ItemsRepeater (last child)
-            _groupedPanel.Children.RemoveAt(0);
+            return;
+        }
+
+        _itemsPanel.ItemWidth = ItemWidth;
+        _itemsPanel.ItemHeight = ItemHeight;
+
+        // Clear any previously added group headers/panels (keep the flat items panel).
+        for (int i = _groupedPanel.Children.Count - 1; i >= 0; i--)
+        {
+            if (_groupedPanel.Children[i] != _itemsPanel)
+            {
+                _groupedPanel.Children.RemoveAt(i);
+            }
+        }
+
+        // Detach every item from whichever panel currently hosts it before redistributing.
+        _itemsPanel.Children.Clear();
+        foreach (var item in Items)
+        {
+            DetachFromParent(item);
         }
 
         if (IsGrouped || !string.IsNullOrEmpty(GroupBy))
         {
-            // Hide flat repeater, build grouped view
-            _itemsRepeater.Visibility = Visibility.Collapsed;
+            // Hide flat panel, build grouped view
+            _itemsPanel.Visibility = Visibility.Collapsed;
             BuildGroupedView();
         }
         else
         {
-            // Flat mode: just use the ItemsRepeater
-            _itemsRepeater.Visibility = Visibility.Visible;
+            // Flat mode: host all items directly in the uniform panel
+            _itemsPanel.Visibility = Visibility.Visible;
+            foreach (var item in Items)
+            {
+                _itemsPanel.Children.Add(item);
+            }
+
             ApplyFilter();
+        }
+    }
+
+    // A UIElement can only have a single parent; moving items between the flat and group panels
+    // requires first detaching from whichever panel currently owns them.
+    private static void DetachFromParent(UIElement element)
+    {
+        if (element is FrameworkElement fe && fe.Parent is Panel panel)
+        {
+            panel.Children.Remove(element);
         }
     }
 
     private void BuildGroupedView()
     {
-        if (_groupedPanel is null) return;
-
-        // Remove all children except the flat ItemsRepeater
-        for (int i = _groupedPanel.Children.Count - 1; i >= 0; i--)
+        if (_groupedPanel is null)
         {
-            if (_groupedPanel.Children[i] != _itemsRepeater)
-            {
-                _groupedPanel.Children.RemoveAt(i);
-            }
+            return;
         }
 
         // Group items by their Group property
@@ -515,37 +531,35 @@ public partial class RibbonGallery : Control
             };
             _groupedPanel.Children.Insert(insertIndex++, header);
 
-            // Items grid
-            var repeater = new ItemsRepeater
+            // Items grid (non-virtualizing, hosts the live item elements directly)
+            var groupPanel = new UniformItemsPanel
             {
-                ItemsSource = items,
-                Layout = new UniformGridLayout
-                {
-                    MinItemWidth = ItemWidth,
-                    MinItemHeight = ItemHeight,
-                    MinColumnSpacing = 2,
-                    MinRowSpacing = 2,
-                },
+                ItemWidth = ItemWidth,
+                ItemHeight = ItemHeight,
                 Visibility = visible ? Visibility.Visible : Visibility.Collapsed,
             };
-            _groupedPanel.Children.Insert(insertIndex++, repeater);
+            foreach (var item in items)
+            {
+                DetachFromParent(item);
+                groupPanel.Children.Add(item);
+            }
+            _groupedPanel.Children.Insert(insertIndex++, groupPanel);
         }
 
         // Add ungrouped items at the end if any
         if (ungrouped.Count > 0)
         {
-            var repeater = new ItemsRepeater
+            var groupPanel = new UniformItemsPanel
             {
-                ItemsSource = ungrouped,
-                Layout = new UniformGridLayout
-                {
-                    MinItemWidth = ItemWidth,
-                    MinItemHeight = ItemHeight,
-                    MinColumnSpacing = 2,
-                    MinRowSpacing = 2,
-                },
+                ItemWidth = ItemWidth,
+                ItemHeight = ItemHeight,
             };
-            _groupedPanel.Children.Insert(insertIndex, repeater);
+            foreach (var item in ungrouped)
+            {
+                DetachFromParent(item);
+                groupPanel.Children.Add(item);
+            }
+            _groupedPanel.Children.Insert(insertIndex, groupPanel);
         }
     }
 
@@ -609,7 +623,11 @@ public partial class RibbonGallery : Control
             buttons.Add(btn);
         }
 
-        _filterButtons.ItemsSource = buttons;
+        _filterButtons.Children.Clear();
+        foreach (var btn in buttons)
+        {
+            _filterButtons.Children.Add(btn);
+        }
 
         // Highlight the selected filter
         UpdateFilterHighlight();
@@ -625,10 +643,18 @@ public partial class RibbonGallery : Control
 
     private void UpdateFilterHighlight()
     {
-        if (_filterButtons?.ItemsSource is not List<Button> buttons) return;
-
-        foreach (var btn in buttons)
+        if (_filterButtons is null)
         {
+            return;
+        }
+
+        foreach (var child in _filterButtons.Children)
+        {
+            if (child is not Button btn)
+            {
+                continue;
+            }
+
             var isSelected = btn.Tag == SelectedFilter;
             btn.FontWeight = isSelected
                 ? Microsoft.UI.Text.FontWeights.Bold
@@ -769,7 +795,7 @@ public partial class RibbonGallery : Control
             // Re-sync items to apply the new filter
             if (gallery.IsGrouped || !string.IsNullOrEmpty(gallery.GroupBy))
             {
-                gallery.BuildGroupedView();
+                gallery.SyncItems();
             }
             else
             {

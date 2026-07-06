@@ -37,13 +37,11 @@
                                         Foreground="{ThemeResource RibbonSecondaryTextBrush}"
                                         VerticalAlignment="Center"
                                         Margin="4,0" />
-                                    <ItemsRepeater
+                                    <StackPanel
                                         x:Name="PART_FilterButtons"
-                                        VerticalAlignment="Center">
-                                        <ItemsRepeater.Layout>
-                                            <StackLayout Orientation="Horizontal" Spacing="2" />
-                                        </ItemsRepeater.Layout>
-                                    </ItemsRepeater>
+                                        Orientation="Horizontal"
+                                        Spacing="2"
+                                        VerticalAlignment="Center" />
                                 </StackPanel>
                             </Border>
 
@@ -73,18 +71,11 @@
                                 Padding="4">
                                 <StackPanel x:Name="PART_GroupedPanel">
                                     <!-- When grouped: group headers + item grids are built here programmatically -->
-                                    <!-- When not grouped: ItemsRepeater is used directly -->
-                                    <ItemsRepeater
+                                    <!-- When not grouped: the flat items panel is used directly -->
+                                    <fluent:UniformItemsPanel
                                         x:Name="PART_ItemsPanel"
-                                        ItemsSource="{TemplateBinding Items}">
-                                        <ItemsRepeater.Layout>
-                                            <UniformGridLayout
-                                                MinItemWidth="{Binding ItemWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                                MinItemHeight="{Binding ItemHeight, RelativeSource={RelativeSource TemplatedParent}}"
-                                                MinColumnSpacing="2"
-                                                MinRowSpacing="2" />
-                                        </ItemsRepeater.Layout>
-                                    </ItemsRepeater>
+                                        ItemWidth="{Binding ItemWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        ItemHeight="{Binding ItemHeight, RelativeSource={RelativeSource TemplatedParent}}" />
                                 </StackPanel>
                             </ScrollViewer>
                         </Grid>
