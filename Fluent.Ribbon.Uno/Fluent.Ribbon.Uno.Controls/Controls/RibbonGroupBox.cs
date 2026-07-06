@@ -16,11 +16,19 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     private const string PART_PopupItemsPanel = "PART_PopupItemsPanel";
     private const string PART_PopupHeaderText = "PART_PopupHeaderText";
 
-    private StackPanel? _itemsPanel;
+    private Panel? _itemsPanel;
     private Button? _collapsedButton;
     private Popup? _collapsedPopup;
     private StackPanel? _popupItemsPanel;
     private TextBlock? _popupHeaderText;
+
+    /// <summary>
+    /// Stores the authored (preferred) size of each scalable item, captured before any
+    /// group-driven scaling occurs. This lets a group honor per-control sizes
+    /// (e.g. a large Paste next to small Cut/Copy) instead of forcing every item
+    /// to the group's uniform size.
+    /// </summary>
+    private readonly Dictionary<UIElement, RibbonControlSize> _preferredSizes = new();
 
     #region Dependency Properties
 
@@ -282,7 +290,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     {
         base.OnApplyTemplate();
 
-        _itemsPanel = GetTemplateChild(PART_ItemsPanel) as StackPanel;
+        _itemsPanel = GetTemplateChild(PART_ItemsPanel) as Panel;
 
         if (_collapsedButton is not null)
         {
@@ -333,7 +341,41 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            _preferredSizes.Clear();
+        }
+        else if (e.OldItems is not null)
+        {
+            foreach (var old in e.OldItems)
+            {
+                if (old is UIElement element)
+                {
+                    _preferredSizes.Remove(element);
+                }
+            }
+        }
+
+        // Capture authored sizes for any newly added scalable items *before* the group
+        // applies its own state-based sizing, so per-control sizes are preserved.
+        CapturePreferredSizes();
         SyncItems();
+        UpdateItemSizes();
+    }
+
+    /// <summary>
+    /// Records the authored size of each scalable item the first time it is seen.
+    /// Once captured, an item's preferred size is never overwritten by group scaling.
+    /// </summary>
+    private void CapturePreferredSizes()
+    {
+        foreach (var item in Items)
+        {
+            if (item is IScalableRibbonControl scalable && !_preferredSizes.ContainsKey(item))
+            {
+                _preferredSizes[item] = scalable.Size;
+            }
+        }
     }
 
     private void SyncItems()
@@ -437,7 +479,9 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
 
     private void UpdateItemSizes()
     {
-        var targetSize = State switch
+        // The group state acts as a cap: controls may be their authored size or smaller,
+        // but never larger than what the current group state allows.
+        var cap = State switch
         {
             RibbonGroupBoxState.Large => RibbonControlSize.Large,
             RibbonGroupBoxState.Medium => RibbonControlSize.Medium,
@@ -449,7 +493,13 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         {
             if (item is IScalableRibbonControl scalable)
             {
-                scalable.ScaleTo(targetSize);
+                var preferred = _preferredSizes.TryGetValue(item, out var p) ? p : scalable.Size;
+
+                // RibbonControlSize orders Large(0) < Medium(1) < Small(2), so a larger
+                // enum value means a smaller control. Clamp to the group cap by taking
+                // whichever is the smaller control (the higher enum value).
+                var effective = (RibbonControlSize)System.Math.Max((int)preferred, (int)cap);
+                scalable.ScaleTo(effective);
             }
         }
     }

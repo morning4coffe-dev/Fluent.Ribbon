@@ -41,9 +41,8 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <StackPanel
+                                <fluent:RibbonGroupItemsPanel
                                     x:Name="PART_ItemsPanel"
-                                    Orientation="Horizontal"
                                     VerticalAlignment="Stretch"
                                     HorizontalAlignment="Left" />
 
