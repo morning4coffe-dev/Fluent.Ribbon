@@ -214,11 +214,17 @@ public partial class RibbonContextualTabGroup : Control
 
     private void UpdateInnerVisibility()
     {
-        InnerVisibility = Visibility == Visibility.Visible && Items.Any(item => item.Visibility == Visibility.Visible)
+        // Set InnerVisibility BEFORE propagating to child tabs. Propagating tab visibility fires
+        // the ribbon's per-tab visibility callbacks synchronously, and those read this group's
+        // InnerVisibility; computing it afterwards (or from the not-yet-updated child tabs) would
+        // leave the group header collapsed on a Collapsed->Visible toggle. Because propagation is
+        // uniform (every tab takes the group's visibility), "any visible child" is equivalent to
+        // "the group is visible and has at least one tab".
+        InnerVisibility = Visibility == Visibility.Visible && Items.Count > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // Propagate visibility to child tabs so they appear/disappear in the tab strip
+        // Propagate visibility to child tabs so they appear/disappear in the tab strip.
         foreach (var tab in Items)
         {
             tab.Visibility = Visibility;

@@ -48,7 +48,9 @@
 
             <!-- Contextual Tab Groups -->
             <fluent:Ribbon.ContextualGroups>
-                <fluent:RibbonContextualTabGroup x:Name="TableToolsGroup" Header="Table Tools" Visibility="Collapsed" />
+                <fluent:RibbonContextualTabGroup x:Name="TableToolsGroup" Header="Table Tools"
+                                                 Background="#0F6CBD" Foreground="White"
+                                                 Visibility="Collapsed" />
             </fluent:Ribbon.ContextualGroups>
 
             <!-- Quick Access Toolbar items (mirrored above/below the ribbon) -->
@@ -296,6 +298,8 @@
                                         <fluent:RibbonMenuItem Header="Undo another thing" />
                                     </fluent:RibbonSplitButton.Items>
                                 </fluent:RibbonSplitButton>
+                                <fluent:RibbonButton Header="Redo" Size="Medium" IconGlyph="&#xE7A6;" fluent:KeyTip.Keys="Y" />
+                                <fluent:RibbonButton Header="Repeat" Size="Medium" IconGlyph="&#xE72C;" fluent:KeyTip.Keys="R" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
                     </fluent:RibbonTab.Groups>

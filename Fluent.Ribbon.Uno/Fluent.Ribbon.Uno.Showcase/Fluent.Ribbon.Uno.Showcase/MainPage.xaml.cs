@@ -66,8 +66,11 @@ public sealed partial class MainPage : Page
         var navItems = Enumerable.Range(1, 10).Select(i => $"Item {i}").ToArray();
         insertKbNav1.ItemsSource = navItems;
         insertKbNav2.ItemsSource = navItems;
+        insertKbNav1.SelectedIndex = 0;
+        insertKbNav2.SelectedIndex = 0;
 
         sharedSizeCombo.ItemsSource = Enumerable.Range(1, 20).Select(i => $"Many items entry {i}").ToArray();
+        sharedSizeCombo.SelectedIndex = 0;
 
         for (var i = 1; i <= 9; i++)
         {

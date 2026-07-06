@@ -10,6 +10,7 @@ namespace Fluent;
 [TemplatePart(Name = PART_ContextualGroupsPanel, Type = typeof(RibbonContextualGroupsContainer))]
 [TemplatePart(Name = PART_BelowRibbonQAT, Type = typeof(QuickAccessToolBar))]
 [TemplatePart(Name = PART_ToolBarItemsHost, Type = typeof(Panel))]
+[TemplatePart(Name = PART_Title, Type = typeof(FrameworkElement))]
 public partial class Ribbon : Control
 {
     private const string PART_TabControl = "PART_RibbonTabControl";
@@ -17,12 +18,14 @@ public partial class Ribbon : Control
     private const string PART_ContextualGroupsPanel = "PART_ContextualGroupsPanel";
     private const string PART_BelowRibbonQAT = "PART_BelowRibbonQAT";
     private const string PART_ToolBarItemsHost = "PART_ToolBarItemsHost";
+    private const string PART_Title = "PART_Title";
 
     private RibbonTabControl? _tabControl;
     private QuickAccessToolBar? _quickAccessToolBar;
     private QuickAccessToolBar? _belowRibbonQAT;
     private RibbonContextualGroupsContainer? _contextualGroupsPanel;
     private Panel? _toolBarItemsHost;
+    private FrameworkElement? _titleText;
     private bool _isUpdatingQatLocation;
     private readonly KeyTipService _keyTipService;
     private readonly HashSet<RibbonTab> _visibilityHookedTabs = new();
@@ -403,6 +406,7 @@ public partial class Ribbon : Control
         _belowRibbonQAT = GetTemplateChild(PART_BelowRibbonQAT) as QuickAccessToolBar;
         _contextualGroupsPanel = GetTemplateChild(PART_ContextualGroupsPanel) as RibbonContextualGroupsContainer;
         _toolBarItemsHost = GetTemplateChild(PART_ToolBarItemsHost) as Panel;
+        _titleText = GetTemplateChild(PART_Title) as FrameworkElement;
 
         HookQuickAccessToolBar(_quickAccessToolBar);
         HookQuickAccessToolBar(_belowRibbonQAT);
@@ -483,6 +487,7 @@ public partial class Ribbon : Control
     {
         SyncContextualGroups();
         LinkContextualTabGroups();
+        UpdateTitleVisibility();
     }
 
     private void SyncContextualGroups()
@@ -531,6 +536,9 @@ public partial class Ribbon : Control
 
     private void OnRibbonSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        // Tab positions change with width, so keep contextual-group headers aligned.
+        _contextualGroupsPanel?.InvalidateArrange();
+
         if (IsAutomaticCollapseEnabled)
         {
             // Collapse ribbon only when the available width is very small.
@@ -673,6 +681,38 @@ public partial class Ribbon : Control
     private void OnTabVisibilityChanged(DependencyObject sender, DependencyProperty dp)
     {
         EnsureSelectedTabVisible();
+
+        // A contextual tab appearing/disappearing shifts the tab strip, so re-align the
+        // colored contextual-group headers above their tabs.
+        _contextualGroupsPanel?.InvalidateArrange();
+
+        // The centered window title and the contextual-group headers share the title bar,
+        // so hide the title while any contextual header is showing to avoid them overlapping.
+        UpdateTitleVisibility();
+    }
+
+    /// <summary>
+    /// Hides the centered window title while any contextual-group header is visible, since both
+    /// occupy the title bar and a contextual tab near the center would otherwise overlap the title.
+    /// </summary>
+    private void UpdateTitleVisibility()
+    {
+        if (_titleText is null)
+        {
+            return;
+        }
+
+        var anyContextualVisible = false;
+        foreach (var group in ContextualGroups)
+        {
+            if (group.InnerVisibility == Visibility.Visible)
+            {
+                anyContextualVisible = true;
+                break;
+            }
+        }
+
+        _titleText.Visibility = anyContextualVisible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>

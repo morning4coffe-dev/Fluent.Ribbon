@@ -222,7 +222,15 @@ public partial class RibbonMenuItem : Control
     protected override void OnPointerPressed(PointerRoutedEventArgs e)
     {
         base.OnPointerPressed(e);
+        InvokeItem();
+    }
 
+    /// <summary>
+    /// Executes the menu item's command and raises <see cref="Click"/>.
+    /// Shared by pointer input and the automation (Invoke) peer.
+    /// </summary>
+    internal void InvokeItem()
+    {
         if (Command?.CanExecute(CommandParameter) == true)
         {
             Command.Execute(CommandParameter);
@@ -230,6 +238,10 @@ public partial class RibbonMenuItem : Control
 
         Click?.Invoke(this, new RoutedEventArgs());
     }
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new RibbonMenuItemAutomationPeer(this);
 
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

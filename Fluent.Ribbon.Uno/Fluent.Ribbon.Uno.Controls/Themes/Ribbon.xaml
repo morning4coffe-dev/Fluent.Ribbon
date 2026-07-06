@@ -90,19 +90,25 @@
 
                                 <!-- Title (centered) -->
                                 <TextBlock
+                                    x:Name="PART_Title"
                                     Text="{TemplateBinding Title}"
                                     VerticalAlignment="Center"
                                     HorizontalAlignment="Center"
                                     FontSize="12"
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     IsHitTestVisible="False" />
-
-                                <!-- Contextual Tab Group headers -->
-                                <fluent:RibbonContextualGroupsContainer
-                                    x:Name="PART_ContextualGroupsPanel"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Stretch" />
                             </Grid>
+
+                            <!-- Contextual Tab Group headers: a full-width overlay across the
+                                 whole title bar so each colored header can be positioned directly
+                                 above its contextual tabs at layout time. -->
+                            <fluent:RibbonContextualGroupsContainer
+                                x:Name="PART_ContextualGroupsPanel"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="4"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                IsHitTestVisible="False" />
 
                             <!-- Toolbar items (right side of title bar) -->
                             <StackPanel

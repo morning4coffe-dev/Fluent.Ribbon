@@ -182,7 +182,7 @@ public partial class ApplicationMenu : Control
     private void ShowDropDown()
     {
         // Build the two-pane dropdown content
-        var rootPanel = new Grid { MinWidth = 400 };
+        var rootPanel = new Grid { MinWidth = 400, Background = MenuBackgroundBrush };
         rootPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         rootPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -214,6 +214,7 @@ public partial class ApplicationMenu : Control
             var separator = new Rectangle
             {
                 Width = 1,
+                Fill = MenuSeparatorBrush,
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
             Grid.SetColumn(separator, 1);
@@ -237,6 +238,7 @@ public partial class ApplicationMenu : Control
             var footerSep = new Rectangle
             {
                 Height = 1,
+                Fill = MenuSeparatorBrush,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(0, 4, 0, 0),
             };
@@ -263,10 +265,34 @@ public partial class ApplicationMenu : Control
             };
         }
 
+        // Force an opaque presenter every time (also picks up the current theme). Without this the
+        // default acrylic FlyoutPresenter renders the colorful ribbon behind it as a smeared blur.
+        var presenterStyle = new Style(typeof(FlyoutPresenter));
+        presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, MenuBackgroundBrush));
+        presenterStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
+        presenterStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(8)));
+        presenterStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
+        presenterStyle.Setters.Add(new Setter(Control.BorderBrushProperty, MenuSeparatorBrush));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 900.0));
+        presenterStyle.Setters.Add(new Setter(ScrollViewer.HorizontalScrollModeProperty, ScrollMode.Disabled));
+        presenterStyle.Setters.Add(new Setter(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled));
+        _flyout.FlyoutPresenterStyle = presenterStyle;
+
         _flyout.Content = rootPanel;
         IsDropDownOpen = true;
         _flyout.ShowAt((FrameworkElement?)_button ?? this);
     }
+
+    // Opaque, theme-aware brushes for the menu surface (mirrors RibbonContentBrush / RibbonBorderBrush).
+    private Brush MenuBackgroundBrush =>
+        new SolidColorBrush(ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E)
+            : Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+
+    private Brush MenuSeparatorBrush =>
+        new SolidColorBrush(ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(0xFF, 0x40, 0x40, 0x40)
+            : Windows.UI.Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4));
 
     private void RestoreItems()
     {
