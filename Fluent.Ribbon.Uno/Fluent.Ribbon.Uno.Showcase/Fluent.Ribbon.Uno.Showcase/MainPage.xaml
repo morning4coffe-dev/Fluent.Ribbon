@@ -51,20 +51,33 @@
                 <fluent:RibbonContextualTabGroup x:Name="TableToolsGroup" Header="Table Tools" Visibility="Collapsed" />
             </fluent:Ribbon.ContextualGroups>
 
+            <!-- Quick Access Toolbar items (mirrored above/below the ribbon) -->
+            <fluent:Ribbon.QuickAccessItems>
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE74E;" ToolTipService.ToolTip="Save" />
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A7;" ToolTipService.ToolTip="Undo" />
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A6;" ToolTipService.ToolTip="Redo" />
+            </fluent:Ribbon.QuickAccessItems>
+
+            <!-- Toolbar items shown on the right of the title bar -->
+            <fluent:Ribbon.ToolBarItems>
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE946;" ToolTipService.ToolTip="Help" />
+                <fluent:RibbonToggleButton Size="Small" IconGlyph="&#xE706;" ToolTipService.ToolTip="Toggle theme" />
+            </fluent:Ribbon.ToolBarItems>
+
             <fluent:Ribbon.Tabs>
-                <fluent:RibbonTab Header="Home"
+                <fluent:RibbonTab Header="Home" fluent:KeyTip.Keys="H"
                                   ReduceOrder="Options,Editing,Editing,Paragraph,Paragraph,Font,Font,Clipboard,Clipboard,Clipboard,Options,Editing,Paragraph,Font,Styles">
                     <fluent:RibbonTab.Groups>
                         <!-- Clipboard Group -->
                         <fluent:RibbonGroupBox Header="Clipboard" IconGlyph="&#xE77F;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Paste" Size="Large" IconGlyph="&#xE77F;">
+                                <fluent:RibbonButton Header="Paste" Size="Large" IconGlyph="&#xE77F;" fluent:KeyTip.Keys="V">
                                     <ToolTipService.ToolTip>
                                         <fluent:ScreenTip Title="Paste (Ctrl+V)" Text="Paste the contents of the clipboard." DisableReason="Copy something first to use Paste." />
                                     </ToolTipService.ToolTip>
                                 </fluent:RibbonButton>
-                                <fluent:RibbonButton Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" />
-                                <fluent:RibbonButton Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" />
+                                <fluent:RibbonButton Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" fluent:KeyTip.Keys="X" />
+                                <fluent:RibbonButton Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" fluent:KeyTip.Keys="C" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
@@ -110,13 +123,13 @@
                         <!-- Editing Group -->
                         <fluent:RibbonGroupBox Header="Editing" IconGlyph="&#xE721;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Find" Size="Large" IconGlyph="&#xE721;">
+                                <fluent:RibbonButton Header="Find" Size="Large" IconGlyph="&#xE721;" fluent:KeyTip.Keys="FD">
                                     <ToolTipService.ToolTip>
                                         <fluent:ScreenTip Title="Find (Ctrl+F)" Text="Search for text in the document." />
                                     </ToolTipService.ToolTip>
                                 </fluent:RibbonButton>
-                                <fluent:RibbonButton Header="Replace" Size="Medium" IconGlyph="&#xE8EE;" />
-                                <fluent:RibbonButton Header="Select All" Size="Medium" IconGlyph="&#xE8B3;" />
+                                <fluent:RibbonButton Header="Replace" Size="Medium" IconGlyph="&#xE8EE;" fluent:KeyTip.Keys="R" />
+                                <fluent:RibbonButton Header="Select All" Size="Medium" IconGlyph="&#xE8B3;" fluent:KeyTip.Keys="SL" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
@@ -134,7 +147,7 @@
                 </fluent:RibbonTab>
 
                 <!-- Insert Tab -->
-                <fluent:RibbonTab Header="Insert">
+                <fluent:RibbonTab Header="Insert" fluent:KeyTip.Keys="N">
                     <fluent:RibbonTab.Groups>
                         <fluent:RibbonGroupBox Header="Pages" IconGlyph="&#xE7C3;">
                             <fluent:RibbonGroupBox.Items>
@@ -206,7 +219,7 @@
                 </fluent:RibbonTab>
 
                 <!-- View Tab -->
-                <fluent:RibbonTab Header="View">
+                <fluent:RibbonTab Header="View" fluent:KeyTip.Keys="W">
                     <fluent:RibbonTab.Groups>
                         <fluent:RibbonGroupBox Header="Views" IconGlyph="&#xE736;">
                             <fluent:RibbonGroupBox.Items>
@@ -240,7 +253,7 @@
                 </fluent:RibbonTab>
 
                 <!-- NEW: Ported Controls Tab -->
-                <fluent:RibbonTab Header="Ported Controls">
+                <fluent:RibbonTab Header="Ported Controls" fluent:KeyTip.Keys="P">
                     <fluent:RibbonTab.Groups>
                         <!-- ToolBar Group showcasing RibbonToolBar -->
                         <fluent:RibbonGroupBox Header="Toolbar" IconGlyph="&#xE81E;">
@@ -352,7 +365,7 @@
                 </fluent:RibbonTab>
 
                 <!-- Contextual Tab: Table Design -->
-                <fluent:RibbonTab Header="Design" ContextualTabGroupName="Table Tools">
+                <fluent:RibbonTab Header="Design" ContextualTabGroupName="Table Tools" fluent:KeyTip.Keys="JT">
                     <fluent:RibbonTab.Groups>
                         <fluent:RibbonGroupBox Header="Table Styles" IconGlyph="&#xE80A;">
                             <fluent:RibbonGroupBox.Items>
@@ -574,6 +587,85 @@
                                     </Border>
                                 </fluent:ResizeableContentControl.Content>
                             </fluent:ResizeableContentControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RibbonScrollViewer -->
+                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RibbonScrollViewer" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Horizontal scroller with left/right chevrons for overflowing ribbon content." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <fluent:RibbonScrollViewer Width="320" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="One" />
+                                    <Button Content="Two" />
+                                    <Button Content="Three" />
+                                    <Button Content="Four" />
+                                    <Button Content="Five" />
+                                    <Button Content="Six" />
+                                    <Button Content="Seven" />
+                                    <Button Content="Eight" />
+                                </StackPanel>
+                            </fluent:RibbonScrollViewer>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RibbonTitleBar -->
+                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RibbonTitleBar" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Title bar hosting a quick access toolbar, contextual group area, and centered title." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <fluent:RibbonTitleBar Header="Document1 - Fluent.Ribbon.Uno" Height="36">
+                                <fluent:RibbonTitleBar.QuickAccessToolBar>
+                                    <fluent:QuickAccessToolBar>
+                                        <fluent:QuickAccessToolBar.Items>
+                                            <fluent:RibbonButton Size="Small" IconGlyph="&#xE74E;" ToolTipService.ToolTip="Save" />
+                                            <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A7;" ToolTipService.ToolTip="Undo" />
+                                        </fluent:QuickAccessToolBar.Items>
+                                    </fluent:QuickAccessToolBar>
+                                </fluent:RibbonTitleBar.QuickAccessToolBar>
+                            </fluent:RibbonTitleBar>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RibbonToolBarControlGroup -->
+                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RibbonToolBarControlGroup" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Groups related toolbar controls so they render as a single segmented cluster." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <fluent:RibbonToolBarControlGroup HorizontalAlignment="Left">
+                                <fluent:RibbonButton Size="Small" Header="Left" IconGlyph="&#xE8B8;" />
+                                <fluent:RibbonButton Size="Small" Header="Center" IconGlyph="&#xE8BA;" />
+                                <fluent:RibbonButton Size="Small" Header="Right" IconGlyph="&#xE8B9;" />
+                            </fluent:RibbonToolBarControlGroup>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Checkable Menu Items -->
+                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="StatusBarMenuItem &amp; QuickAccessMenuItem" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Checkable menu entries used to toggle status-bar fields and quick-access commands. Click to toggle the check mark." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <StackPanel Spacing="2" Width="240" HorizontalAlignment="Left">
+                                <fluent:StatusBarMenuItem Header="Word Count" IsChecked="True" />
+                                <fluent:StatusBarMenuItem Header="Zoom Slider" IsChecked="True" />
+                                <fluent:StatusBarMenuItem Header="Caps Lock" IsChecked="False" />
+                                <fluent:QuickAccessMenuItem Header="Save" IsChecked="True" />
+                                <fluent:QuickAccessMenuItem Header="Print Preview" IsChecked="False" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- KeyTips -->
+                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="KeyTips (Alt navigation)" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Press Alt (or F10) while the ribbon is focused to show access keys, then type them to activate. Try Alt, then H (Home), V (Paste); Esc goes back." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 

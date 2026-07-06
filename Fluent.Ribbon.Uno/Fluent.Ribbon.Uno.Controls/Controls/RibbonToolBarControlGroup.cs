@@ -8,8 +8,13 @@ namespace Fluent;
 /// WPF uses ItemsControl; Uno uses Panel-based approach.
 /// </remarks>
 [ContentProperty(Name = nameof(Items))]
+[TemplatePart(Name = PART_ItemsHost, Type = typeof(Panel))]
 public partial class RibbonToolBarControlGroup : Control
 {
+    private const string PART_ItemsHost = "PART_ItemsHost";
+
+    private Panel? _itemsHost;
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
@@ -74,6 +79,39 @@ public partial class RibbonToolBarControlGroup : Control
     {
         DefaultStyleKey = typeof(RibbonToolBarControlGroup);
         Items = new ObservableCollection<UIElement>();
+        Items.CollectionChanged += OnItemsCollectionChanged;
+    }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        _itemsHost = GetTemplateChild(PART_ItemsHost) as Panel;
+        SyncItems();
+    }
+
+    private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncItems();
+    }
+
+    private void SyncItems()
+    {
+        if (_itemsHost is null)
+        {
+            return;
+        }
+
+        _itemsHost.Children.Clear();
+        foreach (var item in Items)
+        {
+            _itemsHost.Children.Add(item);
+        }
     }
 
     #endregion

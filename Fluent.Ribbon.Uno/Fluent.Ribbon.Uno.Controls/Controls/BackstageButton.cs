@@ -122,16 +122,47 @@ public partial class BackstageButton : Control
     {
         DefaultStyleKey = typeof(BackstageButton);
         IsTabStop = true;
+        IsEnabledChanged += (_, _) => UpdateVisualState();
     }
 
     #endregion
 
     #region Interaction
 
+    private bool _isPointerOver;
+    private bool _isPressed;
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        UpdateVisualState(false);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerEntered(PointerRoutedEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        _isPointerOver = true;
+        UpdateVisualState();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerExited(PointerRoutedEventArgs e)
+    {
+        base.OnPointerExited(e);
+        _isPointerOver = false;
+        _isPressed = false;
+        UpdateVisualState();
+    }
+
     /// <inheritdoc/>
     protected override void OnPointerPressed(PointerRoutedEventArgs e)
     {
         base.OnPointerPressed(e);
+
+        _isPressed = true;
+        UpdateVisualState();
 
         Click?.Invoke(this, new RoutedEventArgs());
 
@@ -141,6 +172,46 @@ public partial class BackstageButton : Control
         }
 
         e.Handled = true;
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerReleased(PointerRoutedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        _isPressed = false;
+        UpdateVisualState();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerCaptureLost(PointerRoutedEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _isPressed = false;
+        UpdateVisualState();
+    }
+
+    private void UpdateVisualState(bool useTransitions = true)
+    {
+        string state;
+
+        if (!IsEnabled)
+        {
+            state = "Disabled";
+        }
+        else if (_isPressed)
+        {
+            state = "Pressed";
+        }
+        else if (_isPointerOver)
+        {
+            state = "PointerOver";
+        }
+        else
+        {
+            state = "Normal";
+        }
+
+        VisualStateManager.GoToState(this, state, useTransitions);
     }
 
     #endregion

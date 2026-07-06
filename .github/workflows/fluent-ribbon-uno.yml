@@ -1,0 +1,60 @@
+name: Fluent.Ribbon.Uno
+
+# Builds the Uno Platform port. The WinUI 3 (Windows) head cannot be built with
+# `dotnet build` (Uno error UNOB0008 — the WinUI XAML compiler requires a full
+# MSBuild.exe), so it is built with `msbuild` on a windows-latest runner that ships
+# with the Windows SDK. The Desktop (Skia) head compiles the same shared C# + XAML
+# and acts as a fast cross-platform sanity check.
+
+on:
+  push:
+    paths:
+      - 'Fluent.Ribbon.Uno/**'
+      - '.github/workflows/fluent-ribbon-uno.yml'
+  pull_request:
+    paths:
+      - 'Fluent.Ribbon.Uno/**'
+      - '.github/workflows/fluent-ribbon-uno.yml'
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    name: Build Desktop (net10.0-desktop)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Controls
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-desktop -c Release
+
+      - name: Build Showcase
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-desktop -c Release
+
+  winui3:
+    name: Build WinUI 3 (net10.0-windows10.0.26100)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Controls (WinUI 3)
+        working-directory: Fluent.Ribbon.Uno
+        run: msbuild Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100
+
+      - name: Build Showcase (WinUI 3)
+        working-directory: Fluent.Ribbon.Uno
+        run: msbuild Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100

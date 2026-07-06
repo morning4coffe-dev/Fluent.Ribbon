@@ -339,6 +339,13 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
             _downButton.PointerExited -= OnButtonPointerExited;
         }
 
+        if (_textBox is not null)
+        {
+            _textBox.LostFocus -= OnTextBoxLostFocus;
+            _textBox.KeyDown -= OnTextBoxKeyDown;
+            _textBox.GotFocus -= OnTextBoxGotFocus;
+        }
+
         _textBox = GetTemplateChild(PART_TextBox) as TextBox;
         _upButton = GetTemplateChild(PART_UpButton) as Button;
         _downButton = GetTemplateChild(PART_DownButton) as Button;

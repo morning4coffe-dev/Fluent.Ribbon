@@ -1,0 +1,21 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:RibbonToolBarControlGroup">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:RibbonToolBarControlGroup">
+                    <Border Background="Transparent" VerticalAlignment="Center">
+                        <StackPanel
+                            x:Name="PART_ItemsHost"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

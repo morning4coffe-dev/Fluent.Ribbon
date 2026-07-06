@@ -171,7 +171,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             nameof(SelectedIndex),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(-1));
+            new PropertyMetadata(-1, OnSelectedIndexChanged));
 
     /// <summary>
     /// Gets or sets the index of the selected item.
@@ -596,6 +596,18 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             if (e.NewValue is not null)
             {
                 gallery.SelectedIndex = gallery.Items.IndexOf((e.NewValue as UIElement)!);
+            }
+        }
+    }
+
+    private static void OnSelectedIndexChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is InRibbonGallery gallery)
+        {
+            var index = (int)e.NewValue;
+            if (index >= 0 && index < gallery.Items.Count)
+            {
+                gallery.SelectedItem = gallery.Items[index];
             }
         }
     }

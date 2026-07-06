@@ -9,17 +9,22 @@ namespace Fluent;
 [TemplatePart(Name = PART_QuickAccessToolBar, Type = typeof(QuickAccessToolBar))]
 [TemplatePart(Name = PART_ContextualGroupsPanel, Type = typeof(RibbonContextualGroupsContainer))]
 [TemplatePart(Name = PART_BelowRibbonQAT, Type = typeof(QuickAccessToolBar))]
+[TemplatePart(Name = PART_ToolBarItemsHost, Type = typeof(Panel))]
 public partial class Ribbon : Control
 {
     private const string PART_TabControl = "PART_RibbonTabControl";
     private const string PART_QuickAccessToolBar = "PART_QuickAccessToolBar";
     private const string PART_ContextualGroupsPanel = "PART_ContextualGroupsPanel";
     private const string PART_BelowRibbonQAT = "PART_BelowRibbonQAT";
+    private const string PART_ToolBarItemsHost = "PART_ToolBarItemsHost";
 
     private RibbonTabControl? _tabControl;
     private QuickAccessToolBar? _quickAccessToolBar;
     private QuickAccessToolBar? _belowRibbonQAT;
     private RibbonContextualGroupsContainer? _contextualGroupsPanel;
+    private Panel? _toolBarItemsHost;
+    private bool _isUpdatingQatLocation;
+    private readonly KeyTipService _keyTipService;
 
     #region Events
 
@@ -321,7 +326,7 @@ public partial class Ribbon : Control
             _tabControl.ContentHeight = IsSimplified ? 44 : double.NaN;
         }
 
-        VisualStateManager.GoToState(this, IsSimplified ? "Simplified" : "Normal", true);
+        VisualStateManager.GoToState(this, IsSimplified ? "SimplifiedOn" : "SimplifiedOff", true);
     }
 
     /// <summary>Identifies the <see cref="AreTabHeadersVisible"/> dependency property.</summary>
@@ -375,7 +380,11 @@ public partial class Ribbon : Control
 
         Tabs.CollectionChanged += OnTabsCollectionChanged;
         ContextualGroups.CollectionChanged += OnContextualGroupsCollectionChanged;
+        QuickAccessItems.CollectionChanged += OnQuickAccessItemsCollectionChanged;
+        ToolBarItems.CollectionChanged += OnToolBarItemsCollectionChanged;
+        _keyTipService = new KeyTipService(this);
         Loaded += OnRibbonLoaded;
+        Unloaded += OnRibbonUnloaded;
         SizeChanged += OnRibbonSizeChanged;
     }
 
@@ -392,10 +401,26 @@ public partial class Ribbon : Control
         _quickAccessToolBar = GetTemplateChild(PART_QuickAccessToolBar) as QuickAccessToolBar;
         _belowRibbonQAT = GetTemplateChild(PART_BelowRibbonQAT) as QuickAccessToolBar;
         _contextualGroupsPanel = GetTemplateChild(PART_ContextualGroupsPanel) as RibbonContextualGroupsContainer;
+        _toolBarItemsHost = GetTemplateChild(PART_ToolBarItemsHost) as Panel;
+
+        HookQuickAccessToolBar(_quickAccessToolBar);
+        HookQuickAccessToolBar(_belowRibbonQAT);
 
         SyncAllTabs();
         SyncContextualGroups();
+        SyncToolBarItems();
         UpdateQATPosition();
+    }
+
+    private void HookQuickAccessToolBar(QuickAccessToolBar? qat)
+    {
+        if (qat is null)
+        {
+            return;
+        }
+
+        qat.ShowAboveRibbonChanged -= OnQatShowAboveRibbonChanged;
+        qat.ShowAboveRibbonChanged += OnQatShowAboveRibbonChanged;
     }
 
     private void OnRibbonLoaded(object sender, RoutedEventArgs e)
@@ -405,6 +430,22 @@ public partial class Ribbon : Control
         SyncAllTabs();
         SyncContextualGroups();
         LinkContextualTabGroups();
+        SyncToolBarItems();
+        SyncQuickAccessItems();
+
+        // Re-apply simplified layout now that tabs/groups are populated.
+        if (IsSimplified)
+        {
+            UpdateSimplifiedState();
+        }
+
+        // Hook keyboard for Alt/F10 KeyTip navigation (XamlRoot is available now).
+        _keyTipService.Initialize();
+    }
+
+    private void OnRibbonUnloaded(object sender, RoutedEventArgs e)
+    {
+        _keyTipService.Teardown();
     }
 
     private void SyncAllTabs()
@@ -624,6 +665,82 @@ public partial class Ribbon : Control
             visible && showAbove ? "QATAbove" :
             visible && !showAbove ? "QATBelow" :
             "QATHidden", true);
+
+        // Keep both toolbars' own menu state aligned with the ribbon (guarded against re-entrancy).
+        _isUpdatingQatLocation = true;
+        if (_quickAccessToolBar is not null)
+        {
+            _quickAccessToolBar.ShowAboveRibbon = showAbove;
+        }
+
+        if (_belowRibbonQAT is not null)
+        {
+            _belowRibbonQAT.ShowAboveRibbon = showAbove;
+        }
+        _isUpdatingQatLocation = false;
+
+        SyncQuickAccessItems();
+    }
+
+    private void OnQatShowAboveRibbonChanged(object? sender, bool showAbove)
+    {
+        if (_isUpdatingQatLocation)
+        {
+            return;
+        }
+
+        ShowQuickAccessToolBarAboveRibbon = showAbove;
+    }
+
+    private void OnQuickAccessItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncQuickAccessItems();
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="QuickAccessItems"/> into whichever quick access toolbar is currently
+    /// active (above or below the ribbon), clearing the other so each element keeps a single parent.
+    /// </summary>
+    private void SyncQuickAccessItems()
+    {
+        var above = ShowQuickAccessToolBarAboveRibbon;
+        var active = above ? _quickAccessToolBar : _belowRibbonQAT;
+        var inactive = above ? _belowRibbonQAT : _quickAccessToolBar;
+
+        inactive?.Items.Clear();
+
+        if (active is null)
+        {
+            return;
+        }
+
+        active.Items.Clear();
+        foreach (var item in QuickAccessItems)
+        {
+            active.Items.Add(item);
+        }
+    }
+
+    private void OnToolBarItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncToolBarItems();
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="ToolBarItems"/> into the host panel on the right of the title bar.
+    /// </summary>
+    private void SyncToolBarItems()
+    {
+        if (_toolBarItemsHost is null)
+        {
+            return;
+        }
+
+        _toolBarItemsHost.Children.Clear();
+        foreach (var item in ToolBarItems)
+        {
+            _toolBarItemsHost.Children.Add(item);
+        }
     }
 
     /// <summary>

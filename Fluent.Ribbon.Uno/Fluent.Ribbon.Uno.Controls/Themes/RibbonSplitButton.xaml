@@ -67,8 +67,9 @@
                                 <VisualState x:Name="Large">
                                     <VisualState.Setters>
                                         <Setter Target="ContentPanel.Orientation" Value="Vertical" />
-                                        <Setter Target="IconImage.Width" Value="32" />
-                                        <Setter Target="IconImage.Height" Value="32" />
+                                        <Setter Target="GlyphIcon.FontSize" Value="28" />
+                                        <Setter Target="PART_Icon.Width" Value="32" />
+                                        <Setter Target="PART_Icon.Height" Value="32" />
                                         <Setter Target="LabelText.Visibility" Value="Visible" />
                                         <Setter Target="DropDownArrow.Margin" Value="0" />
                                     </VisualState.Setters>
@@ -76,17 +77,20 @@
                                 <VisualState x:Name="Medium">
                                     <VisualState.Setters>
                                         <Setter Target="ContentPanel.Orientation" Value="Horizontal" />
-                                        <Setter Target="IconImage.Width" Value="16" />
-                                        <Setter Target="IconImage.Height" Value="16" />
-                                        <Setter Target="IconImage.Margin" Value="0,0,4,0" />
+                                        <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                        <Setter Target="GlyphIcon.Margin" Value="0,0,4,0" />
+                                        <Setter Target="PART_Icon.Width" Value="16" />
+                                        <Setter Target="PART_Icon.Height" Value="16" />
+                                        <Setter Target="PART_Icon.Margin" Value="0,0,4,0" />
                                         <Setter Target="LabelText.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Small">
                                     <VisualState.Setters>
                                         <Setter Target="ContentPanel.Orientation" Value="Horizontal" />
-                                        <Setter Target="IconImage.Width" Value="16" />
-                                        <Setter Target="IconImage.Height" Value="16" />
+                                        <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                        <Setter Target="PART_Icon.Width" Value="16" />
+                                        <Setter Target="PART_Icon.Height" Value="16" />
                                         <Setter Target="LabelText.Visibility" Value="Collapsed" />
                                     </VisualState.Setters>
                                 </VisualState>

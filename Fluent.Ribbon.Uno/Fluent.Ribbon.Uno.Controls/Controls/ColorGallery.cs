@@ -9,8 +9,28 @@ namespace Fluent;
 /// recent colors, and a "More Colors" dialog.
 /// </remarks>
 [ContentProperty(Name = nameof(ThemeColors))]
+[TemplatePart(Name = PART_AutomaticButton, Type = typeof(Button))]
+[TemplatePart(Name = PART_NoColorButton, Type = typeof(Button))]
+[TemplatePart(Name = PART_MoreColorsButton, Type = typeof(Button))]
+[TemplatePart(Name = PART_ThemeColorsSection, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = PART_ThemeColorsPanel, Type = typeof(Panel))]
+[TemplatePart(Name = PART_StandardColorsPanel, Type = typeof(Panel))]
 public partial class ColorGallery : Control
 {
+    private const string PART_AutomaticButton = "PART_AutomaticButton";
+    private const string PART_NoColorButton = "PART_NoColorButton";
+    private const string PART_MoreColorsButton = "PART_MoreColorsButton";
+    private const string PART_ThemeColorsSection = "PART_ThemeColorsSection";
+    private const string PART_ThemeColorsPanel = "PART_ThemeColorsPanel";
+    private const string PART_StandardColorsPanel = "PART_StandardColorsPanel";
+
+    private Panel? _themeColorsPanel;
+    private Panel? _standardColorsPanel;
+    private FrameworkElement? _themeColorsSection;
+    private Button? _automaticButton;
+    private Button? _noColorButton;
+    private Button? _moreColorsButton;
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="SelectedColor"/> dependency property.</summary>
@@ -144,9 +164,7 @@ public partial class ColorGallery : Control
     /// <summary>
     /// Occurs when the "More Colors" button is clicked.
     /// </summary>
-#pragma warning disable CS0067
     public event EventHandler? MoreColorsRequested;
-#pragma warning restore CS0067
 
     #endregion
 
@@ -160,6 +178,58 @@ public partial class ColorGallery : Control
         DefaultStyleKey = typeof(ColorGallery);
         ThemeColors = new ObservableCollection<Windows.UI.Color>();
         StandardColors = CreateDefaultStandardColors();
+
+        ThemeColors.CollectionChanged += OnColorsCollectionChanged;
+        StandardColors.CollectionChanged += OnColorsCollectionChanged;
+    }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        if (_automaticButton is not null)
+        {
+            _automaticButton.Click -= OnAutomaticButtonClick;
+        }
+
+        if (_noColorButton is not null)
+        {
+            _noColorButton.Click -= OnNoColorButtonClick;
+        }
+
+        if (_moreColorsButton is not null)
+        {
+            _moreColorsButton.Click -= OnMoreColorsButtonClick;
+        }
+
+        _themeColorsSection = GetTemplateChild(PART_ThemeColorsSection) as FrameworkElement;
+        _themeColorsPanel = GetTemplateChild(PART_ThemeColorsPanel) as Panel;
+        _standardColorsPanel = GetTemplateChild(PART_StandardColorsPanel) as Panel;
+        _automaticButton = GetTemplateChild(PART_AutomaticButton) as Button;
+        _noColorButton = GetTemplateChild(PART_NoColorButton) as Button;
+        _moreColorsButton = GetTemplateChild(PART_MoreColorsButton) as Button;
+
+        if (_automaticButton is not null)
+        {
+            _automaticButton.Click += OnAutomaticButtonClick;
+        }
+
+        if (_noColorButton is not null)
+        {
+            _noColorButton.Click += OnNoColorButtonClick;
+        }
+
+        if (_moreColorsButton is not null)
+        {
+            _moreColorsButton.Click += OnMoreColorsButtonClick;
+        }
+
+        RebuildSwatches();
     }
 
     #endregion
@@ -172,6 +242,94 @@ public partial class ColorGallery : Control
         {
             gallery.SelectedColorChanged?.Invoke(gallery, (Windows.UI.Color?)e.NewValue);
         }
+    }
+
+    private void OnColorsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RebuildSwatches();
+    }
+
+    private void RebuildSwatches()
+    {
+        BuildSwatches(_themeColorsPanel, ThemeColors);
+        BuildSwatches(_standardColorsPanel, StandardColors);
+
+        if (_themeColorsSection is not null)
+        {
+            _themeColorsSection.Visibility = ThemeColors is { Count: > 0 }
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+    }
+
+    private void BuildSwatches(Panel? host, ObservableCollection<Windows.UI.Color>? colors)
+    {
+        if (host is null)
+        {
+            return;
+        }
+
+        host.Children.Clear();
+
+        if (colors is null || colors.Count == 0)
+        {
+            return;
+        }
+
+        var columns = Math.Max(1, Columns);
+        StackPanel? row = null;
+
+        for (var i = 0; i < colors.Count; i++)
+        {
+            if (i % columns == 0)
+            {
+                row = new StackPanel { Orientation = Orientation.Horizontal };
+                host.Children.Add(row);
+            }
+
+            var color = colors[i];
+            var swatch = new Button
+            {
+                Width = 18,
+                Height = 18,
+                MinWidth = 0,
+                MinHeight = 0,
+                Margin = new Thickness(1),
+                Padding = new Thickness(0),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 200, 200, 200)),
+                Background = new SolidColorBrush(color),
+                Tag = color,
+            };
+
+            ToolTipService.SetToolTip(swatch, color.ToString());
+            swatch.Click += OnSwatchClick;
+            row!.Children.Add(swatch);
+        }
+    }
+
+    private void OnSwatchClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: Windows.UI.Color color })
+        {
+            SelectedColor = color;
+        }
+    }
+
+    private void OnAutomaticButtonClick(object sender, RoutedEventArgs e)
+    {
+        // "Automatic" maps to the default automatic color (black).
+        SelectedColor = Windows.UI.Color.FromArgb(255, 0, 0, 0);
+    }
+
+    private void OnNoColorButtonClick(object sender, RoutedEventArgs e)
+    {
+        SelectedColor = null;
+    }
+
+    private void OnMoreColorsButtonClick(object sender, RoutedEventArgs e)
+    {
+        MoreColorsRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private static ObservableCollection<Windows.UI.Color> CreateDefaultStandardColors()

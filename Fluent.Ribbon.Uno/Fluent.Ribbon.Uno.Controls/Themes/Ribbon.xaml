@@ -49,6 +49,11 @@
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="SimplifiedStates">
+                                <VisualState x:Name="SimplifiedOff" />
+                                <VisualState x:Name="SimplifiedOn" />
+                            </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
                         <Grid.RowDefinitions>
@@ -101,6 +106,7 @@
 
                             <!-- Toolbar items (right side of title bar) -->
                             <StackPanel
+                                x:Name="PART_ToolBarItemsHost"
                                 Grid.Column="3"
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center"

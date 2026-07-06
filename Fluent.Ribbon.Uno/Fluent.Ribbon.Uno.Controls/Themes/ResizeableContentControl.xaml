@@ -1,0 +1,50 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:ResizeableContentControl">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:ResizeableContentControl">
+                    <Grid>
+                        <ContentPresenter
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+
+                        <!-- Bottom-edge handle: vertical-only resize -->
+                        <Border
+                            x:Name="PART_ResizeVerticalThumb"
+                            Height="6"
+                            Margin="0,0,12,0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Bottom"
+                            Background="Transparent"
+                            Visibility="{Binding CanResizeVertical, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}" />
+
+                        <!-- Bottom-right corner handle: resize in both directions -->
+                        <Border
+                            x:Name="PART_ResizeBothThumb"
+                            Width="14"
+                            Height="14"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Background="Transparent"
+                            Visibility="{Binding CanResizeBothDirections, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}">
+                            <Path
+                                Margin="3"
+                                Stretch="Fill"
+                                Fill="{ThemeResource RibbonSecondaryTextBrush}"
+                                Data="M 8,0 L 8,8 L 0,8 Z" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

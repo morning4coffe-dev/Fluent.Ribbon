@@ -109,21 +109,47 @@ Fluent.Ribbon.Uno/
 
 ### Prerequisites
 
-- .NET 8.0 SDK or later
-- Uno Platform workload: `dotnet workload install uno-platform`
+- **.NET 10 SDK** or later
+- Uno Platform workload: `dotnet workload install uno`
+- **For the Windows / WinUI 3 head only:** Visual Studio 2022 (or the standalone
+  [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022))
+  with the **Windows 10/11 SDK** (10.0.26100). A full `MSBuild.exe` is required —
+  see the note below.
 
 ### Build Commands
+
+For non-Windows targets (Desktop/Skia, WebAssembly, Android, iOS) you can use the
+.NET CLI directly:
 
 ```bash
 # Restore packages
 dotnet restore
 
-# Build
-dotnet build
+# Build the Desktop (Skia) head — works on Windows, Linux and macOS
+dotnet build -f net10.0-desktop
 
-# Run showcase (desktop)
-dotnet run --project Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase
+# Run the showcase (Desktop)
+dotnet run --project Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase -f net10.0-desktop
 ```
+
+#### Windows / WinUI 3 target
+
+Building the `net10.0-windows10.0.26100` (WinUI 3) head with `dotnet build` is **not
+supported** — Uno stops it with error `UNOB0008` because the WinUI XAML compiler is a
+.NET Framework tool that must run under a full `MSBuild.exe`. Build it with `msbuild`
+from a *Developer Command Prompt for VS 2022* instead:
+
+```powershell
+# Controls library
+msbuild Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj /r /t:Build /p:TargetFramework=net10.0-windows10.0.26100
+
+# Showcase app
+msbuild Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj /r /t:Build /p:TargetFramework=net10.0-windows10.0.26100
+```
+
+In CI, use a `windows-latest` runner (which ships with the Windows SDK) together with
+[`microsoft/setup-msbuild`](https://github.com/microsoft/setup-msbuild) and invoke
+`msbuild` as shown above.
 
 ## Differences from WPF Fluent.Ribbon
 

@@ -71,4 +71,16 @@ public partial class QuickAccessMenuItem : Control, IHeaderedControl
     }
 
     #endregion
+
+    #region Methods
+
+    /// <inheritdoc/>
+    protected override void OnPointerPressed(PointerRoutedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        IsChecked = !IsChecked;
+        e.Handled = true;
+    }
+
+    #endregion
 }
