@@ -13,6 +13,9 @@ public partial class ApplicationMenu : Control
 
     private Button? _button;
     private Flyout? _flyout;
+    private Grid? _rootPanel;
+    private Rectangle? _verticalSeparator;
+    private Rectangle? _footerSeparator;
 
     #region Dependency Properties
 
@@ -181,8 +184,28 @@ public partial class ApplicationMenu : Control
 
     private void ShowDropDown()
     {
+        // Build the flyout + its content ONCE and reuse it. Rebuilding the panes on
+        // every open — which reparents the menu Items out of the previous (now torn
+        // down) flyout panel and into a fresh one — corrupts the items' native peers
+        // on WinUI3, so the left pane came up empty on the second open. Building once
+        // keeps every item in a single, stable visual parent for the control's life.
+        if (_flyout is null)
+        {
+            BuildFlyout();
+        }
+
+        // The menu surface is theme-aware, so refresh the theme brushes (and the
+        // opaque presenter style) each time — cheap, and it reparents nothing.
+        ApplyThemeBrushes();
+
+        IsDropDownOpen = true;
+        _flyout!.ShowAt((FrameworkElement?)_button ?? this);
+    }
+
+    private void BuildFlyout()
+    {
         // Build the two-pane dropdown content
-        var rootPanel = new Grid { MinWidth = 400, Background = MenuBackgroundBrush };
+        var rootPanel = new Grid { MinWidth = 400 };
         rootPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         rootPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -193,7 +216,7 @@ public partial class ApplicationMenu : Control
         var leftPane = new StackPanel { MinWidth = 200 };
         foreach (var item in Items)
         {
-            // Reparent items into the flyout
+            // Detach from any prior parent (e.g. the logical XAML parent) exactly once.
             if (item is FrameworkElement fe && fe.Parent is Panel panel)
             {
                 panel.Children.Remove(item);
@@ -211,14 +234,14 @@ public partial class ApplicationMenu : Control
             mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) }); // separator
             mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(RightPaneWidth) });
 
-            var separator = new Rectangle
+            _verticalSeparator = new Rectangle
             {
                 Width = 1,
                 Fill = MenuSeparatorBrush,
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
-            Grid.SetColumn(separator, 1);
-            mainPanel.Children.Add(separator);
+            Grid.SetColumn(_verticalSeparator, 1);
+            mainPanel.Children.Add(_verticalSeparator);
 
             var rightPane = new ContentPresenter
             {
@@ -235,15 +258,15 @@ public partial class ApplicationMenu : Control
         // Footer pane
         if (FooterPaneContent is not null)
         {
-            var footerSep = new Rectangle
+            _footerSeparator = new Rectangle
             {
                 Height = 1,
                 Fill = MenuSeparatorBrush,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(0, 4, 0, 0),
             };
-            Grid.SetRow(footerSep, 0);
-            rootPanel.Children.Add(footerSep);
+            Grid.SetRow(_footerSeparator, 0);
+            rootPanel.Children.Add(_footerSeparator);
 
             var footer = new ContentPresenter
             {
@@ -254,18 +277,30 @@ public partial class ApplicationMenu : Control
             rootPanel.Children.Add(footer);
         }
 
-        if (_flyout is null)
+        _rootPanel = rootPanel;
+
+        _flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom, Content = rootPanel };
+        _flyout.Closed += (s, e) => IsDropDownOpen = false;
+    }
+
+    private void ApplyThemeBrushes()
+    {
+        if (_rootPanel is not null)
         {
-            _flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom };
-            _flyout.Closed += (s, e) =>
-            {
-                IsDropDownOpen = false;
-                // Reparent items back
-                RestoreItems();
-            };
+            _rootPanel.Background = MenuBackgroundBrush;
         }
 
-        // Force an opaque presenter every time (also picks up the current theme). Without this the
+        if (_verticalSeparator is not null)
+        {
+            _verticalSeparator.Fill = MenuSeparatorBrush;
+        }
+
+        if (_footerSeparator is not null)
+        {
+            _footerSeparator.Fill = MenuSeparatorBrush;
+        }
+
+        // Force an opaque presenter (also picks up the current theme). Without this the
         // default acrylic FlyoutPresenter renders the colorful ribbon behind it as a smeared blur.
         var presenterStyle = new Style(typeof(FlyoutPresenter));
         presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, MenuBackgroundBrush));
@@ -276,11 +311,11 @@ public partial class ApplicationMenu : Control
         presenterStyle.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 900.0));
         presenterStyle.Setters.Add(new Setter(ScrollViewer.HorizontalScrollModeProperty, ScrollMode.Disabled));
         presenterStyle.Setters.Add(new Setter(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled));
-        _flyout.FlyoutPresenterStyle = presenterStyle;
 
-        _flyout.Content = rootPanel;
-        IsDropDownOpen = true;
-        _flyout.ShowAt((FrameworkElement?)_button ?? this);
+        if (_flyout is not null)
+        {
+            _flyout.FlyoutPresenterStyle = presenterStyle;
+        }
     }
 
     // Opaque, theme-aware brushes for the menu surface (mirrors RibbonContentBrush / RibbonBorderBrush).
@@ -293,11 +328,6 @@ public partial class ApplicationMenu : Control
         new SolidColorBrush(ActualTheme == ElementTheme.Dark
             ? Windows.UI.Color.FromArgb(0xFF, 0x40, 0x40, 0x40)
             : Windows.UI.Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4));
-
-    private void RestoreItems()
-    {
-        // Items will be re-added to the flyout next time it opens
-    }
 
     #endregion
 }
