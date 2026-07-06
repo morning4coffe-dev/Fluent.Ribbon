@@ -89,7 +89,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
             nameof(Icon),
             typeof(ImageSource),
             typeof(RibbonGroupBox),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnAnyIconChanged));
 
     /// <summary>
     /// Gets or sets the icon displayed when the group is collapsed.
@@ -98,6 +98,64 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     {
         get => (ImageSource?)GetValue(IconProperty);
         set => SetValue(IconProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="MediumIcon"/> dependency property.</summary>
+    public static readonly DependencyProperty MediumIconProperty =
+        DependencyProperty.Register(
+            nameof(MediumIcon),
+            typeof(ImageSource),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(null, OnAnyIconChanged));
+
+    /// <summary>
+    /// Gets or sets the medium-sized icon for the group.
+    /// </summary>
+    public ImageSource? MediumIcon
+    {
+        get => (ImageSource?)GetValue(MediumIconProperty);
+        set => SetValue(MediumIconProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="LargeIcon"/> dependency property.</summary>
+    public static readonly DependencyProperty LargeIconProperty =
+        DependencyProperty.Register(
+            nameof(LargeIcon),
+            typeof(ImageSource),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(null, OnAnyIconChanged));
+
+    /// <summary>
+    /// Gets or sets the large-sized icon for the group.
+    /// </summary>
+    public ImageSource? LargeIcon
+    {
+        get => (ImageSource?)GetValue(LargeIconProperty);
+        set => SetValue(LargeIconProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="CollapsedIcon"/> dependency property.</summary>
+    public static readonly DependencyProperty CollapsedIconProperty =
+        DependencyProperty.Register(
+            nameof(CollapsedIcon),
+            typeof(ImageSource),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets the icon shown in the collapsed group button, preferring
+    /// <see cref="LargeIcon"/>, then <see cref="MediumIcon"/>, then <see cref="Icon"/>.
+    /// </summary>
+    public ImageSource? CollapsedIcon
+    {
+        get => (ImageSource?)GetValue(CollapsedIconProperty);
+        private set => SetValue(CollapsedIconProperty, value);
+    }
+
+    private static void OnAnyIconChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var groupBox = (RibbonGroupBox)d;
+        groupBox.CollapsedIcon = groupBox.LargeIcon ?? groupBox.MediumIcon ?? groupBox.Icon;
     }
 
     /// <summary>Identifies the <see cref="IsCollapsed"/> dependency property.</summary>

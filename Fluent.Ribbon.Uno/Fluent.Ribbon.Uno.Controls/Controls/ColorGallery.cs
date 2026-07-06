@@ -15,6 +15,8 @@ namespace Fluent;
 [TemplatePart(Name = PART_ThemeColorsSection, Type = typeof(FrameworkElement))]
 [TemplatePart(Name = PART_ThemeColorsPanel, Type = typeof(Panel))]
 [TemplatePart(Name = PART_StandardColorsPanel, Type = typeof(Panel))]
+[TemplatePart(Name = PART_RecentColorsSection, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = PART_RecentColorsPanel, Type = typeof(Panel))]
 public partial class ColorGallery : Control
 {
     private const string PART_AutomaticButton = "PART_AutomaticButton";
@@ -23,13 +25,27 @@ public partial class ColorGallery : Control
     private const string PART_ThemeColorsSection = "PART_ThemeColorsSection";
     private const string PART_ThemeColorsPanel = "PART_ThemeColorsPanel";
     private const string PART_StandardColorsPanel = "PART_StandardColorsPanel";
+    private const string PART_RecentColorsSection = "PART_RecentColorsSection";
+    private const string PART_RecentColorsPanel = "PART_RecentColorsPanel";
+
+    private const int MaxRecentColors = 10;
 
     private Panel? _themeColorsPanel;
     private Panel? _standardColorsPanel;
+    private Panel? _recentColorsPanel;
     private FrameworkElement? _themeColorsSection;
+    private FrameworkElement? _recentColorsSection;
     private Button? _automaticButton;
     private Button? _noColorButton;
     private Button? _moreColorsButton;
+
+    private static ObservableCollection<Windows.UI.Color>? _recentColors;
+
+    /// <summary>
+    /// Gets the shared collection of recently selected colors.
+    /// </summary>
+    public static ObservableCollection<Windows.UI.Color> RecentColors =>
+        _recentColors ??= new ObservableCollection<Windows.UI.Color>();
 
     #region Dependency Properties
 
@@ -152,6 +168,57 @@ public partial class ColorGallery : Control
         set => SetValue(ColumnsProperty, value);
     }
 
+    /// <summary>Identifies the <see cref="Mode"/> dependency property.</summary>
+    public static readonly DependencyProperty ModeProperty =
+        DependencyProperty.Register(
+            nameof(Mode),
+            typeof(ColorGalleryMode),
+            typeof(ColorGallery),
+            new PropertyMetadata(ColorGalleryMode.StandardColors, OnModeChanged));
+
+    /// <summary>
+    /// Gets or sets the color layout mode.
+    /// </summary>
+    public ColorGalleryMode Mode
+    {
+        get => (ColorGalleryMode)GetValue(ModeProperty);
+        set => SetValue(ModeProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="ChipWidth"/> dependency property.</summary>
+    public static readonly DependencyProperty ChipWidthProperty =
+        DependencyProperty.Register(
+            nameof(ChipWidth),
+            typeof(double),
+            typeof(ColorGallery),
+            new PropertyMetadata(13.0, OnChipSizeChanged));
+
+    /// <summary>
+    /// Gets or sets the width of each color chip.
+    /// </summary>
+    public double ChipWidth
+    {
+        get => (double)GetValue(ChipWidthProperty);
+        set => SetValue(ChipWidthProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="ChipHeight"/> dependency property.</summary>
+    public static readonly DependencyProperty ChipHeightProperty =
+        DependencyProperty.Register(
+            nameof(ChipHeight),
+            typeof(double),
+            typeof(ColorGallery),
+            new PropertyMetadata(13.0, OnChipSizeChanged));
+
+    /// <summary>
+    /// Gets or sets the height of each color chip.
+    /// </summary>
+    public double ChipHeight
+    {
+        get => (double)GetValue(ChipHeightProperty);
+        set => SetValue(ChipHeightProperty, value);
+    }
+
     #endregion
 
     #region Events
@@ -181,6 +248,7 @@ public partial class ColorGallery : Control
 
         ThemeColors.CollectionChanged += OnColorsCollectionChanged;
         StandardColors.CollectionChanged += OnColorsCollectionChanged;
+        RecentColors.CollectionChanged += OnColorsCollectionChanged;
     }
 
     #endregion
@@ -210,6 +278,8 @@ public partial class ColorGallery : Control
         _themeColorsSection = GetTemplateChild(PART_ThemeColorsSection) as FrameworkElement;
         _themeColorsPanel = GetTemplateChild(PART_ThemeColorsPanel) as Panel;
         _standardColorsPanel = GetTemplateChild(PART_StandardColorsPanel) as Panel;
+        _recentColorsSection = GetTemplateChild(PART_RecentColorsSection) as FrameworkElement;
+        _recentColorsPanel = GetTemplateChild(PART_RecentColorsPanel) as Panel;
         _automaticButton = GetTemplateChild(PART_AutomaticButton) as Button;
         _noColorButton = GetTemplateChild(PART_NoColorButton) as Button;
         _moreColorsButton = GetTemplateChild(PART_MoreColorsButton) as Button;
@@ -240,7 +310,59 @@ public partial class ColorGallery : Control
     {
         if (d is ColorGallery gallery)
         {
+            if (e.NewValue is Windows.UI.Color color)
+            {
+                gallery.TrackRecentColor(color);
+            }
+
             gallery.SelectedColorChanged?.Invoke(gallery, (Windows.UI.Color?)e.NewValue);
+        }
+    }
+
+    private static void OnModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ColorGallery gallery)
+        {
+            gallery.RebuildSwatches();
+        }
+    }
+
+    private static void OnChipSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ColorGallery gallery)
+        {
+            gallery.RebuildSwatches();
+        }
+    }
+
+    private void TrackRecentColor(Windows.UI.Color color)
+    {
+        var recent = RecentColors;
+        var existing = -1;
+        for (var i = 0; i < recent.Count; i++)
+        {
+            if (recent[i].Equals(color))
+            {
+                existing = i;
+                break;
+            }
+        }
+
+        if (existing == 0)
+        {
+            return;
+        }
+
+        if (existing > 0)
+        {
+            recent.RemoveAt(existing);
+        }
+
+        recent.Insert(0, color);
+
+        while (recent.Count > MaxRecentColors)
+        {
+            recent.RemoveAt(recent.Count - 1);
         }
     }
 
@@ -251,18 +373,31 @@ public partial class ColorGallery : Control
 
     private void RebuildSwatches()
     {
+        var showThemeColors = Mode == ColorGalleryMode.ThemeColors;
+        var standardColors = Mode == ColorGalleryMode.HighlightColors
+            ? CreateHighlightColors()
+            : StandardColors;
+
         BuildSwatches(_themeColorsPanel, ThemeColors);
-        BuildSwatches(_standardColorsPanel, StandardColors);
+        BuildSwatches(_standardColorsPanel, standardColors);
+        BuildSwatches(_recentColorsPanel, RecentColors);
 
         if (_themeColorsSection is not null)
         {
-            _themeColorsSection.Visibility = ThemeColors is { Count: > 0 }
+            _themeColorsSection.Visibility = showThemeColors && ThemeColors is { Count: > 0 }
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        if (_recentColorsSection is not null)
+        {
+            _recentColorsSection.Visibility = RecentColors is { Count: > 0 }
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
     }
 
-    private void BuildSwatches(Panel? host, ObservableCollection<Windows.UI.Color>? colors)
+    private void BuildSwatches(Panel? host, IReadOnlyList<Windows.UI.Color>? colors)
     {
         if (host is null)
         {
@@ -277,6 +412,8 @@ public partial class ColorGallery : Control
         }
 
         var columns = Math.Max(1, Columns);
+        var chipWidth = ChipWidth > 0 ? ChipWidth : 13.0;
+        var chipHeight = ChipHeight > 0 ? ChipHeight : 13.0;
         StackPanel? row = null;
 
         for (var i = 0; i < colors.Count; i++)
@@ -290,8 +427,8 @@ public partial class ColorGallery : Control
             var color = colors[i];
             var swatch = new Button
             {
-                Width = 18,
-                Height = 18,
+                Width = chipWidth,
+                Height = chipHeight,
                 MinWidth = 0,
                 MinHeight = 0,
                 Margin = new Thickness(1),
@@ -346,6 +483,28 @@ public partial class ColorGallery : Control
             Windows.UI.Color.FromArgb(255, 0, 112, 192),   // Blue
             Windows.UI.Color.FromArgb(255, 0, 32, 96),     // Dark Blue
             Windows.UI.Color.FromArgb(255, 112, 48, 160),  // Purple
+        };
+    }
+
+    private static IReadOnlyList<Windows.UI.Color> CreateHighlightColors()
+    {
+        return new[]
+        {
+            Windows.UI.Color.FromArgb(255, 255, 255, 0),   // Yellow
+            Windows.UI.Color.FromArgb(255, 0, 255, 0),     // Bright Green
+            Windows.UI.Color.FromArgb(255, 0, 255, 255),   // Turquoise
+            Windows.UI.Color.FromArgb(255, 255, 0, 255),   // Pink
+            Windows.UI.Color.FromArgb(255, 0, 0, 255),     // Blue
+            Windows.UI.Color.FromArgb(255, 255, 0, 0),     // Red
+            Windows.UI.Color.FromArgb(255, 0, 0, 128),     // Dark Blue
+            Windows.UI.Color.FromArgb(255, 0, 128, 128),   // Teal
+            Windows.UI.Color.FromArgb(255, 0, 128, 0),     // Green
+            Windows.UI.Color.FromArgb(255, 128, 0, 128),   // Violet
+            Windows.UI.Color.FromArgb(255, 128, 0, 0),     // Dark Red
+            Windows.UI.Color.FromArgb(255, 128, 128, 0),   // Dark Yellow
+            Windows.UI.Color.FromArgb(255, 128, 128, 128), // Gray 50%
+            Windows.UI.Color.FromArgb(255, 192, 192, 192), // Gray 25%
+            Windows.UI.Color.FromArgb(255, 0, 0, 0),       // Black
         };
     }
 

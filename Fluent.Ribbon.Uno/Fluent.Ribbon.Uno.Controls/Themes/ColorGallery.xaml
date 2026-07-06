@@ -46,6 +46,17 @@
                             Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
                         <StackPanel x:Name="PART_StandardColorsPanel" />
 
+                        <!-- Recent colors -->
+                        <StackPanel x:Name="PART_RecentColorsSection" Visibility="Collapsed">
+                            <TextBlock
+                                Text="Recent Colors"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Margin="0,4,0,2"
+                                Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <StackPanel x:Name="PART_RecentColorsPanel" />
+                        </StackPanel>
+
                         <!-- More colors -->
                         <Button
                             x:Name="PART_MoreColorsButton"

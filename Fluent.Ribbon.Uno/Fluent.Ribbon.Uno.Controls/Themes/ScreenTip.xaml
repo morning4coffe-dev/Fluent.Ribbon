@@ -55,6 +55,24 @@
                                 TextWrapping="Wrap"
                                 Foreground="{ThemeResource TextFillColorDisabledBrush}"
                                 Margin="0,4,0,0" />
+
+                            <!-- F1 help label -->
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Margin="0,6,0,0"
+                                Visibility="{TemplateBinding HelpLabelActualVisibility}">
+                                <Rectangle
+                                    Fill="{ThemeResource RibbonBorderBrush}"
+                                    Height="1"
+                                    HorizontalAlignment="Stretch" />
+                            </StackPanel>
+                            <TextBlock
+                                Text="{TemplateBinding HelpLabelText}"
+                                FontSize="11"
+                                TextWrapping="Wrap"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Margin="0,4,0,0"
+                                Visibility="{TemplateBinding HelpLabelActualVisibility}" />
                         </StackPanel>
                     </Border>
                 </ControlTemplate>
