@@ -104,9 +104,9 @@ public abstract class RibbonControl : Control, ICommandSource, IQuickAccessItemP
     [Category("Action")]
     [Localizability(LocalizationCategory.NeverLocalize)]
     [Bindable(true)]
-    public ICommand Command
+    public ICommand? Command
     {
-        get => (ICommand)this.GetValue(CommandProperty);
+        get => (ICommand?)this.GetValue(CommandProperty);
 
         set => this.SetValue(CommandProperty, value);
     }
@@ -290,11 +290,11 @@ public abstract class RibbonControl : Control, ICommandSource, IQuickAccessItemP
         Bind(source, element, nameof(Opacity), OpacityProperty, BindingMode.OneWay);
         Bind(source, element, nameof(SnapsToDevicePixels), SnapsToDevicePixelsProperty, BindingMode.OneWay);
 
-        Bind(source, element, new PropertyPath(FocusManager.IsFocusScopeProperty), FocusManager.IsFocusScopeProperty, BindingMode.OneWay);
+        Bind(source, element, FocusManager.IsFocusScopeProperty, BindingMode.OneWay);
 
-        Bind(source, element, new PropertyPath(InputControlProperties.InputMinWidthProperty), InputControlProperties.InputMinWidthProperty, BindingMode.OneWay);
-        Bind(source, element, new PropertyPath(InputControlProperties.InputWidthProperty), InputControlProperties.InputWidthProperty, BindingMode.OneWay);
-        Bind(source, element, new PropertyPath(InputControlProperties.InputHeightProperty), InputControlProperties.InputHeightProperty, BindingMode.OneWay);
+        Bind(source, element, InputControlProperties.InputMinWidthProperty, BindingMode.OneWay);
+        Bind(source, element, InputControlProperties.InputWidthProperty, BindingMode.OneWay);
+        Bind(source, element, InputControlProperties.InputHeightProperty, BindingMode.OneWay);
 
         if (source is IHeaderedControl headeredControl)
         {
@@ -321,8 +321,9 @@ public abstract class RibbonControl : Control, ICommandSource, IQuickAccessItemP
             }
         }
 
-        var ribbonControl = source as IRibbonControl;
-        if (ribbonControl?.Icon is not null)
+        Bind(source, element, RibbonProperties.CustomIconSizeProperty, BindingMode.OneWay);
+
+        if (source is IRibbonControl ribbonControl)
         {
             if (ribbonControl.Icon is Visual iconVisual)
             {
@@ -332,13 +333,51 @@ public abstract class RibbonControl : Control, ICommandSource, IQuickAccessItemP
                     Height = 16,
                     Fill = new VisualBrush(iconVisual)
                 };
-                ((IRibbonControl)element).Icon = rect;
+                element.SetValue(IconProperty, rect);
             }
             else
             {
                 Bind(source, element, nameof(IRibbonControl.Icon), IconProperty, BindingMode.OneWay);
             }
         }
+
+        if (source is IMediumIconProvider mediumIconProvider)
+        {
+            if (mediumIconProvider.MediumIcon is Visual iconVisual)
+            {
+                var rect = new Rectangle
+                {
+                    Width = 24,
+                    Height = 24,
+                    Fill = new VisualBrush(iconVisual)
+                };
+                element.SetValue(MediumIconProviderProperties.MediumIconProperty, rect);
+            }
+            else
+            {
+                Bind(source, element, nameof(IMediumIconProvider.MediumIcon), MediumIconProviderProperties.MediumIconProperty, BindingMode.OneWay);
+            }
+        }
+
+        if (source is ILargeIconProvider largeIconProvider)
+        {
+            if (largeIconProvider.LargeIcon is Visual iconVisual)
+            {
+                var rect = new Rectangle
+                {
+                    Width = 32,
+                    Height = 32,
+                    Fill = new VisualBrush(iconVisual)
+                };
+                element.SetValue(LargeIconProviderProperties.LargeIconProperty, rect);
+            }
+            else
+            {
+                Bind(source, element, nameof(ILargeIconProvider.LargeIcon), LargeIconProviderProperties.LargeIconProperty, BindingMode.OneWay);
+            }
+        }
+
+        Bind(source, element, new PropertyPath(RibbonProperties.QATIconSizeProperty), RibbonProperties.IconSizeProperty, BindingMode.OneWay);
 
         RibbonProperties.SetSize(element, RibbonControlSize.Small);
     }
@@ -365,6 +404,11 @@ public abstract class RibbonControl : Control, ICommandSource, IQuickAccessItemP
     #endregion
 
     #region Binding
+
+    internal static void Bind(object source, FrameworkElement target, DependencyProperty property, BindingMode mode)
+    {
+        Bind(source, target, new PropertyPath(property), property, mode);
+    }
 
     internal static void Bind(object source, FrameworkElement target, string path, DependencyProperty property, BindingMode mode)
     {
