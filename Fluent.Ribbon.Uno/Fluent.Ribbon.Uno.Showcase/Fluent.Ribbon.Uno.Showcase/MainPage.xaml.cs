@@ -30,7 +30,9 @@ public sealed partial class MainPage : Page
 
     public MainPage()
     {
+        App.LogAutoTestStartup("MAIN PAGE CONSTRUCTOR BEGIN");
         this.InitializeComponent();
+        App.LogAutoTestStartup("MAIN PAGE XAML INITIALIZED");
         SampleColorGallery.SelectedColorChanged += OnColorGallerySelectionChanged;
         UpdateLocalizationSample();
 
@@ -42,7 +44,9 @@ public sealed partial class MainPage : Page
         fontSizeCombo.SelectedIndex = 3;
 
         InitializeShowcaseTabs();
+        InitializeModernShowcase(); // Modern extensions (beyond WPF) — see Modern\README.md
         InitializeDiagnostics();
+        App.LogAutoTestStartup("MAIN PAGE CONSTRUCTOR END");
     }
 
     // Seeds the cloned WPF Showcase tabs (Insert/Tests/Galleries/Binding). RibbonComboBox and
@@ -215,8 +219,9 @@ public sealed partial class MainPage : Page
         };
     }
 
-    private void OnColorGallerySelectionChanged(object? sender, Windows.UI.Color? color)
+    private void OnColorGallerySelectionChanged(object sender, RoutedEventArgs args)
     {
+        var color = (sender as ColorGallery)?.SelectedColor;
         if (color.HasValue)
         {
             var c = color.Value;

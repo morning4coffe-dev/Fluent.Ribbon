@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 namespace Fluent;
 
 /// <summary>
-/// Exposes <see cref="RibbonMenuItem"/> to UI Automation. Because <see cref="RibbonMenuItem"/>
+/// Exposes <see cref="MenuItem"/> to UI Automation. Because <see cref="MenuItem"/>
 /// derives from a bare <see cref="Control"/> (which provides no automation peer by default),
 /// assistive technologies would otherwise see the File-menu items as unnamed, untyped, and
 /// non-invokable. This peer reports the item as a MenuItem, surfaces its <c>Header</c> as the
@@ -16,19 +16,19 @@ public partial class RibbonMenuItemAutomationPeer : FrameworkElementAutomationPe
     /// Initializes a new instance of the <see cref="RibbonMenuItemAutomationPeer"/> class.
     /// </summary>
     /// <param name="owner">The owning menu item.</param>
-    public RibbonMenuItemAutomationPeer(RibbonMenuItem owner)
+    public RibbonMenuItemAutomationPeer(MenuItem owner)
         : base(owner)
     {
     }
 
-    private RibbonMenuItem OwnerItem => (RibbonMenuItem)Owner;
+    private MenuItem OwnerItem => (MenuItem)Owner;
 
     /// <inheritdoc/>
     protected override AutomationControlType GetAutomationControlTypeCore()
         => AutomationControlType.MenuItem;
 
     /// <inheritdoc/>
-    protected override string GetClassNameCore() => nameof(RibbonMenuItem);
+    protected override string GetClassNameCore() => nameof(MenuItem);
 
     /// <inheritdoc/>
     protected override string GetNameCore()

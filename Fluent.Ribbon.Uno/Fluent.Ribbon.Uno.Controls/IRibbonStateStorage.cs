@@ -7,8 +7,18 @@ namespace Fluent;
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon.
 /// </remarks>
-public interface IRibbonStateStorage
+public interface IRibbonStateStorage : IDisposable
 {
+    /// <summary>
+    /// Gets whether state is currently loading.
+    /// </summary>
+    bool IsLoading { get; }
+
+    /// <summary>
+    /// Gets whether persistent state has been loaded.
+    /// </summary>
+    bool IsLoaded { get; }
+
     /// <summary>
     /// Gets or sets whether the ribbon is minimized.
     /// </summary>

@@ -1,13 +1,15 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a group of controls within a RibbonTab.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
 [TemplatePart(Name = PART_ItemsPanel, Type = typeof(StackPanel))]
-[TemplatePart(Name = PART_HeaderPresenter, Type = typeof(ContentPresenter))]
-[TemplatePart(Name = PART_CollapsedButton, Type = typeof(Button))]
-public partial class RibbonGroupBox : Control, IHeaderedControl
+[TemplatePart(Name = PART_HeaderPresenter, Type = typeof(ContentControl))]
+[TemplatePart(Name = PART_CollapsedButton, Type = typeof(WinUIButton))]
+public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 {
     private const string PART_ItemsPanel = "PART_ItemsPanel";
     private const string PART_HeaderPresenter = "PART_HeaderPresenter";
@@ -17,7 +19,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     private const string PART_PopupHeaderText = "PART_PopupHeaderText";
 
     private Panel? _itemsPanel;
-    private Button? _collapsedButton;
+    private WinUIButton? _collapsedButton;
     private Popup? _collapsedPopup;
     private StackPanel? _popupItemsPanel;
     private TextBlock? _popupHeaderText;
@@ -32,8 +34,36 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
 
     #region Dependency Properties
 
+    /// <summary>
+    /// Identifies whether a header presenter belongs to the collapsed group surface.
+    /// </summary>
+    public static readonly DependencyProperty IsCollapsedHeaderContentPresenterProperty =
+        DependencyProperty.RegisterAttached(
+            "IsCollapsedHeaderContentPresenter",
+            typeof(bool),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(false));
+
+    /// <summary>
+    /// Sets whether a header presenter belongs to the collapsed group surface.
+    /// </summary>
+    public static void SetIsCollapsedHeaderContentPresenter(
+        DependencyObject element,
+        bool value)
+    {
+        element.SetValue(IsCollapsedHeaderContentPresenterProperty, value);
+    }
+
+    /// <summary>
+    /// Gets whether a header presenter belongs to the collapsed group surface.
+    /// </summary>
+    public static bool GetIsCollapsedHeaderContentPresenter(DependencyObject element)
+    {
+        return (bool)element.GetValue(IsCollapsedHeaderContentPresenterProperty);
+    }
+
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
+    public new static readonly DependencyProperty HeaderProperty =
         DependencyProperty.Register(
             nameof(Header),
             typeof(object),
@@ -43,7 +73,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     /// <summary>
     /// Gets or sets the header content of the group.
     /// </summary>
-    public object? Header
+    public new object? Header
     {
         get => GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -60,7 +90,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     /// <summary>
     /// Gets the collection of items in this group.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -87,16 +117,16 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     public static readonly DependencyProperty IconProperty =
         DependencyProperty.Register(
             nameof(Icon),
-            typeof(ImageSource),
+            typeof(object),
             typeof(RibbonGroupBox),
             new PropertyMetadata(null, OnAnyIconChanged));
 
     /// <summary>
     /// Gets or sets the icon displayed when the group is collapsed.
     /// </summary>
-    public ImageSource? Icon
+    public object? Icon
     {
-        get => (ImageSource?)GetValue(IconProperty);
+        get => GetValue(IconProperty);
         set => SetValue(IconProperty, value);
     }
 
@@ -104,16 +134,16 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     public static readonly DependencyProperty MediumIconProperty =
         DependencyProperty.Register(
             nameof(MediumIcon),
-            typeof(ImageSource),
+            typeof(object),
             typeof(RibbonGroupBox),
             new PropertyMetadata(null, OnAnyIconChanged));
 
     /// <summary>
     /// Gets or sets the medium-sized icon for the group.
     /// </summary>
-    public ImageSource? MediumIcon
+    public object? MediumIcon
     {
-        get => (ImageSource?)GetValue(MediumIconProperty);
+        get => GetValue(MediumIconProperty);
         set => SetValue(MediumIconProperty, value);
     }
 
@@ -121,16 +151,16 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     public static readonly DependencyProperty LargeIconProperty =
         DependencyProperty.Register(
             nameof(LargeIcon),
-            typeof(ImageSource),
+            typeof(object),
             typeof(RibbonGroupBox),
             new PropertyMetadata(null, OnAnyIconChanged));
 
     /// <summary>
     /// Gets or sets the large-sized icon for the group.
     /// </summary>
-    public ImageSource? LargeIcon
+    public object? LargeIcon
     {
-        get => (ImageSource?)GetValue(LargeIconProperty);
+        get => GetValue(LargeIconProperty);
         set => SetValue(LargeIconProperty, value);
     }
 
@@ -138,7 +168,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     public static readonly DependencyProperty CollapsedIconProperty =
         DependencyProperty.Register(
             nameof(CollapsedIcon),
-            typeof(ImageSource),
+            typeof(object),
             typeof(RibbonGroupBox),
             new PropertyMetadata(null));
 
@@ -146,9 +176,9 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     /// Gets the icon shown in the collapsed group button, preferring
     /// <see cref="LargeIcon"/>, then <see cref="MediumIcon"/>, then <see cref="Icon"/>.
     /// </summary>
-    public ImageSource? CollapsedIcon
+    public object? CollapsedIcon
     {
-        get => (ImageSource?)GetValue(CollapsedIconProperty);
+        get => GetValue(CollapsedIconProperty);
         private set => SetValue(CollapsedIconProperty, value);
     }
 
@@ -337,6 +367,8 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         DefaultStyleKey = typeof(RibbonGroupBox);
         Items = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
+        InitializeCompatibility();
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -355,7 +387,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
             _collapsedButton.Click -= OnCollapsedButtonClick;
         }
 
-        _collapsedButton = GetTemplateChild(PART_CollapsedButton) as Button;
+        _collapsedButton = GetTemplateChild(PART_CollapsedButton) as WinUIButton;
 
         if (_collapsedButton is not null)
         {
@@ -378,6 +410,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         }
         
         var launcherBtn = GetTemplateChild("LauncherButton") as Button;
+        ApplyCompatibilityTemplateParts(launcherBtn);
         if (launcherBtn is not null)
         {
             launcherBtn.Click -= OnLauncherButtonClick;
@@ -399,6 +432,12 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        OnItemsChanged(e);
+    }
+
+    /// <summary>Handles item collection changes.</summary>
+    protected virtual void OnItemsChanged(NotifyCollectionChangedEventArgs e)
+    {
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
             _preferredSizes.Clear();
@@ -419,6 +458,26 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         CapturePreferredSizes();
         SyncItems();
         UpdateItemSizes();
+    }
+
+    /// <summary>Handles the WPF-compatible primary-pointer hook.</summary>
+    protected virtual void OnMouseLeftButtonDown(PointerRoutedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, this) && IsInButtonState)
+        {
+            IsDropDownOpen = true;
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerPressed(PointerRoutedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        if (!e.Handled)
+        {
+            OnMouseLeftButtonDown(e);
+        }
     }
 
     /// <summary>
@@ -466,6 +525,11 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     }
 
     private void OnCollapsedButtonClick(object sender, RoutedEventArgs e)
+        => ExpandForAutomation();
+
+    internal bool IsDropDownOpenForAutomation => _collapsedPopup?.IsOpen == true;
+
+    internal void ExpandForAutomation()
     {
         if (_collapsedPopup is null || _popupItemsPanel is null) return;
         if (_collapsedPopup.IsOpen) return; // Prevent double-click
@@ -507,10 +571,27 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         }
 
         _collapsedPopup.IsOpen = true;
+        if (!IsDropDownOpen)
+        {
+            IsDropDownOpen = true;
+        }
+    }
+
+    internal void CollapseForAutomation()
+    {
+        if (_collapsedPopup is not null)
+        {
+            _collapsedPopup.IsOpen = false;
+        }
     }
 
     private void OnCollapsedPopupClosed(object? sender, object e)
     {
+        if (IsDropDownOpen)
+        {
+            IsDropDownOpen = false;
+        }
+
         if (_popupItemsPanel is null) return;
 
         // Move items back from popup panel to main panel
@@ -563,4 +644,8 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonGroupBoxAutomationPeer(this);
 }

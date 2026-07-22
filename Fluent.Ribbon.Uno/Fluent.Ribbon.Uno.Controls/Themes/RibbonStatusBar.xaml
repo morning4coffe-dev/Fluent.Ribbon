@@ -39,14 +39,14 @@
         </Setter>
     </Style>
 
-    <Style TargetType="fluent:RibbonStatusBarItem">
+    <Style TargetType="fluent:StatusBarItem">
         <Setter Property="Padding" Value="8,2" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="fluent:RibbonStatusBarItem">
+                <ControlTemplate TargetType="fluent:StatusBarItem">
                     <Border Padding="{TemplateBinding Padding}">
                         <ContentPresenter
                             Content="{TemplateBinding Content}"

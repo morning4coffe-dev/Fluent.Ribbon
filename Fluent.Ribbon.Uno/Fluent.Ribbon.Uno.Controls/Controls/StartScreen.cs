@@ -10,15 +10,17 @@ namespace Fluent;
 [ContentProperty(Name = nameof(Content))]
 [TemplatePart(Name = PART_LeftPane, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = PART_RightPane, Type = typeof(ContentPresenter))]
-public partial class StartScreen : Control
+public partial class StartScreen : Backstage, IKeyTipedControl
 {
     private const string PART_LeftPane = "PART_LeftPane";
     private const string PART_RightPane = "PART_RightPane";
+    private WeakReference<UIElement>? _focusBackup;
+    private Ribbon? _owningRibbon;
 
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Content"/> dependency property.</summary>
-    public static readonly DependencyProperty ContentProperty =
+    public new static readonly DependencyProperty ContentProperty =
         DependencyProperty.Register(
             nameof(Content),
             typeof(object),
@@ -28,7 +30,7 @@ public partial class StartScreen : Control
     /// <summary>
     /// Gets or sets the main content (right pane).
     /// </summary>
-    public object? Content
+    public new object? Content
     {
         get => GetValue(ContentProperty);
         set => SetValue(ContentProperty, value);
@@ -52,7 +54,7 @@ public partial class StartScreen : Control
     }
 
     /// <summary>Identifies the <see cref="IsOpen"/> dependency property.</summary>
-    public static readonly DependencyProperty IsOpenProperty =
+    public new static readonly DependencyProperty IsOpenProperty =
         DependencyProperty.Register(
             nameof(IsOpen),
             typeof(bool),
@@ -62,10 +64,61 @@ public partial class StartScreen : Control
     /// <summary>
     /// Gets or sets whether the start screen is open.
     /// </summary>
-    public bool IsOpen
+    public new bool IsOpen
     {
         get => (bool)GetValue(IsOpenProperty);
         set => SetValue(IsOpenProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="Shown"/> dependency property.</summary>
+    public static readonly DependencyProperty ShownProperty =
+        DependencyProperty.Register(
+            nameof(Shown),
+            typeof(bool),
+            typeof(StartScreen),
+            new PropertyMetadata(false));
+
+    /// <summary>
+    /// Gets or sets whether this StartScreen has been shown at least once.
+    /// </summary>
+    public bool Shown
+    {
+        get => (bool)GetValue(ShownProperty);
+        set => SetValue(ShownProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="KeyTip"/> dependency property.</summary>
+    public new static readonly DependencyProperty KeyTipProperty =
+        DependencyProperty.Register(
+            nameof(KeyTip),
+            typeof(string),
+            typeof(StartScreen),
+            new PropertyMetadata(string.Empty));
+
+    /// <summary>
+    /// Gets or sets the key tip used to open the start screen.
+    /// </summary>
+    public new string? KeyTip
+    {
+        get => (string?)GetValue(KeyTipProperty);
+        set => SetValue(KeyTipProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="CloseOnEsc"/> dependency property.</summary>
+    public new static readonly DependencyProperty CloseOnEscProperty =
+        DependencyProperty.Register(
+            nameof(CloseOnEsc),
+            typeof(bool),
+            typeof(StartScreen),
+            new PropertyMetadata(true));
+
+    /// <summary>
+    /// Gets or sets whether Escape closes the start screen.
+    /// </summary>
+    public new bool CloseOnEsc
+    {
+        get => (bool)GetValue(CloseOnEscProperty);
+        set => SetValue(CloseOnEscProperty, value);
     }
 
     /// <summary>Identifies the <see cref="LeftPaneWidth"/> dependency property.</summary>
@@ -95,6 +148,9 @@ public partial class StartScreen : Control
     public StartScreen()
     {
         DefaultStyleKey = typeof(StartScreen);
+        KeyDown += OnStartScreenKeyDown;
+        Loaded += OnStartScreenLoaded;
+        Unloaded += OnStartScreenUnloaded;
     }
 
     #endregion
@@ -116,8 +172,145 @@ public partial class StartScreen : Control
     {
         if (d is StartScreen screen)
         {
-            VisualStateManager.GoToState(screen, (bool)e.NewValue ? "Open" : "Closed", true);
+            var isOpen = (bool)e.NewValue;
+            if (isOpen)
+            {
+                screen.Shown = true;
+                screen._focusBackup =
+                    FocusRoutingHelper.CaptureFocusedElement(screen, onlyWhenOutsideOwner: true);
+            }
+
+            VisualStateManager.GoToState(screen, isOpen ? "Open" : "Closed", true);
+            screen.UpdateOwningRibbonState();
+
+            if (isOpen)
+            {
+                screen.DispatcherQueue?.TryEnqueue(() =>
+                {
+                    if (screen.IsOpen)
+                    {
+                        FocusRoutingHelper.FocusFirst(screen);
+                    }
+                });
+            }
+            else
+            {
+                FocusRoutingHelper.RestoreFocus(ref screen._focusBackup);
+            }
         }
+    }
+
+    private void OnStartScreenKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (_owningRibbon?.AreAnyKeyTipsVisible == true)
+        {
+            return;
+        }
+
+        if (!args.Handled
+            && args.Key == Windows.System.VirtualKey.Escape
+            && CloseOnEsc
+            && IsOpen)
+        {
+            IsOpen = false;
+            args.Handled = true;
+        }
+    }
+
+    private void OnStartScreenLoaded(object sender, RoutedEventArgs args)
+    {
+        if (IsOpen && FocusRoutingHelper.IsEffectivelyVisible(this))
+        {
+            UpdateOwningRibbonState();
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                if (IsOpen)
+                {
+                    FocusRoutingHelper.FocusFirst(this);
+                }
+            });
+        }
+    }
+
+    private void OnStartScreenUnloaded(object sender, RoutedEventArgs args)
+    {
+        _focusBackup = null;
+        if (_owningRibbon is not null && IsOpen)
+        {
+            _owningRibbon.IsBackstageOrStartScreenOpen =
+                _owningRibbon.Menu is Backstage { IsOpen: true };
+        }
+
+        _owningRibbon = null;
+    }
+
+    private void UpdateOwningRibbonState()
+    {
+        _owningRibbon = FocusRoutingHelper.FindAncestor<Ribbon>(this);
+        if (_owningRibbon is null && XamlRoot?.Content is DependencyObject root)
+        {
+            _owningRibbon = FocusRoutingHelper.FindDescendant<Ribbon>(root);
+        }
+
+        if (_owningRibbon is null)
+        {
+            return;
+        }
+
+        // Ribbon.StartScreen is the unambiguous application-level ownership contract.
+        // A StartScreen can also be demonstrated inline inside ordinary tab content.
+        if (!ReferenceEquals(_owningRibbon.StartScreen, this))
+        {
+            return;
+        }
+
+        if (IsOpen && FocusRoutingHelper.IsEffectivelyVisible(this))
+        {
+            _owningRibbon.IsBackstageOrStartScreenOpen = true;
+        }
+        else
+        {
+            _owningRibbon.IsBackstageOrStartScreenOpen =
+                _owningRibbon.Menu is Backstage { IsOpen: true };
+        }
+    }
+
+    /// <inheritdoc />
+    public override KeyTipPressedResult OnKeyTipPressed()
+    {
+        IsOpen = true;
+        return new KeyTipPressedResult(
+            pressedElementAquiredFocus: false,
+            pressedElementOpenedPopup: true);
+    }
+
+    /// <inheritdoc />
+    public override void OnKeyTipBack()
+    {
+        IsOpen = false;
+    }
+
+    /// <summary>
+    /// Opens the StartScreen if it has not already been shown.
+    /// </summary>
+    /// <returns><c>true</c> when the StartScreen was opened; otherwise <c>false</c>.</returns>
+    protected override bool Show()
+    {
+        if (Shown)
+        {
+            return false;
+        }
+
+        IsOpen = true;
+        return IsOpen;
+    }
+
+    /// <summary>
+    /// Closes the StartScreen.
+    /// </summary>
+    protected override void Hide()
+    {
+        IsOpen = false;
     }
 
     #endregion

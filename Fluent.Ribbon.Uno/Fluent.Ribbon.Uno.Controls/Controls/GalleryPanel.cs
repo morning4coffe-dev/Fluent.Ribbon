@@ -9,7 +9,7 @@ namespace Fluent;
 /// WPF version uses VisualCollection and ItemContainerGenerator;
 /// Uno version manages children directly.
 /// </remarks>
-public partial class GalleryPanel : Panel
+public partial class GalleryPanel : StackPanel
 {
     #region Dependency Properties
 
@@ -82,7 +82,7 @@ public partial class GalleryPanel : Panel
     }
 
     /// <summary>Identifies the <see cref="Orientation"/> dependency property.</summary>
-    public static readonly DependencyProperty OrientationProperty =
+    public new static readonly DependencyProperty OrientationProperty =
         DependencyProperty.Register(
             nameof(Orientation),
             typeof(Orientation),
@@ -92,7 +92,7 @@ public partial class GalleryPanel : Panel
     /// <summary>
     /// Gets or sets the orientation for item layout.
     /// </summary>
-    public Orientation Orientation
+    public new Orientation Orientation
     {
         get => (Orientation)GetValue(OrientationProperty);
         set => SetValue(OrientationProperty, value);

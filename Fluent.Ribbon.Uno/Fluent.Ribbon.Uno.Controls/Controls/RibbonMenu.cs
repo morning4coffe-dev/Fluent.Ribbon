@@ -5,7 +5,7 @@ namespace Fluent;
 /// Contains a collection of <see cref="RibbonMenuItem"/> items.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-public partial class RibbonMenu : Control
+public partial class RibbonMenu : MenuBase
 {
     #region Dependency Properties
 
@@ -20,7 +20,7 @@ public partial class RibbonMenu : Control
     /// <summary>
     /// Gets the collection of menu items.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -77,6 +77,12 @@ public partial class RibbonMenu : Control
         {
             _itemsPanel.Children.Add(item);
         }
+    }
+
+    /// <summary>Creates the default ribbon menu-item container.</summary>
+    protected override DependencyObject GetContainerForItemOverride()
+    {
+        return new RibbonMenuItem();
     }
 
     #endregion

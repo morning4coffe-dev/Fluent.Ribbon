@@ -4,7 +4,7 @@ namespace Fluent;
 /// Represents an individual item in a <see cref="RibbonStatusBar"/>.
 /// </summary>
 [ContentProperty(Name = nameof(Content))]
-public partial class RibbonStatusBarItem : ContentControl
+public partial class StatusBarItem : StatusBarItemBase
 {
     #region Dependency Properties
 
@@ -13,7 +13,7 @@ public partial class RibbonStatusBarItem : ContentControl
         DependencyProperty.Register(
             nameof(Title),
             typeof(string),
-            typeof(RibbonStatusBarItem),
+            typeof(StatusBarItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -30,7 +30,7 @@ public partial class RibbonStatusBarItem : ContentControl
         DependencyProperty.Register(
             nameof(IsChecked),
             typeof(bool),
-            typeof(RibbonStatusBarItem),
+            typeof(StatusBarItem),
             new PropertyMetadata(true, OnIsCheckedChanged));
 
     /// <summary>
@@ -47,11 +47,12 @@ public partial class RibbonStatusBarItem : ContentControl
     #region Constructor
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RibbonStatusBarItem"/> class.
+    /// Initializes a new instance of the <see cref="StatusBarItem"/> class.
     /// </summary>
-    public RibbonStatusBarItem()
+    public StatusBarItem()
     {
-        DefaultStyleKey = typeof(RibbonStatusBarItem);
+        DefaultStyleKey = typeof(StatusBarItem);
+        InitializeCompatibility();
     }
 
     #endregion
@@ -60,11 +61,16 @@ public partial class RibbonStatusBarItem : ContentControl
 
     private static void OnIsCheckedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is RibbonStatusBarItem item)
+        if (d is StatusBarItem item)
         {
-            item.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
+            item.OnCheckedStateChanged();
         }
     }
 
     #endregion
+}
+
+/// <summary>Unpublished convenience name retained for existing Uno markup.</summary>
+public partial class RibbonStatusBarItem : StatusBarItem
+{
 }

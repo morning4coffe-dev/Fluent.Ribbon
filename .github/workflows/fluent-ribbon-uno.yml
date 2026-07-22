@@ -1,5 +1,8 @@
 name: Fluent.Ribbon.Uno
 
+permissions:
+  contents: read
+
 # Builds the Uno Platform port. The WinUI 3 (Windows) head cannot be built with
 # `dotnet build` (Uno error UNOB0008 — the WinUI XAML compiler requires a full
 # MSBuild.exe), so it is built with `msbuild` on a windows-latest runner that ships
@@ -10,14 +13,37 @@ on:
   push:
     paths:
       - 'Fluent.Ribbon.Uno/**'
+      - 'Fluent.Ribbon/**'
+      - 'Directory.build.props'
+      - 'Directory.build.targets'
+      - 'Directory.packages.props'
       - '.github/workflows/fluent-ribbon-uno.yml'
   pull_request:
     paths:
       - 'Fluent.Ribbon.Uno/**'
+      - 'Fluent.Ribbon/**'
+      - 'Directory.build.props'
+      - 'Directory.build.targets'
+      - 'Directory.packages.props'
       - '.github/workflows/fluent-ribbon-uno.yml'
   workflow_dispatch:
 
 jobs:
+  package-validation:
+    name: Validate NuGet packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack and validate package-only consumer
+        shell: pwsh
+        run: .\Fluent.Ribbon.Uno\ValidatePackages.ps1
+
   desktop:
     name: Build Desktop (net10.0-desktop)
     runs-on: windows-latest
@@ -33,9 +59,54 @@ jobs:
         working-directory: Fluent.Ribbon.Uno
         run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-desktop -c Release
 
+      - name: Build Compatibility
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility/Fluent.Ribbon.Uno.Compatibility.csproj -f net10.0-desktop -c Release
+
+      - name: Compile WPF-style XAML fixture
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility.XamlTests/Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj -f net10.0-desktop -c Release
+
       - name: Build Showcase
         working-directory: Fluent.Ribbon.Uno
         run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-desktop -c Release
+
+      - name: Test Uno contracts
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release --no-restore
+
+      - name: Test API compatibility tool
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -c Release --no-restore
+
+      - name: Build WPF API reference
+        run: dotnet build Fluent.Ribbon/Fluent.Ribbon.csproj -f net8.0-windows -c Release
+
+      - name: Report WPF API compatibility gaps
+        shell: pwsh
+        run: |
+          $output = & dotnet run --project Fluent.Ribbon.Uno/ApiCompatibility/Fluent.Ribbon.ApiCompatibility/Fluent.Ribbon.ApiCompatibility.csproj -c Release --no-build -- --reference bin/Fluent.Ribbon/Release/net8.0-windows/Fluent.dll --candidate bin/Fluent.Ribbon.Uno.Controls/Release/net10.0-desktop/Fluent.Ribbon.Uno.dll --candidate bin/Fluent.Ribbon.Uno.Compatibility/Release/net10.0-desktop/Fluent.Ribbon.Uno.Compatibility.dll --exceptions Fluent.Ribbon.Uno/ApiCompatibility/exceptions.wpf-only.json --mode report
+          $output
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $summary = [regex]::Match(($output -join "`n"), '(\d+) unapproved gap')
+          if (-not $summary.Success) {
+            throw 'Could not read the API compatibility gap count.'
+          }
+
+          $gapCount = [int]$summary.Groups[1].Value
+          if ($gapCount -gt 282) {
+            throw "API compatibility regressed from the current 282-gap budget to $gapCount gaps."
+          }
+
+      - name: Run Desktop UI smoke
+        working-directory: Fluent.Ribbon.Uno
+        timeout-minutes: 5
+        env:
+          RUN_UNO_UI_TESTS: '1'
+        run: dotnet test Fluent.Ribbon.Uno.UITests/Fluent.Ribbon.Uno.UITests.csproj -c Release --filter TestCategory=UI
 
   winui3:
     name: Build WinUI 3 (net10.0-windows10.0.26100)
@@ -55,6 +126,145 @@ jobs:
         working-directory: Fluent.Ribbon.Uno
         run: msbuild Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100
 
+      - name: Build Compatibility (WinUI 3)
+        working-directory: Fluent.Ribbon.Uno
+        run: msbuild Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100
+
+      - name: Compile WPF-style XAML fixture (WinUI 3)
+        working-directory: Fluent.Ribbon.Uno
+        run: msbuild Fluent.Ribbon.Uno.Compatibility.XamlTests\Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100
+
       - name: Build Showcase (WinUI 3)
         working-directory: Fluent.Ribbon.Uno
         run: msbuild Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100
+
+  desktop-cross-platform:
+    name: Build Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Controls
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-desktop -c Release
+
+      - name: Build Compatibility
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility/Fluent.Ribbon.Uno.Compatibility.csproj -f net10.0-desktop -c Release
+
+      - name: Compile WPF-style XAML fixture
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility.XamlTests/Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj -f net10.0-desktop -c Release
+
+      - name: Build Showcase
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-desktop -c Release
+
+      - name: Test Uno contracts
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release
+
+      - name: Test API compatibility tool
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -c Release
+
+  browserwasm:
+    name: Build WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install WebAssembly workload
+        run: dotnet workload install wasm-tools
+
+      - name: Build Controls
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-browserwasm -c Release
+
+      - name: Build Compatibility
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility/Fluent.Ribbon.Uno.Compatibility.csproj -f net10.0-browserwasm -c Release
+
+      - name: Compile WPF-style XAML fixture
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility.XamlTests/Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj -f net10.0-browserwasm -c Release
+
+      - name: Build Showcase
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-browserwasm -c Release
+
+  android:
+    name: Build Android
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Build Controls
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-android -c Release
+
+      - name: Build Compatibility
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility/Fluent.Ribbon.Uno.Compatibility.csproj -f net10.0-android -c Release
+
+      - name: Compile WPF-style XAML fixture
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility.XamlTests/Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj -f net10.0-android -c Release
+
+      - name: Build Showcase
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-android -c Release
+
+  ios:
+    name: Build iOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install iOS workload
+        run: dotnet workload install ios
+
+      - name: Build Controls
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-ios -c Release
+
+      - name: Build Compatibility
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility/Fluent.Ribbon.Uno.Compatibility.csproj -f net10.0-ios -c Release
+
+      - name: Compile WPF-style XAML fixture
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Compatibility.XamlTests/Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj -f net10.0-ios -c Release
+
+      - name: Build Showcase
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-ios -c Release -p:RuntimeIdentifier=iossimulator-x64

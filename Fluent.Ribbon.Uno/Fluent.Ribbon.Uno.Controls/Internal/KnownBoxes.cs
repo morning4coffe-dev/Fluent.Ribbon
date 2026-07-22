@@ -8,7 +8,7 @@ namespace Fluent.Internal;
 /// since most property system paths handle boxing internally.
 /// Still useful for frequently used callback values.
 /// </remarks>
-public static class KnownBoxes
+public static class KnownBoxValues
 {
     /// <summary>Boxed <c>true</c> value.</summary>
     public static readonly object TrueBox = true;

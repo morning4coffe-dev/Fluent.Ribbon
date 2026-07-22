@@ -12,10 +12,14 @@ public interface ILogicalChildSupport
     /// <summary>
     /// Adds a logical child.
     /// </summary>
-    void AddLogicalChild(object child);
+    void AddLogicalChild(object child)
+    {
+    }
 
     /// <summary>
     /// Removes a logical child.
     /// </summary>
-    void RemoveLogicalChild(object child);
+    void RemoveLogicalChild(object child)
+    {
+    }
 }

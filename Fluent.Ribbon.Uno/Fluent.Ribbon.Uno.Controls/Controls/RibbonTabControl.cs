@@ -60,6 +60,7 @@ public partial class RibbonTabControl : TabView
         // Use TabView's default style/template — no custom template needed
         IsAddTabButtonVisible = false;
         TabWidthMode = TabViewWidthMode.SizeToContent;
+        InitializeCompatibility();
     }
 
     #endregion
@@ -71,6 +72,7 @@ public partial class RibbonTabControl : TabView
     {
         base.OnApplyTemplate();
         _contentPresenter = GetTemplateChild(PART_ContentPresenter) as ContentPresenter;
+        UpdateCompatibilityTemplateParts();
         UpdateMinimizedState();
     }
 
@@ -78,6 +80,7 @@ public partial class RibbonTabControl : TabView
     {
         if (d is RibbonTabControl tabControl)
         {
+            tabControl.OnMinimizedCompatibilityChanged((bool)e.NewValue);
             tabControl.UpdateMinimizedState();
         }
     }
@@ -89,9 +92,15 @@ public partial class RibbonTabControl : TabView
         // Manually find the content presenter in TabView if template doesn't handle it
         if (_contentPresenter is not null)
         {
-            _contentPresenter.Visibility = IsMinimized ? Visibility.Collapsed : Visibility.Visible;
+            _contentPresenter.Visibility = IsMinimized && !IsDropDownOpen
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonTabControlAutomationPeer(this);
 }

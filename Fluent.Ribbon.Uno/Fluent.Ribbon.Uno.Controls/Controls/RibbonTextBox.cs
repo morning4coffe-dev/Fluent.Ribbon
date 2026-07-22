@@ -217,4 +217,8 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonTextBoxAutomationPeer(this);
 }

@@ -22,33 +22,41 @@ public partial class IconPresenter : ContentControl
     public static readonly DependencyProperty SmallSizeProperty =
         DependencyProperty.Register(
             nameof(SmallSize),
-            typeof(double),
+            typeof(Windows.Foundation.Size),
             typeof(IconPresenter),
-            new PropertyMetadata(16.0, OnPropertyChanged));
+            new PropertyMetadata(new Windows.Foundation.Size(16.0, 16.0), OnPropertyChanged));
 
     /// <summary>Identifies the <see cref="MediumSize"/> dependency property.</summary>
     public static readonly DependencyProperty MediumSizeProperty =
         DependencyProperty.Register(
             nameof(MediumSize),
-            typeof(double),
+            typeof(Windows.Foundation.Size),
             typeof(IconPresenter),
-            new PropertyMetadata(24.0, OnPropertyChanged));
+            new PropertyMetadata(new Windows.Foundation.Size(24.0, 24.0), OnPropertyChanged));
 
     /// <summary>Identifies the <see cref="LargeSize"/> dependency property.</summary>
     public static readonly DependencyProperty LargeSizeProperty =
         DependencyProperty.Register(
             nameof(LargeSize),
-            typeof(double),
+            typeof(Windows.Foundation.Size),
             typeof(IconPresenter),
-            new PropertyMetadata(32.0, OnPropertyChanged));
+            new PropertyMetadata(new Windows.Foundation.Size(32.0, 32.0), OnPropertyChanged));
 
     /// <summary>Identifies the <see cref="CustomSize"/> dependency property.</summary>
     public static readonly DependencyProperty CustomSizeProperty =
         DependencyProperty.Register(
             nameof(CustomSize),
-            typeof(double),
+            typeof(Windows.Foundation.Size),
             typeof(IconPresenter),
-            new PropertyMetadata(0.0));
+            new PropertyMetadata(new Windows.Foundation.Size(0.0, 0.0), OnPropertyChanged));
+
+    /// <summary>Identifies the <see cref="CurrentIconSizeSize"/> dependency property.</summary>
+    public static readonly DependencyProperty CurrentIconSizeSizeProperty =
+        DependencyProperty.Register(
+            nameof(CurrentIconSizeSize),
+            typeof(Windows.Foundation.Size),
+            typeof(IconPresenter),
+            new PropertyMetadata(new Windows.Foundation.Size(16.0, 16.0)));
 
     /// <summary>Identifies the <see cref="SmallIcon"/> dependency property.</summary>
     public static readonly DependencyProperty SmallIconProperty =
@@ -106,37 +114,46 @@ public partial class IconPresenter : ContentControl
     /// <summary>
     /// Gets or sets the size for small icons (default 16).
     /// </summary>
-    public double SmallSize
+    public Windows.Foundation.Size SmallSize
     {
-        get => (double)GetValue(SmallSizeProperty);
+        get => (Windows.Foundation.Size)GetValue(SmallSizeProperty);
         set => SetValue(SmallSizeProperty, value);
     }
 
     /// <summary>
     /// Gets or sets the size for medium icons (default 24).
     /// </summary>
-    public double MediumSize
+    public Windows.Foundation.Size MediumSize
     {
-        get => (double)GetValue(MediumSizeProperty);
+        get => (Windows.Foundation.Size)GetValue(MediumSizeProperty);
         set => SetValue(MediumSizeProperty, value);
     }
 
     /// <summary>
     /// Gets or sets the size for large icons (default 32).
     /// </summary>
-    public double LargeSize
+    public Windows.Foundation.Size LargeSize
     {
-        get => (double)GetValue(LargeSizeProperty);
+        get => (Windows.Foundation.Size)GetValue(LargeSizeProperty);
         set => SetValue(LargeSizeProperty, value);
     }
 
     /// <summary>
     /// Gets or sets the size for custom icons.
     /// </summary>
-    public double CustomSize
+    public Windows.Foundation.Size CustomSize
     {
-        get => (double)GetValue(CustomSizeProperty);
+        get => (Windows.Foundation.Size)GetValue(CustomSizeProperty);
         set => SetValue(CustomSizeProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the resolved size for the current icon mode.
+    /// </summary>
+    public Windows.Foundation.Size CurrentIconSizeSize
+    {
+        get => (Windows.Foundation.Size)GetValue(CurrentIconSizeSizeProperty);
+        set => SetValue(CurrentIconSizeSizeProperty, value);
     }
 
     /// <summary>
@@ -181,7 +198,7 @@ public partial class IconPresenter : ContentControl
     public object? OptimalIcon
     {
         get => GetValue(OptimalIconProperty);
-        private set => SetValue(OptimalIconProperty, value);
+        set => SetValue(OptimalIconProperty, value);
     }
 
     #endregion
@@ -239,14 +256,16 @@ public partial class IconPresenter : ContentControl
             _ => SmallSize
         };
 
-        if (!DoubleUtil.AreClose(Width, size))
+        CurrentIconSizeSize = size;
+
+        if (!DoubleUtil.AreClose(Width, size.Width))
         {
-            Width = size;
+            Width = size.Width;
         }
 
-        if (!DoubleUtil.AreClose(Height, size))
+        if (!DoubleUtil.AreClose(Height, size.Height))
         {
-            Height = size;
+            Height = size.Height;
         }
     }
 

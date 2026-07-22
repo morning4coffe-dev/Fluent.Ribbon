@@ -11,7 +11,7 @@ namespace Fluent;
 [ContentProperty(Name = nameof(Content))]
 [TemplatePart(Name = PART_ResizeBothThumb, Type = typeof(UIElement))]
 [TemplatePart(Name = PART_ResizeVerticalThumb, Type = typeof(UIElement))]
-public partial class ResizeableContentControl : Control
+public partial class ResizeableContentControl : ContentControl
 {
     private const string PART_ResizeBothThumb = "PART_ResizeBothThumb";
     private const string PART_ResizeVerticalThumb = "PART_ResizeVerticalThumb";
@@ -24,23 +24,6 @@ public partial class ResizeableContentControl : Control
     private bool _isDraggingBoth;
 
     #region Dependency Properties
-
-    /// <summary>Identifies the <see cref="Content"/> dependency property.</summary>
-    public static readonly DependencyProperty ContentProperty =
-        DependencyProperty.Register(
-            nameof(Content),
-            typeof(object),
-            typeof(ResizeableContentControl),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets or sets the content.
-    /// </summary>
-    public object? Content
-    {
-        get => GetValue(ContentProperty);
-        set => SetValue(ContentProperty, value);
-    }
 
     /// <summary>Identifies the <see cref="CanResizeBothDirections"/> dependency property.</summary>
     public static readonly DependencyProperty CanResizeBothDirectionsProperty =
@@ -76,6 +59,24 @@ public partial class ResizeableContentControl : Control
         set => SetValue(CanResizeVerticalProperty, value);
     }
 
+    /// <summary>Identifies the <see cref="ResizeMode"/> dependency property.</summary>
+    public static readonly DependencyProperty ResizeModeProperty =
+        DependencyProperty.Register(
+            nameof(ResizeMode),
+            typeof(ContextMenuResizeMode),
+            typeof(ResizeableContentControl),
+            new PropertyMetadata(ContextMenuResizeMode.Both, OnResizeModeChanged));
+
+    /// <summary>Gets or sets the resize mode.</summary>
+    public ContextMenuResizeMode ResizeMode
+    {
+        get => (ContextMenuResizeMode)GetValue(ResizeModeProperty);
+        set => SetValue(ResizeModeProperty, value);
+    }
+
+    /// <summary>Gets whether a resize interaction is active.</summary>
+    public bool IsMouseOverResizeThumbs => _isDragging;
+
     #endregion
 
     #region Constructor
@@ -108,6 +109,16 @@ public partial class ResizeableContentControl : Control
     #endregion
 
     #region Resize Handling
+
+    private static void OnResizeModeChanged(
+        DependencyObject d,
+        DependencyPropertyChangedEventArgs e)
+    {
+        var control = (ResizeableContentControl)d;
+        var mode = (ContextMenuResizeMode)e.NewValue;
+        control.CanResizeBothDirections = mode == ContextMenuResizeMode.Both;
+        control.CanResizeVertical = mode is ContextMenuResizeMode.Vertical or ContextMenuResizeMode.Both;
+    }
 
     private void AttachHandlers()
     {

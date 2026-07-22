@@ -11,6 +11,7 @@
                         <!-- Automatic color -->
                         <Button
                             x:Name="PART_AutomaticButton"
+                            AutomationProperties.AutomationId="ColorGalleryAutomaticButton"
                             Content="Automatic"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
@@ -20,6 +21,7 @@
                         <!-- No color -->
                         <Button
                             x:Name="PART_NoColorButton"
+                            AutomationProperties.AutomationId="ColorGalleryNoColorButton"
                             Content="No Color"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
@@ -35,6 +37,7 @@
                                 Margin="0,4,0,2"
                                 Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
                             <StackPanel x:Name="PART_ThemeColorsPanel" />
+                            <StackPanel x:Name="PART_ThemeGradientsPanel" />
                         </StackPanel>
 
                         <!-- Standard colors -->
@@ -45,6 +48,7 @@
                             Margin="0,4,0,2"
                             Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
                         <StackPanel x:Name="PART_StandardColorsPanel" />
+                        <StackPanel x:Name="PART_StandardGradientsPanel" />
 
                         <!-- Recent colors -->
                         <StackPanel x:Name="PART_RecentColorsSection" Visibility="Collapsed">
@@ -60,6 +64,7 @@
                         <!-- More colors -->
                         <Button
                             x:Name="PART_MoreColorsButton"
+                            AutomationProperties.AutomationId="ColorGalleryMoreColorsButton"
                             Content="More Colors..."
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"

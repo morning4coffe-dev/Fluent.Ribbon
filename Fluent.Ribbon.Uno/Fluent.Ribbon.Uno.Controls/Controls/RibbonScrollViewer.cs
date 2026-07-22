@@ -1,31 +1,42 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a scrolling helper for ribbon tabs and groups.
 /// Wraps a ScrollViewer with left/right scroll buttons for horizontal scrolling.
 /// </summary>
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
-/// In WPF this subclassed ScrollViewer with custom HitTest; here it's a wrapper Control.
+/// Uno heads keep the WPF-shaped <see cref="ScrollViewer"/> base. WinUI uses a
+/// <see cref="Control"/> wrapper because its <see cref="ScrollViewer"/> is sealed.
 /// </remarks>
 [ContentProperty(Name = nameof(Content))]
 [TemplatePart(Name = PART_ScrollViewer, Type = typeof(ScrollViewer))]
-[TemplatePart(Name = PART_LeftButton, Type = typeof(Button))]
-[TemplatePart(Name = PART_RightButton, Type = typeof(Button))]
+[TemplatePart(Name = PART_LeftButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_RightButton, Type = typeof(WinUIButton))]
+#if WINDOWS
 public partial class RibbonScrollViewer : Control
+#else
+public partial class RibbonScrollViewer : ScrollViewer
+#endif
 {
     private const string PART_ScrollViewer = "PART_ScrollViewer";
     private const string PART_LeftButton = "PART_LeftButton";
     private const string PART_RightButton = "PART_RightButton";
 
     private ScrollViewer? _scrollViewer;
-    private Button? _leftButton;
-    private Button? _rightButton;
+    private WinUIButton? _leftButton;
+    private WinUIButton? _rightButton;
 
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Content"/> dependency property.</summary>
+#if WINDOWS
     public static readonly DependencyProperty ContentProperty =
+#else
+    public new static readonly DependencyProperty ContentProperty =
+#endif
         DependencyProperty.Register(
             nameof(Content),
             typeof(UIElement),
@@ -35,7 +46,11 @@ public partial class RibbonScrollViewer : Control
     /// <summary>
     /// Gets or sets the scrollable content.
     /// </summary>
+#if WINDOWS
     public UIElement? Content
+#else
+    public new UIElement? Content
+#endif
     {
         get => (UIElement?)GetValue(ContentProperty);
         set => SetValue(ContentProperty, value);
@@ -89,9 +104,14 @@ public partial class RibbonScrollViewer : Control
             _rightButton.Click -= OnRightButtonClick;
         }
 
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.ViewChanged -= OnScrollViewerViewChanged;
+        }
+
         _scrollViewer = GetTemplateChild(PART_ScrollViewer) as ScrollViewer;
-        _leftButton = GetTemplateChild(PART_LeftButton) as Button;
-        _rightButton = GetTemplateChild(PART_RightButton) as Button;
+        _leftButton = GetTemplateChild(PART_LeftButton) as WinUIButton;
+        _rightButton = GetTemplateChild(PART_RightButton) as WinUIButton;
 
         if (_leftButton is not null)
         {
@@ -162,6 +182,48 @@ public partial class RibbonScrollViewer : Control
             _rightButton.Visibility = _scrollViewer.HorizontalOffset < maxOffset - 1
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>Performs a portable hit test.</summary>
+    protected virtual HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
+    {
+        return new HitTestResult(this);
+    }
+
+    /// <summary>Handles WPF-compatible wheel input.</summary>
+    protected virtual void OnMouseWheel(PointerRoutedEventArgs e)
+    {
+#if WINDOWS
+        if (_scrollViewer is null)
+        {
+            return;
+        }
+
+        var scrollViewer = _scrollViewer;
+#else
+        var scrollViewer = this;
+#endif
+        var delta = e.GetCurrentPoint(scrollViewer).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        scrollViewer.ChangeView(
+            Math.Max(0, scrollViewer.HorizontalOffset + (delta > 0 ? -ScrollStep : ScrollStep)),
+            null,
+            null);
+        e.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerWheelChanged(PointerRoutedEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        if (!e.Handled)
+        {
+            OnMouseWheel(e);
         }
     }
 

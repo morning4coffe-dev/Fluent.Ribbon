@@ -1,0 +1,24 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:modernControls="using:Fluent.Modern.Controls">
+
+    <Style TargetType="modernControls:RibbonInfoBarHost">
+        <Setter Property="MinWidth" Value="240" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="modernControls:RibbonInfoBarHost">
+                    <InfoBar
+                        IsOpen="{TemplateBinding IsOpen}"
+                        IsClosable="{TemplateBinding IsClosable}"
+                        Severity="{TemplateBinding Severity}"
+                        Title="{TemplateBinding Title}"
+                        Message="{TemplateBinding Message}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

@@ -9,7 +9,7 @@ namespace Fluent;
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
 /// </remarks>
 [ContentProperty(Name = nameof(Items))]
-public partial class RibbonToolBar : Control
+public partial class RibbonToolBar : RibbonControl
 {
     #region Dependency Properties
 
@@ -86,6 +86,7 @@ public partial class RibbonToolBar : Control
 
         Items.CollectionChanged += (_, _) => InvalidateLayout();
         LayoutDefinitions.CollectionChanged += (_, _) => InvalidateLayout();
+        InitializeCompatibility();
     }
 
     #endregion
@@ -108,6 +109,12 @@ public partial class RibbonToolBar : Control
     {
         if (d is RibbonToolBar toolbar)
         {
+            var isSimplified = (bool)e.NewValue;
+            foreach (var child in toolbar.Children)
+            {
+                UpdateChildSimplifiedState(child, isSimplified);
+            }
+
             toolbar.RebuildLayout();
         }
     }
@@ -145,15 +152,46 @@ public partial class RibbonToolBar : Control
     /// </summary>
     private RibbonToolBarLayoutDefinition? GetCurrentLayoutDefinition()
     {
-        foreach (var definition in LayoutDefinitions)
+        if (LayoutDefinitions.Count == 0)
         {
-            if (definition.ForSimplified == IsSimplified)
+            return null;
+        }
+
+        var matchingMode = LayoutDefinitions
+            .Where(definition => definition.ForSimplified == IsSimplified)
+            .ToList();
+        if (matchingMode.Count == 0)
+        {
+            matchingMode = LayoutDefinitions.ToList();
+        }
+
+        var currentSize = RibbonProperties.GetSize(this);
+        var exact = matchingMode.FirstOrDefault(definition => definition.Size == currentSize);
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        var preference = currentSize switch
+        {
+            RibbonControlSize.Large =>
+                new[] { RibbonControlSize.Middle, RibbonControlSize.Small },
+            RibbonControlSize.Middle =>
+                new[] { RibbonControlSize.Small, RibbonControlSize.Large },
+            _ =>
+                new[] { RibbonControlSize.Middle, RibbonControlSize.Large },
+        };
+
+        foreach (var size in preference)
+        {
+            var fallback = matchingMode.FirstOrDefault(definition => definition.Size == size);
+            if (fallback is not null)
             {
-                return definition;
+                return fallback;
             }
         }
 
-        return LayoutDefinitions.FirstOrDefault();
+        return matchingMode[0];
     }
 
     private void BuildDefaultLayout()
@@ -213,10 +251,7 @@ public partial class RibbonToolBar : Control
                             scalable.ScaleTo(controlDef.Size);
                         }
 
-                        if (!double.IsNaN(controlDef.Width))
-                        {
-                            targetControl.Width = controlDef.Width;
-                        }
+                        targetControl.Width = controlDef.Width;
 
                         Grid.SetRow(targetControl, rowIndex);
                         Grid.SetColumn(targetControl, colIndex);
@@ -226,7 +261,11 @@ public partial class RibbonToolBar : Control
                 }
                 else if (child is RibbonToolBarControlGroupDefinition groupDef)
                 {
-                    var groupPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                    var groupPanel = new RibbonToolBarControlGroup
+                    {
+                        IsFirstInRow = colIndex == 0,
+                        IsLastInRow = ReferenceEquals(child, row.Children.LastOrDefault()),
+                    };
 
                     foreach (var groupChild in groupDef.Children)
                     {
@@ -240,7 +279,8 @@ public partial class RibbonToolBar : Control
                                 scalable.ScaleTo(groupChild.Size);
                             }
 
-                            groupPanel.Children.Add(targetControl);
+                            targetControl.Width = groupChild.Width;
+                            groupPanel.Items.Add(targetControl);
                         }
                     }
 

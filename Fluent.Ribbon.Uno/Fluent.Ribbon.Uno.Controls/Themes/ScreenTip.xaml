@@ -13,7 +13,7 @@
                         Background="{ThemeResource FlyoutPresenterBackground}"
                         BorderBrush="{ThemeResource RibbonBorderBrush}"
                         BorderThickness="1"
-                        CornerRadius="4"
+                        CornerRadius="8"
                         Padding="{TemplateBinding Padding}"
                         MaxWidth="{TemplateBinding MaxWidthOverride}">
                         <StackPanel>
@@ -33,19 +33,16 @@
                                 Margin="0,2,0,6" />
 
                             <!-- Image -->
-                            <Image
-                                Source="{TemplateBinding Image}"
+                            <ContentPresenter
+                                Content="{TemplateBinding Image}"
                                 MaxWidth="292"
-                                Stretch="Uniform"
                                 HorizontalAlignment="Left"
                                 Margin="0,0,0,6" />
 
                             <!-- Description Text -->
-                            <TextBlock
-                                Text="{TemplateBinding Text}"
-                                FontSize="12"
-                                TextWrapping="Wrap"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <ContentPresenter
+                                Content="{TemplateBinding Text}"
+                                ContentTemplate="{TemplateBinding TextTemplate}" />
 
                             <!-- Disable Reason -->
                             <TextBlock

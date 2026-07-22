@@ -1,0 +1,133 @@
+namespace Fluent.Automation.Peers;
+
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
+
+/// <summary>
+/// Automation peer for <see cref="RibbonStatusBar"/>.
+/// </summary>
+public sealed class RibbonStatusBarAutomationPeer : FrameworkElementAutomationPeer
+{
+    /// <summary>Initializes a status-bar automation peer.</summary>
+    public RibbonStatusBarAutomationPeer(RibbonStatusBar owner)
+        : base(owner)
+    {
+    }
+
+    private RibbonStatusBar OwnerStatusBar => (RibbonStatusBar)Owner;
+
+    /// <inheritdoc />
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.StatusBar;
+
+    /// <inheritdoc />
+    protected override string GetClassNameCore() => nameof(RibbonStatusBar);
+
+    /// <inheritdoc />
+    protected override string GetNameCore()
+    {
+        var name = base.GetNameCore();
+        return string.IsNullOrWhiteSpace(name) ? "Status Bar" : name;
+    }
+
+    /// <inheritdoc />
+    protected override IList<AutomationPeer>? GetChildrenCore()
+    {
+        var children = new List<AutomationPeer>();
+        foreach (var item in OwnerStatusBar.Items.Concat(OwnerStatusBar.RightItems))
+        {
+            if (item.Visibility != Visibility.Visible)
+            {
+                continue;
+            }
+
+            var peer = CreatePeerForElement(item);
+            if (peer is not null)
+            {
+                children.Add(peer);
+            }
+        }
+
+        return children;
+    }
+}
+
+/// <summary>
+/// Automation peer for <see cref="StatusBarItem"/>.
+/// </summary>
+public sealed class RibbonStatusBarItemAutomationPeer : FrameworkElementAutomationPeer
+{
+    /// <summary>Initializes a status-bar item automation peer.</summary>
+    public RibbonStatusBarItemAutomationPeer(StatusBarItem owner)
+        : base(owner)
+    {
+    }
+
+    private StatusBarItem OwnerStatusItem => (StatusBarItem)Owner;
+
+    /// <inheritdoc />
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.Text;
+
+    /// <inheritdoc />
+    protected override string GetClassNameCore() => nameof(StatusBarItem);
+
+    /// <inheritdoc />
+    protected override string GetNameCore()
+    {
+        var name = base.GetNameCore();
+        return string.IsNullOrWhiteSpace(name)
+            ? OwnerStatusItem.Title ?? OwnerStatusItem.Content?.ToString() ?? string.Empty
+            : name;
+    }
+}
+
+/// <summary>
+/// Automation peer for <see cref="StatusBarMenuItem"/>.
+/// </summary>
+public sealed class StatusBarMenuItemAutomationPeer :
+    FrameworkElementAutomationPeer,
+    IToggleProvider,
+    IInvokeProvider
+{
+    /// <summary>Initializes a status-bar menu-item automation peer.</summary>
+    public StatusBarMenuItemAutomationPeer(StatusBarMenuItem owner)
+        : base(owner)
+    {
+    }
+
+    private StatusBarMenuItem OwnerMenuItem => (StatusBarMenuItem)Owner;
+
+    /// <inheritdoc />
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.MenuItem;
+
+    /// <inheritdoc />
+    protected override string GetClassNameCore() => nameof(StatusBarMenuItem);
+
+    /// <inheritdoc />
+    protected override string GetNameCore()
+    {
+        var name = base.GetNameCore();
+        return string.IsNullOrWhiteSpace(name)
+            ? OwnerMenuItem.Header?.ToString() ?? string.Empty
+            : name;
+    }
+
+    /// <inheritdoc />
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface is PatternInterface.Toggle or PatternInterface.Invoke
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc />
+    public ToggleState ToggleState =>
+        OwnerMenuItem.IsChecked ? ToggleState.On : ToggleState.Off;
+
+    /// <inheritdoc />
+    public void Toggle() => OwnerMenuItem.InvokeForAutomation();
+
+    /// <inheritdoc />
+    public void Invoke() => OwnerMenuItem.InvokeForAutomation();
+}

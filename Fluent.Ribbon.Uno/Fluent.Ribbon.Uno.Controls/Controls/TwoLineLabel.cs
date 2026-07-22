@@ -187,4 +187,8 @@ public partial class TwoLineLabel : Control
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.TwoLineLabelAutomationPeer(this);
 }

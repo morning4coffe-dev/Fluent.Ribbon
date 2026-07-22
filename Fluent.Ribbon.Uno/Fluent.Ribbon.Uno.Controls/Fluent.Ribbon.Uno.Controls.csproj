@@ -11,10 +11,20 @@
     <AssemblyName>Fluent.Ribbon.Uno</AssemblyName>
 
     <!-- Package Info -->
-    <PackageId>Fluent.Ribbon.Uno</PackageId>
-    <Description>Cross-platform Ribbon UI controls for Uno Platform, inspired by Fluent.Ribbon for WPF</Description>
+    <PackageId>Fluent.Ribbon.Uno.Core</PackageId>
+    <Description>Runtime controls and XAML resources for the cross-platform Fluent.Ribbon Uno port</Description>
     <Authors>Fluent.Ribbon Contributors</Authors>
     <PackageTags>ribbon;fluent;uno;uno-platform;winui;cross-platform;controls</PackageTags>
+    <PackageLicenseFile>license\License.txt</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>Logo.png</PackageIcon>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://github.com/morning4coffe-dev/Fluent.Ribbon</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/morning4coffe-dev/Fluent.Ribbon.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
     <!--
       UnoFeatures let's you quickly add and manage implicit package references based on the features you want to use.
@@ -33,6 +43,11 @@
     <!-- Disable strong-name signing since Uno Platform assemblies are not signed -->
     <SignAssembly>false</SignAssembly>
     <PublicSign>false</PublicSign>
+    <DefaultItemExcludes>
+      $(DefaultItemExcludes);
+      $(MSBuildProjectDirectory)\bin\**;
+      $(MSBuildProjectDirectory)\obj\**
+    </DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
@@ -56,4 +71,39 @@
     <!-- Remove GitVersion.MsBuild inherited from Directory.build.props as it doesn't work with Uno SDK projects -->
     <PackageReference Remove="GitVersion.MsBuild" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\MIGRATION.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\License.txt" Pack="true" PackagePath="license\License.txt" />
+    <None Include="..\..\Images\Logo\Logo_128x128.png" Pack="true" PackagePath="Logo.png" />
+  </ItemGroup>
+
+  <Target Name="ExcludeGeneratedContentFromPackage" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <Content Remove="obj\**\*;bin\**\*;$(MSBuildProjectDirectory)\obj\**\*;$(MSBuildProjectDirectory)\bin\**\*" />
+      <None Remove="obj\**\*;bin\**\*;$(MSBuildProjectDirectory)\obj\**\*;$(MSBuildProjectDirectory)\bin\**\*" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ConfigureUnoThemeResourcesForPackage" BeforeTargets="_WalkEachTargetPerFramework">
+    <PropertyGroup>
+      <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeUnoThemeResourcesInPackage</TargetsForTfmSpecificContentInPackage>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="IncludeUnoThemeResourcesInPackage">
+    <PropertyGroup>
+      <_UnoNuGetTargetFramework>$(TargetFramework)</_UnoNuGetTargetFramework>
+      <_UnoNuGetTargetFramework
+        Condition="'$(TargetPlatformIdentifier)' != ''
+                   and '$(TargetPlatformIdentifier)' != 'Windows'">$(TargetFramework)$(TargetPlatformVersion)</_UnoNuGetTargetFramework>
+    </PropertyGroup>
+    <ItemGroup>
+      <_UnoThemeResource Include="$(MSBuildProjectDirectory)\Themes\**\*.xaml" />
+      <TfmSpecificPackageFile Include="@(_UnoThemeResource)">
+        <PackagePath>lib\$(_UnoNuGetTargetFramework)\$(AssemblyName)\Themes\</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
 </Project>

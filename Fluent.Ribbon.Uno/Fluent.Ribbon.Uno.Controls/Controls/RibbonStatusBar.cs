@@ -4,7 +4,7 @@ namespace Fluent;
 /// Represents a status bar typically displayed at the bottom of a window.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-public partial class RibbonStatusBar : Control
+public partial class RibbonStatusBar : StatusBarBase
 {
     #region Dependency Properties
 
@@ -57,6 +57,7 @@ public partial class RibbonStatusBar : Control
 
         Items.CollectionChanged += OnItemsChanged;
         RightItems.CollectionChanged += OnRightItemsChanged;
+        InitializeCompatibility();
     }
 
     #endregion
@@ -85,11 +86,13 @@ public partial class RibbonStatusBar : Control
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncItems();
+        OnItemsChanged(e);
     }
 
     private void OnRightItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         SyncRightItems();
+        OnRightItemsChangedCompatibility(e);
     }
 
     private void SyncItems()

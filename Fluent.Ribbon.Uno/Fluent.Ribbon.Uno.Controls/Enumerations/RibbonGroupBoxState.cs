@@ -16,6 +16,11 @@ public enum RibbonGroupBoxState
     Medium = 1,
 
     /// <summary>
+    /// WPF-compatible name for <see cref="Medium"/>.
+    /// </summary>
+    Middle = Medium,
+
+    /// <summary>
     /// Small state - controls use small icons without labels.
     /// </summary>
     Small = 2,

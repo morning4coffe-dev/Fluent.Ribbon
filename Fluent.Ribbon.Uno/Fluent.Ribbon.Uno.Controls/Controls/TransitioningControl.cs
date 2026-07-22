@@ -13,6 +13,12 @@ namespace Fluent;
 [TemplatePart(Name = PART_PreviousContentPresenter, Type = typeof(ContentPresenter))]
 public partial class TransitioningControl : Control
 {
+    /// <summary>Name of the previous-content template part.</summary>
+    public const string PreviousContentPartName = "PART_PreviousContent";
+
+    /// <summary>Name of the current-content template part.</summary>
+    public const string CurrentContentPartName = "PART_CurrentContent";
+
     private const string PART_CurrentContentPresenter = "PART_CurrentContentPresenter";
     private const string PART_PreviousContentPresenter = "PART_PreviousContentPresenter";
 
@@ -131,7 +137,10 @@ public partial class TransitioningControl : Control
         }
     }
 
-    private void StartTransition(object? oldContent, object? newContent)
+    /// <summary>
+    /// Starts the content transition.
+    /// </summary>
+    protected virtual void StartTransition(object? oldContent, object? newContent)
     {
         if (_currentContentPresenter is null)
         {
@@ -151,6 +160,12 @@ public partial class TransitioningControl : Control
         // Set new content
         _currentContentPresenter.Content = newContent;
         _currentContentPresenter.Opacity = 0;
+
+        if (TransitionStoryboard is not null)
+        {
+            TransitionStoryboard.Begin();
+            return;
+        }
 
         // Animate: fade out previous, fade in current
         var duration = new Duration(TransitionDuration);
@@ -188,7 +203,7 @@ public partial class TransitioningControl : Control
     /// <summary>
     /// Stops any running transition animation.
     /// </summary>
-    public void StopTransition()
+    public virtual void StopTransition()
     {
         if (_previousContentPresenter is not null)
         {

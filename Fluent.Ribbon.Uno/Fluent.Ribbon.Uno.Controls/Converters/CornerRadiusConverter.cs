@@ -1,5 +1,7 @@
 namespace Fluent.Converters;
 
+using System.Globalization;
+
 /// <summary>
 /// Defines parts of a <see cref="CornerRadius"/>.
 /// </summary>
@@ -28,7 +30,7 @@ public enum CornerRadiusPart
 /// <summary>
 /// Extracts specific parts of a <see cref="CornerRadius"/>.
 /// </summary>
-public class CornerRadiusConverter : IValueConverter
+public class CornerRadiusConverter : IValueConverter, global::Fluent.IMultiValueConverter
 {
     /// <inheritdoc />
     public object Convert(object? value, Type targetType, object? parameter, string language)
@@ -54,5 +56,72 @@ public class CornerRadiusConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, string language)
     {
         throw new NotImplementedException();
+    }
+
+    /// <summary>WPF-compatible culture-based conversion overload.</summary>
+    public virtual object Convert(
+        object? value,
+        Type targetType,
+        object? parameter,
+        CultureInfo culture)
+    {
+        return Convert(value, targetType, parameter, culture.Name);
+    }
+
+    /// <summary>WPF-compatible culture-based reverse conversion overload.</summary>
+    public virtual object ConvertBack(
+        object? value,
+        Type targetType,
+        object? parameter,
+        CultureInfo culture)
+    {
+        return ConvertBack(value, targetType, parameter, culture.Name);
+    }
+
+    /// <summary>Converts four values to a corner radius.</summary>
+    public virtual object Convert(
+        object[] values,
+        Type targetType,
+        object parameter,
+        CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Length < 4)
+        {
+            throw new ArgumentException("Four corner values are required.", nameof(values));
+        }
+
+        var parts = parameter is CornerRadiusPart requestedParts
+            ? requestedParts
+            : CornerRadiusPart.All;
+        return new CornerRadius(
+            parts.HasFlag(CornerRadiusPart.TopLeft) ? TryConvertSingleValue(values[0]) : 0,
+            parts.HasFlag(CornerRadiusPart.TopRight) ? TryConvertSingleValue(values[1]) : 0,
+            parts.HasFlag(CornerRadiusPart.BottomRight) ? TryConvertSingleValue(values[2]) : 0,
+            parts.HasFlag(CornerRadiusPart.BottomLeft) ? TryConvertSingleValue(values[3]) : 0);
+    }
+
+    /// <summary>Multi-value reverse conversion is unsupported.</summary>
+    public virtual object[] ConvertBack(
+        object value,
+        Type[] targetTypes,
+        object parameter,
+        CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+
+    private static double TryConvertSingleValue(object value)
+    {
+        try
+        {
+            return (value as IConvertible)?.ToDouble(CultureInfo.InvariantCulture) ?? 0;
+        }
+        catch (Exception exception) when (exception is FormatException
+                                          or InvalidCastException
+                                          or OverflowException)
+        {
+            return 0;
+        }
     }
 }

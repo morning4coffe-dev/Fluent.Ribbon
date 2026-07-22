@@ -15,4 +15,33 @@ public class IconConverter : ObjectToImageConverter
     /// New default instance.
     /// </summary>
     public static new readonly IconConverter Default = new();
+
+    /// <summary>Initializes an empty converter.</summary>
+    public IconConverter()
+    {
+    }
+
+    /// <summary>Initializes a converter for an icon binding.</summary>
+    public IconConverter(Binding iconBinding)
+        : base(iconBinding, new Windows.Foundation.Size(16, 16))
+    {
+    }
+
+    /// <summary>Initializes a converter for an icon and target-visual binding.</summary>
+    public IconConverter(Binding iconBinding, Binding targetVisualBinding)
+        : base(
+            iconBinding,
+            new Windows.Foundation.Size(16, 16),
+            targetVisualBinding)
+    {
+    }
+
+    /// <summary>Initializes a converter with explicit desired size.</summary>
+    public IconConverter(
+        Binding iconBinding,
+        object desiredSize,
+        Binding targetVisualBinding)
+        : base(iconBinding, desiredSize, targetVisualBinding)
+    {
+    }
 }

@@ -21,7 +21,7 @@
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="3"
+                        CornerRadius="4"
                         MinWidth="44"
                         Padding="{TemplateBinding Padding}">
                         <VisualStateManager.VisualStateGroups>

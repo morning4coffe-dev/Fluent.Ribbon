@@ -245,7 +245,7 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     #region IKeyTipedControl
 
     /// <inheritdoc />
-    public void OnKeyTipPressed()
+    public KeyTipPressedResult OnKeyTipPressed()
     {
         IsSelected = true;
 
@@ -255,6 +255,7 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
         }
 
         Click?.Invoke(this, new RoutedEventArgs());
+        return KeyTipPressedResult.Empty;
     }
 
     /// <inheritdoc />
@@ -263,4 +264,8 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.GalleryItemWrapperAutomationPeer(this);
 }

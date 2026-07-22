@@ -10,7 +10,7 @@ namespace Fluent;
 /// WPF version inherits from Control and serves as a base class; Uno version
 /// provides attached properties only (controls use their own base classes).
 /// </remarks>
-public static class RibbonProperties
+public partial class RibbonProperties : DependencyObject
 {
     #region Size
 
@@ -20,7 +20,7 @@ public static class RibbonProperties
             "Size",
             typeof(RibbonControlSize),
             typeof(RibbonProperties),
-            new PropertyMetadata(RibbonControlSize.Large));
+            new PropertyMetadata(RibbonControlSize.Large, OnSizeChanged));
 
     /// <summary>Gets the ribbon control size for the element.</summary>
     public static RibbonControlSize GetSize(DependencyObject element)
@@ -34,6 +34,16 @@ public static class RibbonProperties
         element.SetValue(SizeProperty, value);
     }
 
+    private static void OnSizeChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        if (sender is Fluent.Extensibility.IRibbonSizeChangedSink sink)
+        {
+            sink.OnSizePropertyChanged(
+                (RibbonControlSize)args.OldValue,
+                (RibbonControlSize)args.NewValue);
+        }
+    }
+
     #endregion
 
     #region SizeDefinition
@@ -44,18 +54,24 @@ public static class RibbonProperties
             "SizeDefinition",
             typeof(string),
             typeof(RibbonProperties),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnSizeDefinitionChanged));
 
-    /// <summary>Gets the size definition string for the element.</summary>
-    public static string? GetSizeDefinition(DependencyObject element)
+    /// <summary>Gets the WPF-compatible size definition for the element.</summary>
+    public static RibbonControlSizeDefinition GetSizeDefinition(DependencyObject element)
     {
-        return (string?)element.GetValue(SizeDefinitionProperty);
+        return new RibbonControlSizeDefinition((string?)element.GetValue(SizeDefinitionProperty));
     }
 
     /// <summary>Sets the size definition string for the element.</summary>
     public static void SetSizeDefinition(DependencyObject element, string? value)
     {
         element.SetValue(SizeDefinitionProperty, value);
+    }
+
+    /// <summary>Sets the WPF-compatible size definition for the element.</summary>
+    public static void SetSizeDefinition(DependencyObject element, RibbonControlSizeDefinition value)
+    {
+        element.SetValue(SizeDefinitionProperty, value.ToString());
     }
 
     #endregion

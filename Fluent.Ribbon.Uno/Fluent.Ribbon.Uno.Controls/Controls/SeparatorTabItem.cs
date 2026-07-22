@@ -3,7 +3,7 @@ namespace Fluent;
 /// <summary>
 /// Represents a visual separator between tab items in the ribbon tab strip.
 /// </summary>
-public partial class SeparatorTabItem : Control
+public partial class SeparatorTabItem : TabViewItem
 {
     #region Constructor
 

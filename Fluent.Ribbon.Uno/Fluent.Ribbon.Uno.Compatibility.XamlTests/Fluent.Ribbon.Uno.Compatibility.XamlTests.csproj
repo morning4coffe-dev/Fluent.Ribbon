@@ -1,0 +1,30 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-ios;net10.0-android;net10.0-windows10.0.26100;net10.0-browserwasm;net10.0-desktop</TargetFrameworks>
+    <UnoSingleProject>false</UnoSingleProject>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FluentUno.Compatibility.XamlTests</RootNamespace>
+    <AssemblyName>Fluent.Ribbon.Uno.Compatibility.XamlTests</AssemblyName>
+    <UnoFeatures>SkiaRenderer;</UnoFeatures>
+    <UseWpf>false</UseWpf>
+    <UseWindowsForms>false</UseWindowsForms>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+    <SignAssembly>false</SignAssembly>
+    <PublicSign>false</PublicSign>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj" />
+    <ProjectReference Include="..\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <None Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <PackageReference Remove="GitVersion.MsBuild" />
+  </ItemGroup>
+</Project>

@@ -5,13 +5,15 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a gallery control that displays a grid of selectable items.
 /// Galleries are typically used in ribbon drop-downs for selecting styles,
 /// colors, shapes, etc.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-public partial class RibbonGallery : Control
+public partial class RibbonGallery : ListBox
 {
     #region Dependency Properties
 
@@ -26,14 +28,14 @@ public partial class RibbonGallery : Control
     /// <summary>
     /// Gets the collection of gallery items.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
     }
 
     /// <summary>Identifies the <see cref="ItemsSource"/> dependency property.</summary>
-    public static readonly DependencyProperty ItemsSourceProperty =
+    public new static readonly DependencyProperty ItemsSourceProperty =
         DependencyProperty.Register(
             nameof(ItemsSource),
             typeof(IEnumerable),
@@ -43,14 +45,14 @@ public partial class RibbonGallery : Control
     /// <summary>
     /// Gets or sets the data source for gallery items.
     /// </summary>
-    public IEnumerable? ItemsSource
+    public new IEnumerable? ItemsSource
     {
         get => (IEnumerable?)GetValue(ItemsSourceProperty);
         set => SetValue(ItemsSourceProperty, value);
     }
 
     /// <summary>Identifies the <see cref="ItemTemplate"/> dependency property.</summary>
-    public static readonly DependencyProperty ItemTemplateProperty =
+    public new static readonly DependencyProperty ItemTemplateProperty =
         DependencyProperty.Register(
             nameof(ItemTemplate),
             typeof(DataTemplate),
@@ -60,14 +62,14 @@ public partial class RibbonGallery : Control
     /// <summary>
     /// Gets or sets the data template used to display each item.
     /// </summary>
-    public DataTemplate? ItemTemplate
+    public new DataTemplate? ItemTemplate
     {
         get => (DataTemplate?)GetValue(ItemTemplateProperty);
         set => SetValue(ItemTemplateProperty, value);
     }
 
     /// <summary>Identifies the <see cref="SelectedItem"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedItemProperty =
+    public new static readonly DependencyProperty SelectedItemProperty =
         DependencyProperty.Register(
             nameof(SelectedItem),
             typeof(object),
@@ -77,14 +79,14 @@ public partial class RibbonGallery : Control
     /// <summary>
     /// Gets or sets the currently selected item.
     /// </summary>
-    public object? SelectedItem
+    public new object? SelectedItem
     {
         get => GetValue(SelectedItemProperty);
         set => SetValue(SelectedItemProperty, value);
     }
 
     /// <summary>Identifies the <see cref="SelectedIndex"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedIndexProperty =
+    public new static readonly DependencyProperty SelectedIndexProperty =
         DependencyProperty.Register(
             nameof(SelectedIndex),
             typeof(int),
@@ -94,7 +96,7 @@ public partial class RibbonGallery : Control
     /// <summary>
     /// Gets or sets the index of the currently selected item.
     /// </summary>
-    public int SelectedIndex
+    public new int SelectedIndex
     {
         get => (int)GetValue(SelectedIndexProperty);
         set => SetValue(SelectedIndexProperty, value);
@@ -328,7 +330,7 @@ public partial class RibbonGallery : Control
     /// <summary>
     /// Occurs when the selected item changes.
     /// </summary>
-    public event EventHandler<object?>? SelectionChanged;
+    public new event EventHandler<object?>? SelectionChanged;
 
     #endregion
 
@@ -641,10 +643,10 @@ public partial class RibbonGallery : Control
     {
         if (_filterButtons is null || Filters.Count == 0) return;
 
-        var buttons = new List<Button>();
+        var buttons = new List<WinUIButton>();
         foreach (var filter in Filters)
         {
-            var btn = new Button
+            var btn = new WinUIButton
             {
                 Content = filter.Title,
                 Tag = filter,
@@ -670,7 +672,7 @@ public partial class RibbonGallery : Control
 
     private void OnFilterButtonClick(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is GalleryGroupFilter filter)
+        if (sender is WinUIButton btn && btn.Tag is GalleryGroupFilter filter)
         {
             SelectedFilter = filter;
         }
@@ -685,7 +687,7 @@ public partial class RibbonGallery : Control
 
         foreach (var child in _filterButtons.Children)
         {
-            if (child is not Button btn)
+            if (child is not WinUIButton btn)
             {
                 continue;
             }

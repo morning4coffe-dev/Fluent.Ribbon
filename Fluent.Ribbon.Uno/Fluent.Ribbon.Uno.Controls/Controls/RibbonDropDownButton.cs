@@ -1,16 +1,24 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a button with a dropdown menu in the Ribbon.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_Button, Type = typeof(Button))]
-public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl, IDropDownControl
+[TemplatePart(Name = PART_Button, Type = typeof(WinUIButton))]
+public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl, IDropDownControl
 {
     private const string PART_Button = "PART_Button";
 
-    private Button? _button;
+    private WinUIButton? _button;
     private Flyout? _flyout;
+
+    /// <summary>Gets the template part used to open the drop-down.</summary>
+    protected virtual string DropDownButtonTemplatePartName => PART_Button;
+
+    /// <summary>Gets whether the base class should connect its drop-down template part.</summary>
+    protected virtual bool UsesDefaultDropDownButtonTemplateBehavior => true;
 
     #region Events
 
@@ -124,23 +132,6 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
     {
         get => (RibbonControlSize)GetValue(SizeProperty);
         set => SetValue(SizeProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
-    public static readonly DependencyProperty ItemsProperty =
-        DependencyProperty.Register(
-            nameof(Items),
-            typeof(ObservableCollection<UIElement>),
-            typeof(RibbonDropDownButton),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets the collection of dropdown menu items.
-    /// </summary>
-    public ObservableCollection<UIElement> Items
-    {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
-        private set => SetValue(ItemsProperty, value);
     }
 
     /// <summary>Identifies the <see cref="KeyTip"/> dependency property.</summary>
@@ -403,7 +394,11 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
     public RibbonDropDownButton()
     {
         DefaultStyleKey = typeof(RibbonDropDownButton);
-        Items = new ObservableCollection<UIElement>();
+        Items.VectorChanged += (_, _) => ResetFlyout();
+        RegisterPropertyChangedCallback(
+            ItemsControl.ItemsSourceProperty,
+            static (sender, _) => ((RibbonDropDownButton)sender).ResetFlyout());
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -420,7 +415,9 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
             _button.Click -= OnButtonClick;
         }
 
-        _button = GetTemplateChild(PART_Button) as Button;
+        _button = UsesDefaultDropDownButtonTemplateBehavior
+            ? GetTemplateChild(DropDownButtonTemplatePartName) as WinUIButton
+            : null;
 
         if (_button is not null)
         {
@@ -487,11 +484,23 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
                 });
             }
 
-            // Menu items
-            foreach (var item in Items)
+            var dropDownItems = ItemsSource is System.Collections.IEnumerable source
+                ? source.Cast<object>().ToArray()
+                : Items.Cast<object>().ToArray();
+            foreach (var item in dropDownItems.OfType<IDropDownItemOwner>())
             {
-                panel.Children.Add(item);
+                item.SetDropDownOwner(this);
             }
+
+            var itemsHost = new ItemsControl
+            {
+                ItemsSource = dropDownItems,
+                ItemTemplate = ItemTemplate,
+                ItemTemplateSelector = ItemTemplateSelector,
+                ItemContainerStyle = ItemContainerStyle,
+                ItemsPanel = ItemsPanel,
+            };
+            panel.Children.Add(itemsHost);
 
             // Apply height constraints
             if (!double.IsNaN(DropDownHeight))
@@ -525,28 +534,44 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
             _flyout.Opened += (s, e) =>
             {
                 IsDropDownOpen = true;
-                DropDownOpened?.Invoke(this, EventArgs.Empty);
+                RaiseDropDownOpened();
             };
 
             _flyout.Closed += (s, e) =>
             {
                 IsDropDownOpen = false;
-                DropDownClosed?.Invoke(this, EventArgs.Empty);
+                RaiseDropDownClosed();
             };
         }
 
         _flyout.ShowAt((FrameworkElement?)_button ?? this);
     }
 
+    internal void OpenDropDownForAutomation() => ShowDropDown();
+
+    /// <summary>Raises the drop-down-opened notification.</summary>
+    protected void RaiseDropDownOpened() =>
+        DropDownOpened?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Raises the drop-down-closed notification.</summary>
+    protected void RaiseDropDownClosed() =>
+        DropDownClosed?.Invoke(this, EventArgs.Empty);
+
     /// <summary>
     /// Closes the drop-down if it is currently open.
     /// </summary>
-    public void CloseDropDown()
+    public virtual void CloseDropDown()
     {
         if (_flyout is not null && IsDropDownOpen)
         {
             _flyout.Hide();
         }
+    }
+
+    private void ResetFlyout()
+    {
+        _flyout?.Hide();
+        _flyout = null;
     }
 
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -592,9 +617,10 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
     #region IKeyTipedControl
 
     /// <inheritdoc />
-    public void OnKeyTipPressed()
+    public virtual KeyTipPressedResult OnKeyTipPressed()
     {
         ShowDropDown();
+        return new KeyTipPressedResult(true, true);
     }
 
     /// <inheritdoc />
@@ -614,4 +640,8 @@ public partial class RibbonDropDownButton : Control, IRibbonControl, IScalableRi
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonDropDownButtonAutomationPeer(this);
 }

@@ -14,8 +14,10 @@ public partial class App : Application
     /// </summary>
     public App()
     {
+        LogAutoTestStartup("APP CONSTRUCTOR BEGIN");
         this.InitializeComponent();
         WireCrashCapture();
+        LogAutoTestStartup("APP CONSTRUCTOR END");
     }
 
     // Opt-in (SHOWCASE_AUTOTEST): capture otherwise-unhandled exceptions so the auto-test
@@ -86,6 +88,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        LogAutoTestStartup("APP LAUNCHED BEGIN");
         MainWindow = new Window();
 #if DEBUG
         // The Uno Studio / Hot Design dev-server injects extra layout passes and raises its own
@@ -115,12 +118,36 @@ public partial class App : Application
             // When the navigation stack isn't restored navigate to the first page,
             // configuring the new page by passing required information as a navigation
             // parameter
-            rootFrame.Navigate(typeof(MainPage), args.Arguments);
+            var navigated = rootFrame.Navigate(typeof(MainPage), args.Arguments);
+            LogAutoTestStartup($"MAIN PAGE NAVIGATED {navigated}");
         }
 
         MainWindow.SetWindowIcon();
         // Ensure the current window is active
         MainWindow.Activate();
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST"))
+            && rootFrame.Content is MainPage mainPage)
+        {
+            mainPage.StartAutoTestFromHost();
+        }
+
+        LogAutoTestStartup("APP LAUNCHED END");
+    }
+
+    internal static void LogAutoTestStartup(string message)
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST")))
+        {
+            return;
+        }
+
+        var line = $"[AUTOTEST] {DateTime.Now:HH:mm:ss.fff} {message}";
+        Console.WriteLine(line);
+        var path = Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST_LOG");
+        if (!string.IsNullOrEmpty(path))
+        {
+            File.AppendAllText(path, line + Environment.NewLine);
+        }
     }
 
     /// <summary>

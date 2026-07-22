@@ -10,7 +10,7 @@ using Fluent.Internal;
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
 /// WinUI does not have IScrollInfo; horizontal scrolling is handled by a parent ScrollViewer.
 /// </remarks>
-public partial class RibbonTabsContainer : Panel
+public partial class RibbonTabsContainer : Panel, IScrollInfo
 {
     private const double MinimumLeftRightHeaderPadding = 5;
     private const double DefaultLeftRightHeaderPadding = 9;

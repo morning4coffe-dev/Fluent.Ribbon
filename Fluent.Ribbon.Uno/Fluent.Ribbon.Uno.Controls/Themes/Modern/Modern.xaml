@@ -1,0 +1,11 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/ModernAccentBrushes.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/ModernIconPresenter.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/ModernRibbonButton.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/RibbonSearchBox.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/RibbonInfoBarHost.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

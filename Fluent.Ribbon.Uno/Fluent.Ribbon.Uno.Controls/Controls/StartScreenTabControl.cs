@@ -1,5 +1,7 @@
 namespace Fluent;
 
+using System.Collections;
+
 /// <summary>
 /// A specialized tab control for the Start Screen, with left and right content areas.
 /// </summary>
@@ -11,7 +13,7 @@ namespace Fluent;
 [TemplatePart(Name = PART_LeftContent, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = PART_RightContent, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = PART_ItemsPanel, Type = typeof(StackPanel))]
-public partial class StartScreenTabControl : Control
+public partial class StartScreenTabControl : BackstageTabControl
 {
     private const string PART_LeftContent = "PART_LeftContent";
     private const string PART_RightContent = "PART_RightContent";
@@ -33,7 +35,7 @@ public partial class StartScreenTabControl : Control
     /// <summary>
     /// Gets the collection of tab items.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -91,7 +93,7 @@ public partial class StartScreenTabControl : Control
     }
 
     /// <summary>Identifies the <see cref="SelectedContent"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedContentProperty =
+    public new static readonly DependencyProperty SelectedContentProperty =
         DependencyProperty.Register(
             nameof(SelectedContent),
             typeof(UIElement),
@@ -101,7 +103,7 @@ public partial class StartScreenTabControl : Control
     /// <summary>
     /// Gets or sets the content of the currently selected tab.
     /// </summary>
-    public UIElement? SelectedContent
+    public new UIElement? SelectedContent
     {
         get => (UIElement?)GetValue(SelectedContentProperty);
         set => SetValue(SelectedContentProperty, value);
@@ -157,12 +159,6 @@ public partial class StartScreenTabControl : Control
         foreach (var item in Items)
         {
             _itemsPanel.Children.Add(item);
-
-            if (item is BackstageTabItem tabItem)
-            {
-                tabItem.Click -= OnTabItemClick;
-                tabItem.Click += OnTabItemClick;
-            }
         }
 
         // Select first tab by default
@@ -170,14 +166,6 @@ public partial class StartScreenTabControl : Control
         if (firstTab is not null)
         {
             SelectTab(firstTab);
-        }
-    }
-
-    private void OnTabItemClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is BackstageTabItem tabItem)
-        {
-            SelectTab(tabItem);
         }
     }
 
@@ -190,6 +178,30 @@ public partial class StartScreenTabControl : Control
 
         tab.IsSelected = true;
         SelectedContent = tab.Content as UIElement;
+    }
+
+    internal new void SelectTabForAutomation(BackstageTabItem tab) => SelectTab(tab);
+
+    /// <inheritdoc />
+    protected override IEnumerator LogicalChildren
+    {
+        get
+        {
+            if (LeftContent is not null)
+            {
+                yield return LeftContent;
+            }
+
+            if (RightContent is not null)
+            {
+                yield return RightContent;
+            }
+
+            if (SelectedContent is not null)
+            {
+                yield return SelectedContent;
+            }
+        }
     }
 
     #endregion

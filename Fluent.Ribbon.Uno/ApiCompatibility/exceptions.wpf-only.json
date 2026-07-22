@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 2,
+  "exceptions": [
+    {
+      "id": "missing-type:Fluent.KeyTipAdorner",
+      "reason": "WPF AdornerLayer-based key-tip rendering has no direct Uno public API equivalent.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.RibbonWindow",
+      "reason": "WPF Window and ControlzEx window-chrome integration is intrinsically desktop/WPF-specific.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.WindowSteeringHelperControl",
+      "reason": "This control exists to coordinate WPF window chrome and non-client-area behavior.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.GrayscaleEffect",
+      "reason": "WPF ShaderEffect and pixel-shader integration has no source-compatible Uno/WinUI control-library equivalent.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.Helpers.WindowSteeringHelper",
+      "reason": "This helper is implemented around WPF HWND non-client-area and window-steering behavior.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.WindowCommands",
+      "reason": "These commands target WPF and ControlzEx window chrome; platform window commands belong to the host application on Uno.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.Theming.RibbonLibraryThemeProvider",
+      "reason": "This type derives from the WPF-only ControlzEx LibraryThemeProvider; Uno uses WinUI ThemeDictionaries instead.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.Extensions.ItemContainerGeneratorExtensions",
+      "reason": "The extensions target WPF ItemContainerGenerator APIs that are not present in WinUI/Uno; controls use platform container APIs directly.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.Extensions.SelectorAutomationPeerExtensions",
+      "reason": "This helper reflects into a WPF-internal SelectorAutomationPeer method and has no supported WinUI equivalent.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.Metro.Behaviours.StylizedBehaviorCollection",
+      "reason": "This public type is built on the WPF Microsoft.Xaml.Behaviors object model; Uno behaviors use a different runtime contract.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "missing-type:Fluent.Metro.Behaviours.StylizedBehaviors",
+      "reason": "This attached behavior service depends on WPF Microsoft.Xaml.Behaviors and cannot retain the same framework type signatures on Uno.",
+      "detailFingerprint": "sha256:5a958a6d814851edde9dccce1ada144b76498653f4d41e76e0922adff29cf2d7"
+    },
+    {
+      "id": "incompatible-member:M:Fluent.Automation.Peers.RibbonTabControlAutomationPeer::CreateItemAutomationPeer(System.Object)",
+      "reason": "Uno TabView automation exposes AutomationPeer rather than WPF Selector ItemAutomationPeer relationships.",
+      "detailFingerprint": "sha256:5f7b970e6197f4fffa794950c758d5f0d6281589708dd1989721368992b231f3"
+    },
+    {
+      "id": "incompatible-type:Fluent.Automation.Peers.RibbonTabItemDataAutomationPeer",
+      "reason": "Uno TabView does not expose a SelectorItemAutomationPeer base that can represent tab data items.",
+      "detailFingerprint": "sha256:4b1ca1256e2e857fc1cc76bcce1fd193175e252c81487e74a32543644f8cb71e"
+    },
+    {
+      "id": "missing-member:P:Fluent.DropDownButton::DropDownPopup()",
+      "reason": "The Uno implementation uses Flyout; exposing an unrelated WinUI Popup would be an unusable compatibility token.",
+      "detailFingerprint": "sha256:d53169444f0fcd402315ca861544690b410cad8fb591749506c012aaac8ec7c5"
+    },
+    {
+      "id": "missing-member:F:Fluent.GalleryItem::ClickEvent",
+      "reason": "WinUI does not provide WPF custom routed-event registration or AddOwner; the portable CLR Click event remains functional.",
+      "detailFingerprint": "sha256:d53169444f0fcd402315ca861544690b410cad8fb591749506c012aaac8ec7c5"
+    },
+    {
+      "id": "incompatible-type:Fluent.KeyTip",
+      "reason": "Deriving KeyTip from WinUI Label collides with its attached dependency-property names during Uno XBF generation.",
+      "detailFingerprint": "sha256:ad33d752a6e0110ab95bdc0798386c3d313815947f299404e1785ef897ce25b9"
+    },
+    {
+      "id": "missing-member:F:Fluent.SplitButton::CheckedEvent",
+      "reason": "WinUI does not provide WPF custom routed-event registration or AddOwner; the portable CLR Checked event remains functional.",
+      "detailFingerprint": "sha256:d53169444f0fcd402315ca861544690b410cad8fb591749506c012aaac8ec7c5"
+    },
+    {
+      "id": "missing-member:F:Fluent.SplitButton::ClickEvent",
+      "reason": "WinUI does not provide WPF custom routed-event registration or AddOwner; the portable CLR Click event remains functional.",
+      "detailFingerprint": "sha256:d53169444f0fcd402315ca861544690b410cad8fb591749506c012aaac8ec7c5"
+    },
+    {
+      "id": "missing-member:F:Fluent.SplitButton::IndeterminateEvent",
+      "reason": "WinUI does not provide WPF custom routed-event registration or AddOwner; the portable CLR Indeterminate event remains functional.",
+      "detailFingerprint": "sha256:d53169444f0fcd402315ca861544690b410cad8fb591749506c012aaac8ec7c5"
+    },
+    {
+      "id": "missing-member:F:Fluent.SplitButton::UncheckedEvent",
+      "reason": "WinUI does not provide WPF custom routed-event registration or AddOwner; the portable CLR Unchecked event remains functional.",
+      "detailFingerprint": "sha256:d53169444f0fcd402315ca861544690b410cad8fb591749506c012aaac8ec7c5"
+    }
+  ]
+}

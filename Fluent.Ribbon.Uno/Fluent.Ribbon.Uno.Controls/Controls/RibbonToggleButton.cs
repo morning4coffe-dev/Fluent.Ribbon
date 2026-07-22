@@ -7,7 +7,7 @@ namespace Fluent;
 /// </summary>
 [TemplatePart(Name = PART_Icon, Type = typeof(Image))]
 [TemplatePart(Name = PART_Label, Type = typeof(TextBlock))]
-public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl
+public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl, IQuickAccessItemProvider
 {
     private const string PART_Icon = "PART_Icon";
     private const string PART_Label = "PART_Label";
@@ -265,6 +265,7 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         Checked += OnCheckedUpdateGroup;
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -425,7 +426,7 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
     #region IKeyTipedControl
 
     /// <inheritdoc />
-    public void OnKeyTipPressed()
+    public KeyTipPressedResult OnKeyTipPressed()
     {
         if (Microsoft.UI.Xaml.Automation.Peers.AutomationPeer.ListenerExists(Microsoft.UI.Xaml.Automation.Peers.AutomationEvents.InvokePatternOnInvoked))
         {
@@ -438,6 +439,8 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
             IsChecked = !IsChecked;
             Command?.Execute(CommandParameter);
         }
+
+        return KeyTipPressedResult.Empty;
     }
 
     /// <inheritdoc />
@@ -456,4 +459,48 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
     }
 
     #endregion
+
+    #region IQuickAccessItemProvider
+
+    /// <inheritdoc />
+    public bool CanAddToQuickAccessToolBar
+    {
+        get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
+        set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
+    }
+
+    /// <inheritdoc />
+    public FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonToggleButton
+        {
+            Size = RibbonControlSize.Small,
+            Header = Header,
+            Icon = Icon,
+            LargeIcon = LargeIcon,
+            MediumIcon = MediumIcon,
+            IconGlyph = IconGlyph,
+            Command = Command,
+            CommandParameter = CommandParameter,
+            CanAddToQuickAccessToolBar = false,
+        };
+
+        // Keep the toolbar copy's checked state in sync with the original both ways.
+        clone.SetBinding(
+            Microsoft.UI.Xaml.Controls.Primitives.ToggleButton.IsCheckedProperty,
+            new Microsoft.UI.Xaml.Data.Binding
+            {
+                Source = this,
+                Path = new PropertyPath(nameof(IsChecked)),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay,
+            });
+
+        return clone;
+    }
+
+    #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonToggleButtonAutomationPeer(this);
 }

@@ -13,7 +13,7 @@ public interface IKeyTipedControl
     /// <summary>
     /// Handles key tip pressed.
     /// </summary>
-    void OnKeyTipPressed();
+    KeyTipPressedResult OnKeyTipPressed();
 
     /// <summary>
     /// Handles back navigation with key tips.

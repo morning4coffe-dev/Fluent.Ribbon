@@ -12,7 +12,7 @@
                     <Border
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
-                        CornerRadius="3"
+                        CornerRadius="4"
                         Padding="{TemplateBinding Padding}">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">

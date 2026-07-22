@@ -14,7 +14,7 @@
                     <Border
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
-                        CornerRadius="3"
+                        CornerRadius="4"
                         Padding="{TemplateBinding Padding}">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
@@ -46,11 +46,12 @@
                             <VisualStateGroup x:Name="SizeStates">
                                 <VisualState x:Name="Large" />
                                 <VisualState x:Name="Medium" />
-                                <VisualState x:Name="Small">
-                                    <VisualState.Setters>
-                                        <Setter Target="HeaderText.Visibility" Value="Collapsed" />
-                                    </VisualState.Setters>
-                                </VisualState>
+                                <!--
+                                    Radio buttons have no icon to fall back on, so the label is
+                                    always kept (matching Office behaviour). Collapsing it would
+                                    leave a meaningless bare circle when the group is reduced.
+                                -->
+                                <VisualState x:Name="Small" />
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 

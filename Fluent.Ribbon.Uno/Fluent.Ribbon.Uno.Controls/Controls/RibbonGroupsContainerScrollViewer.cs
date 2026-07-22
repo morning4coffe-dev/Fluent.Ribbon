@@ -6,13 +6,22 @@ namespace Fluent;
 /// </summary>
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
-/// The WPF version subclasses <c>ScrollViewer</c> and overrides <c>OnMouseWheel</c>; because
-/// <see cref="ScrollViewer"/> is sealed under WinUI 3, this is implemented as an attached behavior
-/// so it works identically on the Skia and WinUI heads.
+/// Uno heads keep the WPF-shaped <see cref="ScrollViewer"/> base. WinUI uses the
+/// composed <see cref="RibbonScrollViewer"/> because its <see cref="ScrollViewer"/> is sealed.
+/// The attached behavior remains available for ordinary <see cref="ScrollViewer"/> instances.
 /// Attach it in XAML with <c>fluent:RibbonGroupsContainerScrollViewer.EnableHorizontalWheelScrolling="True"</c>.
 /// </remarks>
-public static class RibbonGroupsContainerScrollViewer
+#if WINDOWS
+public class RibbonGroupsContainerScrollViewer : RibbonScrollViewer
+#else
+public class RibbonGroupsContainerScrollViewer : ScrollViewer
+#endif
 {
+    /// <summary>Initializes a new instance.</summary>
+    public RibbonGroupsContainerScrollViewer()
+    {
+    }
+
     /// <summary>
     /// Identifies the EnableHorizontalWheelScrolling attached property.
     /// </summary>
@@ -82,10 +91,41 @@ public static class RibbonGroupsContainerScrollViewer
         e.Handled = true;
     }
 
-    private static bool IsAnyDropDownOpen(ScrollViewer scrollViewer)
+    /// <summary>Handles WPF-compatible wheel input.</summary>
+#if WINDOWS
+    protected override void OnMouseWheel(PointerRoutedEventArgs e)
+#else
+    protected virtual void OnMouseWheel(PointerRoutedEventArgs e)
+#endif
+    {
+#if WINDOWS
+        if (e.Handled || IsAnyDropDownOpen(this))
+        {
+            return;
+        }
+
+        base.OnMouseWheel(e);
+#else
+        OnPointerWheelChanged(this, e);
+#endif
+    }
+
+#if !WINDOWS
+    /// <inheritdoc />
+    protected override void OnPointerWheelChanged(PointerRoutedEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        if (!e.Handled)
+        {
+            OnMouseWheel(e);
+        }
+    }
+#endif
+
+    private static bool IsAnyDropDownOpen(DependencyObject element)
     {
         // Check children for open dropdowns
-        foreach (var child in Fluent.Extensions.UIElementExtensions.FindVisualChildren<FrameworkElement>(scrollViewer))
+        foreach (var child in Fluent.Extensions.UIElementExtensions.FindVisualChildren<FrameworkElement>(element))
         {
             if (child is IDropDownControl dropDown && dropDown.IsDropDownOpen)
             {

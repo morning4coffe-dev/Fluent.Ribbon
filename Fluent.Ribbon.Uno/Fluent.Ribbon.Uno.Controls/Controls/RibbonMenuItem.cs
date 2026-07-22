@@ -4,8 +4,8 @@ namespace Fluent;
 /// Represents a menu item within a Ribbon dropdown or context menu.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_Icon, Type = typeof(Image))]
-public partial class RibbonMenuItem : InteractiveMenuItemBase
+[TemplatePart(Name = PART_Icon, Type = typeof(IconPresenter))]
+public partial class MenuItem : InteractiveMenuItemBase
 {
     private const string PART_Icon = "PART_Icon";
 
@@ -25,7 +25,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(Header),
             typeof(object),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -42,7 +42,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(Description),
             typeof(string),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -58,16 +58,16 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
     public static readonly DependencyProperty IconProperty =
         DependencyProperty.Register(
             nameof(Icon),
-            typeof(ImageSource),
-            typeof(RibbonMenuItem),
+            typeof(object),
+            typeof(MenuItem),
             new PropertyMetadata(null));
 
     /// <summary>
     /// Gets or sets the icon for the menu item.
     /// </summary>
-    public ImageSource? Icon
+    public object? Icon
     {
-        get => (ImageSource?)GetValue(IconProperty);
+        get => GetValue(IconProperty);
         set => SetValue(IconProperty, value);
     }
 
@@ -76,7 +76,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(Command),
             typeof(ICommand),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -93,7 +93,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(CommandParameter),
             typeof(object),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -110,7 +110,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(Items),
             typeof(ObservableCollection<UIElement>),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -127,7 +127,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(HasSubItems),
             typeof(bool),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(false));
 
     /// <summary>
@@ -144,7 +144,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(KeyTip),
             typeof(string),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -161,7 +161,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(InputGestureText),
             typeof(string),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -178,7 +178,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         DependencyProperty.Register(
             nameof(IconGlyph),
             typeof(string),
-            typeof(RibbonMenuItem),
+            typeof(MenuItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -195,23 +195,13 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
     #region Constructor
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RibbonMenuItem"/> class.
+    /// Initializes a new instance of the <see cref="MenuItem"/> class.
     /// </summary>
-    public RibbonMenuItem()
+    public MenuItem()
     {
-        DefaultStyleKey = typeof(RibbonMenuItem);
+        DefaultStyleKey = typeof(MenuItem);
         Items = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsChanged;
-    }
-
-    #endregion
-
-    #region Template
-
-    /// <inheritdoc/>
-    protected override void OnApplyTemplate()
-    {
-        base.OnApplyTemplate();
     }
 
     #endregion
@@ -219,7 +209,7 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
     #region Methods
 
     /// <inheritdoc/>
-    protected override void OnInvoke() => InvokeItem();
+    protected override void OnInvoke() => OnClick();
 
     /// <summary>
     /// Executes the menu item's command and raises <see cref="Click"/>.
@@ -235,14 +225,21 @@ public partial class RibbonMenuItem : InteractiveMenuItemBase
         Click?.Invoke(this, new RoutedEventArgs());
     }
 
-    /// <inheritdoc/>
-    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
-        => new RibbonMenuItemAutomationPeer(this);
+    internal void InvokeFromQuickAccess() => OnClick();
 
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         HasSubItems = Items.Count > 0;
     }
 
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new RibbonMenuItemAutomationPeer(this);
+
     #endregion
+}
+
+/// <summary>Unpublished convenience name retained for existing Uno markup.</summary>
+public partial class RibbonMenuItem : MenuItem
+{
 }

@@ -1,0 +1,71 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-ios;net10.0-android;net10.0-windows10.0.26100;net10.0-browserwasm;net10.0-desktop</TargetFrameworks>
+    <UnoSingleProject>false</UnoSingleProject>
+    <OutputType>Library</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Fluent</RootNamespace>
+    <AssemblyName>Fluent.Ribbon.Uno.Compatibility</AssemblyName>
+    <PackageId>Fluent.Ribbon.Uno</PackageId>
+    <Description>WPF-compatible Fluent.Ribbon API facade for Uno Platform, backed by Fluent.Ribbon.Uno.Core</Description>
+    <Authors>Fluent.Ribbon Contributors</Authors>
+    <PackageTags>ribbon;fluent;uno;uno-platform;winui;cross-platform;controls;wpf-migration</PackageTags>
+    <PackageLicenseFile>license\License.txt</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>Logo.png</PackageIcon>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://github.com/morning4coffe-dev/Fluent.Ribbon</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/morning4coffe-dev/Fluent.Ribbon.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ShouldRunGenerator>false</ShouldRunGenerator>
+    <UseWpf>false</UseWpf>
+    <UseWindowsForms>false</UseWindowsForms>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+    <SignAssembly>false</SignAssembly>
+    <PublicSign>false</PublicSign>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <None Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <PackageReference Remove="GitVersion.MsBuild" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\MIGRATION.md" Pack="true" PackagePath="\" />
+    <None Include="RUNTIME.md" Pack="true" PackagePath="docs\compatibility-runtime.md" />
+    <None Include="..\..\License.txt" Pack="true" PackagePath="license\License.txt" />
+    <None Include="..\..\Images\Logo\Logo_128x128.png" Pack="true" PackagePath="Logo.png" />
+  </ItemGroup>
+
+  <Target Name="DisableUnoLibrarySourceGenerators" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_UnoLibrarySourceGenerator
+        Include="@(Analyzer)"
+        Condition="'%(FileName)' == 'Uno.UI.SourceGenerators' Or '%(FileName)' == 'Uno.Resizetizer.Generators'" />
+      <Analyzer Remove="@(_UnoLibrarySourceGenerator)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="PinCorePackageDependencyVersion"
+          AfterTargets="_GetProjectReferenceVersions"
+          BeforeTargets="GenerateNuspec">
+    <ItemGroup>
+      <_ProjectReferencesWithVersions
+        Update="@(_ProjectReferencesWithVersions)"
+        Condition="'%(Filename)' == 'Fluent.Ribbon.Uno.Controls'">
+        <ProjectVersion>[$(PackageVersion)]</ProjectVersion>
+      </_ProjectReferencesWithVersions>
+    </ItemGroup>
+  </Target>
+</Project>

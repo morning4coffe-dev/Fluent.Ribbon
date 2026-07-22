@@ -5,6 +5,13 @@
 
     <Style TargetType="fluent:BackstageTabControl">
         <Setter Property="ItemsPanelBackground" Value="{ThemeResource RibbonBackstageBackgroundBrush}" />
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <StackPanel />
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:BackstageTabControl">
@@ -14,43 +21,44 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Left menu panel -->
                         <Grid
-                            Background="{TemplateBinding ItemsPanelBackground}"
-                            MinWidth="{TemplateBinding ItemsPanelMinWidth}">
+                            x:Name="PART_ItemsPanelContainer"
+                            MinWidth="{TemplateBinding ItemsPanelMinWidth}"
+                            Background="{TemplateBinding ItemsPanelBackground}">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <!-- Back button -->
                             <Button
                                 x:Name="PART_BackButton"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
                                 Height="44"
                                 Padding="16,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
                                 Visibility="{Binding IsBackButtonVisible, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}">
-                                <FontIcon Glyph="&#xE72B;" FontSize="16" Foreground="White" />
+                                <FontIcon
+                                    FontSize="16"
+                                    Foreground="{ThemeResource RibbonBackstageForegroundBrush}"
+                                    Glyph="&#xE72B;" />
                             </Button>
 
-                            <!-- Tab items -->
-                            <StackPanel
-                                x:Name="PART_ItemsPanel"
-                                Grid.Row="1"
-                                Margin="0,8,0,0" />
+                            <ItemsPresenter Grid.Row="1" Margin="0,8,0,0" />
                         </Grid>
 
-                        <!-- Content area -->
                         <Border
                             Grid.Column="1"
-                            Background="{ThemeResource RibbonContentBrush}"
-                            Padding="24">
+                            Padding="24"
+                            Background="{ThemeResource RibbonContentBrush}">
                             <ContentPresenter
-                                x:Name="PART_ContentPresenter"
-                                Content="{TemplateBinding SelectedContent}" />
+                                x:Name="PART_SelectedContentHost"
+                                Content="{TemplateBinding SelectedContent}"
+                                ContentTemplate="{TemplateBinding SelectedContentTemplate}"
+                                ContentTemplateSelector="{TemplateBinding SelectedContentTemplateSelector}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" />
                         </Border>
                     </Grid>
                 </ControlTemplate>

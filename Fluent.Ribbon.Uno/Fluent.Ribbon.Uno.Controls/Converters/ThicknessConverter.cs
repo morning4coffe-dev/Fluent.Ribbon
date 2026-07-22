@@ -1,5 +1,7 @@
 namespace Fluent.Converters;
 
+using System.Globalization;
+
 /// <summary>
 /// Converter that constructs a <see cref="Thickness"/> from individual side values.
 /// </summary>
@@ -9,7 +11,7 @@ namespace Fluent.Converters;
 /// and applies optional transformations through the parameter.
 /// Parameter format: "L", "T", "R", "B", "LR" (left+right), "TB" (top+bottom), or "negate".
 /// </remarks>
-public class ThicknessConverter : IValueConverter
+public class ThicknessConverter : IValueConverter, global::Fluent.IMultiValueConverter
 {
     /// <inheritdoc/>
     public object? Convert(object? value, Type targetType, object? parameter, string language)
@@ -47,6 +49,36 @@ public class ThicknessConverter : IValueConverter
         return value;
     }
 
+    /// <summary>Converts four values to a thickness.</summary>
+    public virtual object Convert(
+        object[] values,
+        Type targetType,
+        object parameter,
+        CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Length < 4)
+        {
+            throw new ArgumentException("Four side values are required.", nameof(values));
+        }
+
+        return new Thickness(
+            TryConvertSingleValue(values[0], culture),
+            TryConvertSingleValue(values[1], culture),
+            TryConvertSingleValue(values[2], culture),
+            TryConvertSingleValue(values[3], culture));
+    }
+
+    /// <summary>Multi-value reverse conversion is unsupported.</summary>
+    public virtual object[] ConvertBack(
+        object value,
+        Type[] targetTypes,
+        object parameter,
+        CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+
     private static Thickness ParseThickness(string value)
     {
         var parts = value.Split(',');
@@ -73,5 +105,19 @@ public class ThicknessConverter : IValueConverter
         }
 
         return default;
+    }
+
+    private static double TryConvertSingleValue(object value, CultureInfo culture)
+    {
+        try
+        {
+            return (value as IConvertible)?.ToDouble(culture) ?? 0;
+        }
+        catch (Exception exception) when (exception is FormatException
+                                          or InvalidCastException
+                                          or OverflowException)
+        {
+            return 0;
+        }
     }
 }

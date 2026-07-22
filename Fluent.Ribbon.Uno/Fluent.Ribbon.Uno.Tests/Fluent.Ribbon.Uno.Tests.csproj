@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <RootNamespace>FluentUno.Tests</RootNamespace>
+    <AssemblyName>Fluent.Ribbon.Uno.Tests</AssemblyName>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <UseWpf>false</UseWpf>
+    <UseWindowsForms>false</UseWindowsForms>
+    <SignAssembly>false</SignAssembly>
+    <PublicSign>false</PublicSign>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Remove="GitVersion.MsBuild" />
+    <PackageReference Remove="JetBrains.Annotations" />
+    <PackageReference Remove="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Remove="StyleCop.Analyzers" />
+    <PackageReference Remove="WpfAnalyzers" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+    <None Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
+  </ItemGroup>
+</Project>

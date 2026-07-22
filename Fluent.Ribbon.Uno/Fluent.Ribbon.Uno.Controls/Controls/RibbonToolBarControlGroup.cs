@@ -9,7 +9,7 @@ namespace Fluent;
 /// </remarks>
 [ContentProperty(Name = nameof(Items))]
 [TemplatePart(Name = PART_ItemsHost, Type = typeof(Panel))]
-public partial class RibbonToolBarControlGroup : Control
+public partial class RibbonToolBarControlGroup : ItemsControl
 {
     private const string PART_ItemsHost = "PART_ItemsHost";
 
@@ -28,7 +28,7 @@ public partial class RibbonToolBarControlGroup : Control
     /// <summary>
     /// Gets the collection of controls in this group.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -40,7 +40,7 @@ public partial class RibbonToolBarControlGroup : Control
             nameof(IsFirstInRow),
             typeof(bool),
             typeof(RibbonToolBarControlGroup),
-            new PropertyMetadata(false));
+            new PropertyMetadata(true));
 
     /// <summary>
     /// Gets or sets whether this group is the first in its row.
@@ -57,7 +57,7 @@ public partial class RibbonToolBarControlGroup : Control
             nameof(IsLastInRow),
             typeof(bool),
             typeof(RibbonToolBarControlGroup),
-            new PropertyMetadata(false));
+            new PropertyMetadata(true));
 
     /// <summary>
     /// Gets or sets whether this group is the last in its row.

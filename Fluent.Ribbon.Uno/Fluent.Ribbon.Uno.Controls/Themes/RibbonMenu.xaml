@@ -11,8 +11,8 @@
                         Background="{ThemeResource RibbonContentBrush}"
                         BorderBrush="{ThemeResource RibbonBorderBrush}"
                         BorderThickness="1"
-                        CornerRadius="4"
-                        Padding="2">
+                        CornerRadius="8"
+                        Padding="4">
                         <StackPanel
                             x:Name="PART_ItemsPanel"
                             Orientation="Vertical" />

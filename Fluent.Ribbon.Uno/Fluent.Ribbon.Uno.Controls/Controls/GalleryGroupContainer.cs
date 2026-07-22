@@ -6,12 +6,12 @@ namespace Fluent;
 /// </summary>
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
-/// WPF uses HeaderedItemsControl; Uno version uses Control with manual item management.
+/// Uses the portable WPF-compatible headered-items base with manual item layout.
 /// </remarks>
 [ContentProperty(Name = nameof(Items))]
 [TemplatePart(Name = PART_ItemsPanel, Type = typeof(Panel))]
 [TemplatePart(Name = PART_Header, Type = typeof(ContentPresenter))]
-public partial class GalleryGroupContainer : Control
+public partial class GalleryGroupContainer : HeaderedItemsControl
 {
     private const string PART_ItemsPanel = "PART_ItemsPanel";
     private const string PART_Header = "PART_Header";
@@ -21,7 +21,7 @@ public partial class GalleryGroupContainer : Control
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
+    public new static readonly DependencyProperty HeaderProperty =
         DependencyProperty.Register(
             nameof(Header),
             typeof(object),
@@ -31,7 +31,7 @@ public partial class GalleryGroupContainer : Control
     /// <summary>
     /// Gets or sets the group header.
     /// </summary>
-    public object? Header
+    public new object? Header
     {
         get => GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -65,7 +65,7 @@ public partial class GalleryGroupContainer : Control
     /// <summary>
     /// Gets or sets the collection of items in this group.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -188,6 +188,14 @@ public partial class GalleryGroupContainer : Control
     #region Methods
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncItems();
+    }
+
+    /// <summary>Handles a change of the items-panel template.</summary>
+    protected virtual void OnItemsPanelChanged(
+        ItemsPanelTemplate? oldItemsPanel,
+        ItemsPanelTemplate? newItemsPanel)
     {
         SyncItems();
     }

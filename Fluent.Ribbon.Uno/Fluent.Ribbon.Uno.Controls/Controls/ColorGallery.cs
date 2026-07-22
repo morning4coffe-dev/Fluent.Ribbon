@@ -1,5 +1,9 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
+using Microsoft.UI.Xaml.Automation;
+
 /// <summary>
 /// A gallery control for color selection with automatic/no-color/standard/theme colors.
 /// </summary>
@@ -9,9 +13,9 @@ namespace Fluent;
 /// recent colors, and a "More Colors" dialog.
 /// </remarks>
 [ContentProperty(Name = nameof(ThemeColors))]
-[TemplatePart(Name = PART_AutomaticButton, Type = typeof(Button))]
-[TemplatePart(Name = PART_NoColorButton, Type = typeof(Button))]
-[TemplatePart(Name = PART_MoreColorsButton, Type = typeof(Button))]
+[TemplatePart(Name = PART_AutomaticButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_NoColorButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_MoreColorsButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_ThemeColorsSection, Type = typeof(FrameworkElement))]
 [TemplatePart(Name = PART_ThemeColorsPanel, Type = typeof(Panel))]
 [TemplatePart(Name = PART_StandardColorsPanel, Type = typeof(Panel))]
@@ -28,16 +32,14 @@ public partial class ColorGallery : Control
     private const string PART_RecentColorsSection = "PART_RecentColorsSection";
     private const string PART_RecentColorsPanel = "PART_RecentColorsPanel";
 
-    private const int MaxRecentColors = 10;
-
     private Panel? _themeColorsPanel;
     private Panel? _standardColorsPanel;
     private Panel? _recentColorsPanel;
     private FrameworkElement? _themeColorsSection;
     private FrameworkElement? _recentColorsSection;
-    private Button? _automaticButton;
-    private Button? _noColorButton;
-    private Button? _moreColorsButton;
+    private WinUIButton? _automaticButton;
+    private WinUIButton? _noColorButton;
+    private WinUIButton? _moreColorsButton;
 
     private static ObservableCollection<Windows.UI.Color>? _recentColors;
 
@@ -83,22 +85,30 @@ public partial class ColorGallery : Control
         private set => SetValue(ThemeColorsProperty, value);
     }
 
-    /// <summary>Identifies the <see cref="StandardColors"/> dependency property.</summary>
-    public static readonly DependencyProperty StandardColorsProperty =
+    /// <summary>Identifies the additive mutable standard-colors collection.</summary>
+    public static readonly DependencyProperty MutableStandardColorsProperty =
         DependencyProperty.Register(
-            nameof(StandardColors),
+            nameof(MutableStandardColors),
             typeof(ObservableCollection<Windows.UI.Color>),
             typeof(ColorGallery),
             new PropertyMetadata(null));
 
     /// <summary>
-    /// Gets or sets the collection of standard colors.
+    /// Gets the mutable Uno standard-colors collection.
     /// </summary>
-    public ObservableCollection<Windows.UI.Color> StandardColors
+    /// <remarks>
+    /// WPF source compatibility requires <see cref="StandardColors"/> to remain a static
+    /// <see cref="Windows.UI.Color"/> array. Use this collection when an application needs
+    /// to customize the standard-mode palette at runtime.
+    /// </remarks>
+    public ObservableCollection<Windows.UI.Color> MutableStandardColors
     {
-        get => (ObservableCollection<Windows.UI.Color>)GetValue(StandardColorsProperty);
-        private set => SetValue(StandardColorsProperty, value);
+        get => (ObservableCollection<Windows.UI.Color>)GetValue(MutableStandardColorsProperty);
+        private set => SetValue(MutableStandardColorsProperty, value);
     }
+
+    /// <summary>Gets the mutable Uno standard-colors collection.</summary>
+    public ObservableCollection<Windows.UI.Color> StandardColorsCollection => MutableStandardColors;
 
     /// <summary>Identifies the <see cref="IsAutomaticColorButtonVisible"/> dependency property.</summary>
     public static readonly DependencyProperty IsAutomaticColorButtonVisibleProperty =
@@ -165,7 +175,7 @@ public partial class ColorGallery : Control
     public int Columns
     {
         get => (int)GetValue(ColumnsProperty);
-        set => SetValue(ColumnsProperty, value);
+        set => SetValue(ColumnsProperty, Math.Max(1, value));
     }
 
     /// <summary>Identifies the <see cref="Mode"/> dependency property.</summary>
@@ -199,7 +209,7 @@ public partial class ColorGallery : Control
     public double ChipWidth
     {
         get => (double)GetValue(ChipWidthProperty);
-        set => SetValue(ChipWidthProperty, value);
+        set => SetValue(ChipWidthProperty, Math.Max(0, value));
     }
 
     /// <summary>Identifies the <see cref="ChipHeight"/> dependency property.</summary>
@@ -216,7 +226,7 @@ public partial class ColorGallery : Control
     public double ChipHeight
     {
         get => (double)GetValue(ChipHeightProperty);
-        set => SetValue(ChipHeightProperty, value);
+        set => SetValue(ChipHeightProperty, Math.Max(0, value));
     }
 
     #endregion
@@ -226,12 +236,27 @@ public partial class ColorGallery : Control
     /// <summary>
     /// Occurs when the selected color changes.
     /// </summary>
-    public event EventHandler<Windows.UI.Color?>? SelectedColorChanged;
+    public event RoutedEventHandler? SelectedColorChanged;
+
+    /// <summary>
+    /// Occurs when the selected color changes and supplies the new nullable color value.
+    /// </summary>
+    /// <remarks>
+    /// This additive Uno event preserves the value-carrying behavior formerly exposed by
+    /// <c>SelectedColorChanged</c>; the WPF-compatible event now uses
+    /// <see cref="RoutedEventHandler"/>.
+    /// </remarks>
+    public event EventHandler<Windows.UI.Color?>? SelectedColorValueChanged;
 
     /// <summary>
     /// Occurs when the "More Colors" button is clicked.
     /// </summary>
     public event EventHandler? MoreColorsRequested;
+
+    /// <summary>
+    /// Occurs when the WPF-compatible synchronous custom-color workflow is requested.
+    /// </summary>
+    public event EventHandler<MoreColorsExecutingEventArgs>? MoreColorsExecuting;
 
     #endregion
 
@@ -244,11 +269,12 @@ public partial class ColorGallery : Control
     {
         DefaultStyleKey = typeof(ColorGallery);
         ThemeColors = new ObservableCollection<Windows.UI.Color>();
-        StandardColors = CreateDefaultStandardColors();
+        MutableStandardColors = new ObservableCollection<Windows.UI.Color>(StandardColors);
 
         ThemeColors.CollectionChanged += OnColorsCollectionChanged;
-        StandardColors.CollectionChanged += OnColorsCollectionChanged;
+        MutableStandardColors.CollectionChanged += OnColorsCollectionChanged;
         RecentColors.CollectionChanged += OnColorsCollectionChanged;
+        InitializeCompatibility();
     }
 
     #endregion
@@ -280,9 +306,9 @@ public partial class ColorGallery : Control
         _standardColorsPanel = GetTemplateChild(PART_StandardColorsPanel) as Panel;
         _recentColorsSection = GetTemplateChild(PART_RecentColorsSection) as FrameworkElement;
         _recentColorsPanel = GetTemplateChild(PART_RecentColorsPanel) as Panel;
-        _automaticButton = GetTemplateChild(PART_AutomaticButton) as Button;
-        _noColorButton = GetTemplateChild(PART_NoColorButton) as Button;
-        _moreColorsButton = GetTemplateChild(PART_MoreColorsButton) as Button;
+        _automaticButton = GetTemplateChild(PART_AutomaticButton) as WinUIButton;
+        _noColorButton = GetTemplateChild(PART_NoColorButton) as WinUIButton;
+        _moreColorsButton = GetTemplateChild(PART_MoreColorsButton) as WinUIButton;
 
         if (_automaticButton is not null)
         {
@@ -299,6 +325,7 @@ public partial class ColorGallery : Control
             _moreColorsButton.Click += OnMoreColorsButtonClick;
         }
 
+        ApplyCompatibilityTemplateParts();
         RebuildSwatches();
     }
 
@@ -310,12 +337,9 @@ public partial class ColorGallery : Control
     {
         if (d is ColorGallery gallery)
         {
-            if (e.NewValue is Windows.UI.Color color)
-            {
-                gallery.TrackRecentColor(color);
-            }
-
-            gallery.SelectedColorChanged?.Invoke(gallery, (Windows.UI.Color?)e.NewValue);
+            gallery.UpdateSelectionCompatibility((Windows.UI.Color?)e.NewValue);
+            gallery.SelectedColorChanged?.Invoke(gallery, new RoutedEventArgs());
+            gallery.SelectedColorValueChanged?.Invoke(gallery, (Windows.UI.Color?)e.NewValue);
         }
     }
 
@@ -323,6 +347,7 @@ public partial class ColorGallery : Control
     {
         if (d is ColorGallery gallery)
         {
+            gallery.UpdateGradientsCompatibility();
             gallery.RebuildSwatches();
         }
     }
@@ -360,27 +385,30 @@ public partial class ColorGallery : Control
 
         recent.Insert(0, color);
 
-        while (recent.Count > MaxRecentColors)
-        {
-            recent.RemoveAt(recent.Count - 1);
-        }
     }
 
     private void OnColorsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        UpdateGradientsCompatibility();
         RebuildSwatches();
     }
 
     private void RebuildSwatches()
     {
         var showThemeColors = Mode == ColorGalleryMode.ThemeColors;
-        var standardColors = Mode == ColorGalleryMode.HighlightColors
-            ? CreateHighlightColors()
-            : StandardColors;
+        IReadOnlyList<Windows.UI.Color> standardColors = Mode switch
+        {
+            ColorGalleryMode.HighlightColors => HighlightColors,
+            ColorGalleryMode.ThemeColors => StandardThemeColors,
+            _ => MutableStandardColors,
+        };
 
-        BuildSwatches(_themeColorsPanel, ThemeColors);
+        _colorSwatches.Clear();
+        BuildSwatches(_themeColorsPanel, showThemeColors ? ThemeColors : null, "Theme");
+        BuildSwatches(_themeGradientsPanel, showThemeColors ? ThemeGradients : null, "ThemeGradient");
         BuildSwatches(_standardColorsPanel, standardColors);
-        BuildSwatches(_recentColorsPanel, RecentColors);
+        BuildSwatches(_standardGradientsPanel, showThemeColors ? StandardGradients : null, "StandardGradient");
+        BuildSwatches(_recentColorsPanel, showThemeColors ? RecentColors : null, "Recent");
 
         if (_themeColorsSection is not null)
         {
@@ -391,13 +419,18 @@ public partial class ColorGallery : Control
 
         if (_recentColorsSection is not null)
         {
-            _recentColorsSection.Visibility = RecentColors is { Count: > 0 }
+            _recentColorsSection.Visibility = showThemeColors && RecentColors is { Count: > 0 }
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
+
+        UpdateSelectionCompatibility(SelectedColor);
     }
 
-    private void BuildSwatches(Panel? host, IReadOnlyList<Windows.UI.Color>? colors)
+    private void BuildSwatches(
+        Panel? host,
+        IReadOnlyList<Windows.UI.Color>? colors,
+        string automationPrefix = "Standard")
     {
         if (host is null)
         {
@@ -425,7 +458,7 @@ public partial class ColorGallery : Control
             }
 
             var color = colors[i];
-            var swatch = new Button
+            var swatch = new WinUIButton
             {
                 Width = chipWidth,
                 Height = chipHeight,
@@ -440,14 +473,17 @@ public partial class ColorGallery : Control
             };
 
             ToolTipService.SetToolTip(swatch, color.ToString());
+            AutomationProperties.SetAutomationId(swatch, $"ColorGallery{automationPrefix}Color{i}");
+            AutomationProperties.SetName(swatch, color.ToString());
             swatch.Click += OnSwatchClick;
             row!.Children.Add(swatch);
+            _colorSwatches.Add(swatch);
         }
     }
 
     private void OnSwatchClick(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: Windows.UI.Color color })
+        if (sender is WinUIButton { Tag: Windows.UI.Color color })
         {
             SelectedColor = color;
         }
@@ -455,57 +491,17 @@ public partial class ColorGallery : Control
 
     private void OnAutomaticButtonClick(object sender, RoutedEventArgs e)
     {
-        // "Automatic" maps to the default automatic color (black).
-        SelectedColor = Windows.UI.Color.FromArgb(255, 0, 0, 0);
+        SelectedColor = null;
     }
 
     private void OnNoColorButtonClick(object sender, RoutedEventArgs e)
     {
-        SelectedColor = null;
+        SelectedColor = Microsoft.UI.Colors.Transparent;
     }
 
-    private void OnMoreColorsButtonClick(object sender, RoutedEventArgs e)
+    private async void OnMoreColorsButtonClick(object sender, RoutedEventArgs e)
     {
-        MoreColorsRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private static ObservableCollection<Windows.UI.Color> CreateDefaultStandardColors()
-    {
-        return new ObservableCollection<Windows.UI.Color>
-        {
-            Windows.UI.Color.FromArgb(255, 192, 0, 0),     // Dark Red
-            Windows.UI.Color.FromArgb(255, 255, 0, 0),     // Red
-            Windows.UI.Color.FromArgb(255, 255, 192, 0),   // Orange
-            Windows.UI.Color.FromArgb(255, 255, 255, 0),   // Yellow
-            Windows.UI.Color.FromArgb(255, 146, 208, 80),  // Light Green
-            Windows.UI.Color.FromArgb(255, 0, 176, 80),    // Green
-            Windows.UI.Color.FromArgb(255, 0, 176, 240),   // Light Blue
-            Windows.UI.Color.FromArgb(255, 0, 112, 192),   // Blue
-            Windows.UI.Color.FromArgb(255, 0, 32, 96),     // Dark Blue
-            Windows.UI.Color.FromArgb(255, 112, 48, 160),  // Purple
-        };
-    }
-
-    private static IReadOnlyList<Windows.UI.Color> CreateHighlightColors()
-    {
-        return new[]
-        {
-            Windows.UI.Color.FromArgb(255, 255, 255, 0),   // Yellow
-            Windows.UI.Color.FromArgb(255, 0, 255, 0),     // Bright Green
-            Windows.UI.Color.FromArgb(255, 0, 255, 255),   // Turquoise
-            Windows.UI.Color.FromArgb(255, 255, 0, 255),   // Pink
-            Windows.UI.Color.FromArgb(255, 0, 0, 255),     // Blue
-            Windows.UI.Color.FromArgb(255, 255, 0, 0),     // Red
-            Windows.UI.Color.FromArgb(255, 0, 0, 128),     // Dark Blue
-            Windows.UI.Color.FromArgb(255, 0, 128, 128),   // Teal
-            Windows.UI.Color.FromArgb(255, 0, 128, 0),     // Green
-            Windows.UI.Color.FromArgb(255, 128, 0, 128),   // Violet
-            Windows.UI.Color.FromArgb(255, 128, 0, 0),     // Dark Red
-            Windows.UI.Color.FromArgb(255, 128, 128, 0),   // Dark Yellow
-            Windows.UI.Color.FromArgb(255, 128, 128, 128), // Gray 50%
-            Windows.UI.Color.FromArgb(255, 192, 192, 192), // Gray 25%
-            Windows.UI.Color.FromArgb(255, 0, 0, 0),       // Black
-        };
+        await ExecuteMoreColorsAsync();
     }
 
     #endregion

@@ -16,6 +16,11 @@ public enum RibbonControlSize
     Medium = 1,
 
     /// <summary>
+    /// WPF-compatible name for <see cref="Medium"/>.
+    /// </summary>
+    Middle = Medium,
+
+    /// <summary>
     /// Small size with icon only.
     /// </summary>
     Small = 2

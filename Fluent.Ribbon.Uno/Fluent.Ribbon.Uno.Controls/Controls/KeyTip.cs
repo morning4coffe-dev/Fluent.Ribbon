@@ -15,6 +15,68 @@ namespace Fluent;
 /// </remarks>
 public partial class KeyTip : DependencyObject
 {
+    /// <summary>
+    /// Identifies the visual content property used by compatibility APIs.
+    /// </summary>
+    public static readonly DependencyProperty ContentProperty =
+        DependencyProperty.Register(
+            nameof(Content),
+            typeof(object),
+            typeof(KeyTip),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets or sets the visual content used by compatibility APIs.
+    /// </summary>
+    public object? Content
+    {
+        get => GetValue(ContentProperty);
+        set => SetValue(ContentProperty, value);
+    }
+
+    /// <summary>
+    /// Identifies the compatibility visibility property.
+    /// </summary>
+    public static readonly DependencyProperty VisibilityProperty =
+        DependencyProperty.Register(
+            nameof(Visibility),
+            typeof(Visibility),
+            typeof(KeyTip),
+            new PropertyMetadata(Visibility.Visible));
+
+    /// <summary>
+    /// Gets or sets compatibility visibility.
+    /// </summary>
+    public Visibility Visibility
+    {
+        get => (Visibility)GetValue(VisibilityProperty);
+        set => SetValue(VisibilityProperty, value);
+    }
+
+    /// <summary>
+    /// Identifies the compatibility enabled property.
+    /// </summary>
+    public static readonly DependencyProperty IsEnabledProperty =
+        DependencyProperty.Register(
+            nameof(IsEnabled),
+            typeof(bool),
+            typeof(KeyTip),
+            new PropertyMetadata(true));
+
+    /// <summary>
+    /// Gets or sets whether the compatibility KeyTip is enabled.
+    /// </summary>
+    public bool IsEnabled
+    {
+        get => (bool)GetValue(IsEnabledProperty);
+        set => SetValue(IsEnabledProperty, value);
+    }
+
+    /// <summary>
+    /// Gets whether the compatibility KeyTip is visible.
+    /// </summary>
+    public bool IsVisible => Visibility == Visibility.Visible;
+
     #region Attached Properties
 
     /// <summary>Identifies the Keys attached property.</summary>

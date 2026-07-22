@@ -1,33 +1,30 @@
 namespace Fluent;
 
+using System.Collections;
+
 /// <summary>
-/// Represents the Backstage view that provides a full-page overlay
-/// for application-level commands like File, Save, Print, etc.
+/// Represents the full-page backstage surface.
 /// </summary>
-[ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_MenuPanel, Type = typeof(StackPanel))]
-[TemplatePart(Name = PART_ContentPresenter, Type = typeof(ContentPresenter))]
-[TemplatePart(Name = PART_BackButton, Type = typeof(Button))]
-public partial class Backstage : Control
+[ContentProperty(Name = nameof(Content))]
+[TemplatePart(Name = PART_AdornerLayer, Type = typeof(FrameworkElement))]
+public partial class Backstage : RibbonControl
 {
-    private const string PART_MenuPanel = "PART_MenuPanel";
-    private const string PART_ContentPresenter = "PART_ContentPresenter";
-    private const string PART_BackButton = "PART_BackButton";
+    private const string PART_AdornerLayer = "PART_AdornerLayer";
 
-    private StackPanel? _menuPanel;
-    private ContentPresenter? _contentPresenter;
-    private Button? _backButton;
-
-    #region Events
+    private WeakReference<UIElement>? focusBackup;
+    private Ribbon? parentRibbon;
+    private bool? originalHideContextTabs;
+    private bool effectiveIsOpen;
 
     /// <summary>
-    /// Occurs when the IsOpen property changes.
+    /// Occurs when <see cref="IsOpen"/> changes.
     /// </summary>
-    public event EventHandler<bool>? IsOpenChanged;
+    public event EventHandler<DependencyPropertyChangedEventArgs>? IsOpenChanged;
 
-    #endregion
-
-    #region Dependency Properties
+    /// <summary>
+    /// Gets the portable overlay host used to display the backstage content.
+    /// </summary>
+    public FrameworkElement? AdornerLayer { get; private set; }
 
     /// <summary>Identifies the <see cref="IsOpen"/> dependency property.</summary>
     public static readonly DependencyProperty IsOpenProperty =
@@ -37,98 +34,11 @@ public partial class Backstage : Control
             typeof(Backstage),
             new PropertyMetadata(false, OnIsOpenChanged));
 
-    /// <summary>
-    /// Gets or sets whether the backstage view is open.
-    /// </summary>
+    /// <summary>Gets or sets whether the backstage is open.</summary>
     public bool IsOpen
     {
-        get => (bool)GetValue(IsOpenProperty);
-        set => SetValue(IsOpenProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
-    public static readonly DependencyProperty ItemsProperty =
-        DependencyProperty.Register(
-            nameof(Items),
-            typeof(ObservableCollection<UIElement>),
-            typeof(Backstage),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets the collection of backstage tab items and buttons.
-    /// </summary>
-    public ObservableCollection<UIElement> Items
-    {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
-        private set => SetValue(ItemsProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="SelectedContent"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedContentProperty =
-        DependencyProperty.Register(
-            nameof(SelectedContent),
-            typeof(UIElement),
-            typeof(Backstage),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets or sets the content of the currently selected backstage tab.
-    /// </summary>
-    public UIElement? SelectedContent
-    {
-        get => (UIElement?)GetValue(SelectedContentProperty);
-        set => SetValue(SelectedContentProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
-    public static readonly DependencyProperty TitleProperty =
-        DependencyProperty.Register(
-            nameof(Title),
-            typeof(string),
-            typeof(Backstage),
-            new PropertyMetadata("File"));
-
-    /// <summary>
-    /// Gets or sets the title displayed on the backstage button.
-    /// </summary>
-    public string Title
-    {
-        get => (string)GetValue(TitleProperty);
-        set => SetValue(TitleProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="BackstageBackground"/> dependency property.</summary>
-    public static readonly DependencyProperty BackstageBackgroundProperty =
-        DependencyProperty.Register(
-            nameof(BackstageBackground),
-            typeof(Brush),
-            typeof(Backstage),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets or sets the background brush for the backstage menu area.
-    /// </summary>
-    public Brush? BackstageBackground
-    {
-        get => (Brush?)GetValue(BackstageBackgroundProperty);
-        set => SetValue(BackstageBackgroundProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="CloseOnEsc"/> dependency property.</summary>
-    public static readonly DependencyProperty CloseOnEscProperty =
-        DependencyProperty.Register(
-            nameof(CloseOnEsc),
-            typeof(bool),
-            typeof(Backstage),
-            new PropertyMetadata(true));
-
-    /// <summary>
-    /// Gets or sets whether pressing Escape closes the backstage.
-    /// </summary>
-    public bool CloseOnEsc
-    {
-        get => (bool)GetValue(CloseOnEscProperty);
-        set => SetValue(CloseOnEscProperty, value);
+        get => effectiveIsOpen;
+        set => SetIsOpen(value);
     }
 
     /// <summary>Identifies the <see cref="CanChangeIsOpen"/> dependency property.</summary>
@@ -137,14 +47,9 @@ public partial class Backstage : Control
             nameof(CanChangeIsOpen),
             typeof(bool),
             typeof(Backstage),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnCanChangeIsOpenChanged));
 
-    /// <summary>
-    /// Gets or sets whether the <see cref="IsOpen"/> state can be changed.
-    /// When set to <c>false</c>, the backstage cannot be opened or closed
-    /// programmatically, by the back button, or by the Escape key.
-    /// Useful for preventing close during critical operations like saving.
-    /// </summary>
+    /// <summary>Gets or sets whether the open state can change.</summary>
     public bool CanChangeIsOpen
     {
         get => (bool)GetValue(CanChangeIsOpenProperty);
@@ -159,200 +64,387 @@ public partial class Backstage : Control
             typeof(Backstage),
             new PropertyMetadata(true));
 
-    /// <summary>
-    /// Gets or sets whether contextual tabs are hidden when the backstage is open.
-    /// </summary>
+    /// <summary>Gets or sets whether contextual tabs are hidden while open.</summary>
     public bool HideContextTabsOnOpen
     {
         get => (bool)GetValue(HideContextTabsOnOpenProperty);
         set => SetValue(HideContextTabsOnOpenProperty, value);
     }
 
-    /// <summary>Identifies the <see cref="IsBackButtonVisible"/> dependency property.</summary>
-    public static readonly DependencyProperty IsBackButtonVisibleProperty =
+    /// <summary>Identifies the <see cref="AreAnimationsEnabled"/> dependency property.</summary>
+    public static readonly DependencyProperty AreAnimationsEnabledProperty =
         DependencyProperty.Register(
-            nameof(IsBackButtonVisible),
+            nameof(AreAnimationsEnabled),
+            typeof(bool),
+            typeof(Backstage),
+            new PropertyMetadata(true));
+
+    /// <summary>Gets or sets whether open and close transitions are animated.</summary>
+    public bool AreAnimationsEnabled
+    {
+        get => (bool)GetValue(AreAnimationsEnabledProperty);
+        set => SetValue(AreAnimationsEnabledProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="CloseOnEsc"/> dependency property.</summary>
+    public static readonly DependencyProperty CloseOnEscProperty =
+        DependencyProperty.Register(
+            nameof(CloseOnEsc),
+            typeof(bool),
+            typeof(Backstage),
+            new PropertyMetadata(true));
+
+    /// <summary>Gets or sets whether Escape closes the backstage.</summary>
+    public bool CloseOnEsc
+    {
+        get => (bool)GetValue(CloseOnEscProperty);
+        set => SetValue(CloseOnEscProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="UseHighestAvailableAdornerLayer"/> dependency property.</summary>
+    public static readonly DependencyProperty UseHighestAvailableAdornerLayerProperty =
+        DependencyProperty.Register(
+            nameof(UseHighestAvailableAdornerLayer),
             typeof(bool),
             typeof(Backstage),
             new PropertyMetadata(true));
 
     /// <summary>
-    /// Gets or sets whether the back button is visible.
+    /// Gets or sets whether the highest available portable overlay host should be used.
     /// </summary>
-    public bool IsBackButtonVisible
+    public bool UseHighestAvailableAdornerLayer
     {
-        get => (bool)GetValue(IsBackButtonVisibleProperty);
-        set => SetValue(IsBackButtonVisibleProperty, value);
+        get => (bool)GetValue(UseHighestAvailableAdornerLayerProperty);
+        set => SetValue(UseHighestAvailableAdornerLayerProperty, value);
     }
 
-    #endregion
+    /// <summary>Identifies the <see cref="Content"/> dependency property.</summary>
+    public static readonly DependencyProperty ContentProperty =
+        DependencyProperty.Register(
+            nameof(Content),
+            typeof(UIElement),
+            typeof(Backstage),
+            new PropertyMetadata(null, OnContentChanged));
 
-    #region Constructor
+    /// <summary>Gets or sets the backstage content.</summary>
+    public UIElement? Content
+    {
+        get => (UIElement?)GetValue(ContentProperty);
+        set => SetValue(ContentProperty, value);
+    }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Backstage"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of the <see cref="Backstage"/> class.</summary>
     public Backstage()
     {
         DefaultStyleKey = typeof(Backstage);
-        Items = new ObservableCollection<UIElement>();
-        Items.CollectionChanged += OnItemsCollectionChanged;
-
-        // Handle Escape key
-        KeyDown += OnKeyDown;
+        CanAddToQuickAccessToolBar = false;
+        Loaded += OnBackstageLoaded;
+        Unloaded += OnBackstageUnloaded;
     }
 
-    #endregion
-
-    #region Keyboard
-
-    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == Windows.System.VirtualKey.Escape && CloseOnEsc && IsOpen && CanChangeIsOpen)
-        {
-            IsOpen = false;
-            e.Handled = true;
-        }
-    }
-
-    #endregion
-
-    #region Template
-
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
 
-        _menuPanel = GetTemplateChild(PART_MenuPanel) as StackPanel;
-        _contentPresenter = GetTemplateChild(PART_ContentPresenter) as ContentPresenter;
-
-        if (_backButton is not null)
-        {
-            _backButton.Click -= OnBackButtonClick;
-        }
-
-        _backButton = GetTemplateChild(PART_BackButton) as Button;
-
-        if (_backButton is not null)
-        {
-            _backButton.Click += OnBackButtonClick;
-        }
-
-        SyncItems();
+        AdornerLayer = GetTemplateChild(PART_AdornerLayer) as FrameworkElement;
         UpdateVisualState();
     }
 
-    #endregion
-
-    #region Methods
-
-    private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    /// <summary>
+    /// Called when popup dismissal is requested for content inside this backstage.
+    /// </summary>
+    protected virtual void OnDismissPopup(object? sender, DismissPopupEventArgs e)
     {
-        SyncItems();
+        if (sender is DependencyObject source
+            && ReferenceEquals(source, this) is false
+            && PopupService.IsAncestorOf(this, source) is false)
+        {
+            return;
+        }
+
+        if (e.DismissReason is DismissPopupReason.ApplicationLostFocus
+            or DismissPopupReason.ShowingKeyTips
+            || e.DismissMode != DismissPopupMode.Always)
+        {
+            return;
+        }
+
+        SetIsOpen(false);
     }
 
-    private void SyncItems()
+    /// <summary>Shows the backstage content.</summary>
+    protected virtual bool Show()
     {
-        if (_menuPanel is null) return;
-
-        _menuPanel.Children.Clear();
-        foreach (var item in Items)
+        if (Content is null)
         {
-            _menuPanel.Children.Add(item);
+            return false;
+        }
 
-            // Auto-select first BackstageTabItem
-            if (item is BackstageTabItem tabItem)
+        focusBackup = FocusRoutingHelper.CaptureFocusedElement(this, onlyWhenOutsideOwner: true);
+        ResolveParentRibbon();
+        ApplyParentRibbonOpenState();
+        UpdateVisualState();
+
+        DispatcherQueue?.TryEnqueue(
+            () =>
             {
-                tabItem.Click -= OnTabItemClick;
-                tabItem.Click += OnTabItemClick;
+                if (effectiveIsOpen && Content is not null)
+                {
+                    FocusRoutingHelper.FocusFirst(Content);
+                }
+            });
+
+        return true;
+    }
+
+    /// <summary>Hides the backstage content.</summary>
+    protected virtual void Hide()
+    {
+        UpdateVisualState();
+        RestoreParentRibbonState();
+        FocusRoutingHelper.RestoreFocus(ref focusBackup);
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        if (e.Handled)
+        {
+            base.OnKeyDown(e);
+            return;
+        }
+
+        if ((e.Key == Windows.System.VirtualKey.Enter
+             || e.Key == Windows.System.VirtualKey.Space)
+            && FocusState != FocusState.Unfocused)
+        {
+            SetIsOpen(!effectiveIsOpen);
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape
+                 && CloseOnEsc
+                 && effectiveIsOpen)
+        {
+            SetIsOpen(false);
+            e.Handled = true;
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerPressed(PointerRoutedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        OnMouseLeftButtonDown(e);
+    }
+
+    /// <summary>Handles the WPF-compatible left-button activation hook.</summary>
+    protected virtual void OnMouseLeftButtonDown(PointerRoutedEventArgs e)
+    {
+        if (!e.Handled && ReferenceEquals(e.OriginalSource, this))
+        {
+            SetIsOpen(!effectiveIsOpen);
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    public override KeyTipPressedResult OnKeyTipPressed()
+    {
+        SetIsOpen(true);
+        base.OnKeyTipPressed();
+
+        return KeyTipPressedResult.Empty;
+    }
+
+    /// <inheritdoc />
+    public override void OnKeyTipBack()
+    {
+        SetIsOpen(false);
+        base.OnKeyTipBack();
+    }
+
+    /// <inheritdoc />
+    public override FrameworkElement? CreateQuickAccessItem()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>Gets the logical children retained for WPF source compatibility.</summary>
+    protected override IEnumerator LogicalChildren
+    {
+        get
+        {
+            if (Content is not null)
+            {
+                yield return Content;
+            }
+
+            if (Icon is not null)
+            {
+                yield return Icon;
             }
         }
+    }
 
-        // Select the first tab by default
-        var firstTab = Items.OfType<BackstageTabItem>().FirstOrDefault();
-        if (firstTab is not null)
+    /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonBackstageAutomationPeer(this);
+
+    internal void SetIsOpen(bool isOpen)
+    {
+        if (CanChangeIsOpen
+            && (bool)GetValue(IsOpenProperty) != isOpen)
         {
-            SelectTab(firstTab);
+            SetValue(IsOpenProperty, isOpen);
         }
     }
 
-    private void OnTabItemClick(object sender, RoutedEventArgs e)
+    private static void OnIsOpenChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
     {
-        if (sender is BackstageTabItem tabItem)
-        {
-            SelectTab(tabItem);
-        }
-    }
+        var backstage = (Backstage)sender;
+        var newValue = (bool)args.NewValue;
 
-    private void SelectTab(BackstageTabItem tab)
-    {
-        // Deselect all tabs
-        foreach (var item in Items.OfType<BackstageTabItem>())
+        if (backstage.CanChangeIsOpen is false)
         {
-            item.IsSelected = false;
+            return;
         }
 
-        // Select the clicked tab
-        tab.IsSelected = true;
-        SelectedContent = tab.Content as UIElement;
-    }
-
-    private void OnBackButtonClick(object sender, RoutedEventArgs e)
-    {
-        if (CanChangeIsOpen)
+        if (newValue)
         {
-            IsOpen = false;
-        }
-    }
-
-    private static void OnIsOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is Backstage backstage)
-        {
-            // If CanChangeIsOpen is false, coerce back to the old value
-            if (!backstage.CanChangeIsOpen)
+            backstage.effectiveIsOpen = true;
+            if (backstage.Show() is false)
             {
-                backstage.SetValue(IsOpenProperty, e.OldValue);
+                backstage.effectiveIsOpen = false;
+                backstage.UpdateVisualState();
                 return;
             }
+        }
+        else
+        {
+            backstage.effectiveIsOpen = false;
+            backstage.Hide();
+        }
 
-            backstage.UpdateVisualState();
-            backstage.IsOpenChanged?.Invoke(backstage, (bool)e.NewValue);
+        backstage.IsOpenChanged?.Invoke(backstage, args);
+    }
 
-            if ((bool)e.NewValue)
+    private static void OnCanChangeIsOpenChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var backstage = (Backstage)sender;
+        if ((bool)args.NewValue is false
+            || backstage.effectiveIsOpen
+               == (bool)backstage.GetValue(IsOpenProperty))
+        {
+            return;
+        }
+
+        if ((bool)backstage.GetValue(IsOpenProperty))
+        {
+            backstage.effectiveIsOpen = true;
+            if (backstage.Show() is false)
             {
-                // When opening, ensure we stretch to fill the available space
-                backstage.StretchToPage();
-                backstage.Focus(FocusState.Programmatic);
+                backstage.effectiveIsOpen = false;
+                backstage.UpdateVisualState();
             }
         }
+        else
+        {
+            backstage.effectiveIsOpen = false;
+            backstage.Hide();
+        }
+    }
+
+    private static void OnContentChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var backstage = (Backstage)sender;
+        if (args.NewValue is null && backstage.effectiveIsOpen)
+        {
+            backstage.effectiveIsOpen = false;
+            backstage.Hide();
+        }
+    }
+
+    private void OnBackstageLoaded(object sender, RoutedEventArgs args)
+    {
+        PopupService.DismissPopup += OnDismissPopup;
+        ResolveParentRibbon();
+        UpdateVisualState();
+
+        if (CanChangeIsOpen && (bool)GetValue(IsOpenProperty))
+        {
+            effectiveIsOpen = true;
+            ApplyParentRibbonOpenState();
+            UpdateVisualState();
+        }
+    }
+
+    private void OnBackstageUnloaded(object sender, RoutedEventArgs args)
+    {
+        PopupService.DismissPopup -= OnDismissPopup;
+        RestoreParentRibbonState();
+        focusBackup = null;
+        AdornerLayer = null;
+    }
+
+    private void ResolveParentRibbon()
+    {
+        parentRibbon = GetParentRibbon(this);
+        if (parentRibbon is null && XamlRoot?.Content is DependencyObject root)
+        {
+            parentRibbon = FocusRoutingHelper.FindDescendant<Ribbon>(root);
+        }
+    }
+
+    private void ApplyParentRibbonOpenState()
+    {
+        if (parentRibbon is null)
+        {
+            return;
+        }
+
+        parentRibbon.IsBackstageOrStartScreenOpen = true;
+        if (HideContextTabsOnOpen
+            && parentRibbon.TitleBar is { } titleBar
+            && titleBar.HideContextTabs is false)
+        {
+            originalHideContextTabs = false;
+            titleBar.HideContextTabs = true;
+        }
+    }
+
+    private void RestoreParentRibbonState()
+    {
+        if (parentRibbon is null)
+        {
+            return;
+        }
+
+        parentRibbon.IsBackstageOrStartScreenOpen =
+            parentRibbon.StartScreen?.IsOpen == true;
+
+        if (originalHideContextTabs.HasValue && parentRibbon.TitleBar is { } titleBar)
+        {
+            titleBar.HideContextTabs = originalHideContextTabs.Value;
+        }
+
+        originalHideContextTabs = null;
+        parentRibbon = null;
     }
 
     private void UpdateVisualState()
     {
-        VisualStateManager.GoToState(this, IsOpen ? "Open" : "Closed", true);
+        VisualStateManager.GoToState(
+            this,
+            effectiveIsOpen ? "Open" : "Closed",
+            AreAnimationsEnabled);
     }
-
-    /// <summary>
-    /// Walks up the visual tree to find the page/root and stretches to fill it.
-    /// </summary>
-    private void StretchToPage()
-    {
-        // Find the root element (Page or Frame)
-        FrameworkElement? root = this;
-        while (root?.Parent is FrameworkElement parent)
-        {
-            root = parent;
-        }
-
-        if (root is not null && root != this)
-        {
-            // Ensure we're positioned to cover the full page
-            HorizontalAlignment = HorizontalAlignment.Stretch;
-            VerticalAlignment = VerticalAlignment.Stretch;
-        }
-    }
-
-    #endregion
 }

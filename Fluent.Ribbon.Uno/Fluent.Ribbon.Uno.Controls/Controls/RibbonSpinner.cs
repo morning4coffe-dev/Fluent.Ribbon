@@ -1,21 +1,23 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a numeric spinner control within a Ribbon. The spinner allows
 /// the user to increment or decrement a numeric value.
 /// </summary>
 [TemplatePart(Name = PART_TextBox, Type = typeof(TextBox))]
-[TemplatePart(Name = PART_UpButton, Type = typeof(Button))]
-[TemplatePart(Name = PART_DownButton, Type = typeof(Button))]
-public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedControl, IMediumIconProvider
+[TemplatePart(Name = PART_UpButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_DownButton, Type = typeof(WinUIButton))]
+public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMediumIconProvider
 {
     private const string PART_TextBox = "PART_TextBox";
     private const string PART_UpButton = "PART_UpButton";
     private const string PART_DownButton = "PART_DownButton";
 
     private TextBox? _textBox;
-    private Button? _upButton;
-    private Button? _downButton;
+    private WinUIButton? _upButton;
+    private WinUIButton? _downButton;
     private DispatcherTimer? _repeatTimer;
     private bool _isIncrementing;
 
@@ -24,14 +26,14 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
     /// <summary>
     /// Occurs when the value changes.
     /// </summary>
-    public event EventHandler<double>? ValueChanged;
+    public event RoutedPropertyChangedEventHandler<double>? ValueChanged;
 
     #endregion
 
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
+    public new static readonly DependencyProperty HeaderProperty =
         DependencyProperty.Register(
             nameof(Header),
             typeof(object),
@@ -41,7 +43,7 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
     /// <summary>
     /// Gets or sets the header/label of the spinner.
     /// </summary>
-    public object? Header
+    public new object? Header
     {
         get => GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -167,7 +169,7 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
     }
 
     /// <summary>Identifies the <see cref="Size"/> dependency property.</summary>
-    public static readonly DependencyProperty SizeProperty =
+    public new static readonly DependencyProperty SizeProperty =
         DependencyProperty.Register(
             nameof(Size),
             typeof(RibbonControlSize),
@@ -177,14 +179,14 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
     /// <summary>
     /// Gets or sets the size of the control.
     /// </summary>
-    public RibbonControlSize Size
+    public new RibbonControlSize Size
     {
         get => (RibbonControlSize)GetValue(SizeProperty);
         set => SetValue(SizeProperty, value);
     }
 
     /// <summary>Identifies the <see cref="KeyTip"/> dependency property.</summary>
-    public static readonly DependencyProperty KeyTipProperty =
+    public new static readonly DependencyProperty KeyTipProperty =
         DependencyProperty.Register(
             nameof(KeyTip),
             typeof(string),
@@ -194,7 +196,7 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
     /// <summary>
     /// Gets or sets the key tip for keyboard navigation.
     /// </summary>
-    public string KeyTip
+    public new string KeyTip
     {
         get => (string)GetValue(KeyTipProperty);
         set => SetValue(KeyTipProperty, value);
@@ -347,8 +349,8 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
         }
 
         _textBox = GetTemplateChild(PART_TextBox) as TextBox;
-        _upButton = GetTemplateChild(PART_UpButton) as Button;
-        _downButton = GetTemplateChild(PART_DownButton) as Button;
+        _upButton = GetTemplateChild(PART_UpButton) as WinUIButton;
+        _downButton = GetTemplateChild(PART_DownButton) as WinUIButton;
 
         if (_upButton is not null)
         {
@@ -388,6 +390,27 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public override FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonSpinner
+        {
+            Header = Header,
+            Value = Value,
+            Minimum = Minimum,
+            Maximum = Maximum,
+            Increment = Increment,
+            Format = Format,
+            Size = RibbonControlSize.Small,
+            InputWidth = InputWidth,
+            Delay = Delay,
+            Interval = Interval,
+            SelectAllTextOnFocus = SelectAllTextOnFocus
+        };
+        BindQuickAccessItem(this, clone);
+        return clone;
+    }
 
     #region Methods
 
@@ -537,7 +560,11 @@ public partial class RibbonSpinner : Control, IScalableRibbonControl, IHeaderedC
         {
             spinner.UpdateTextBox();
             spinner.Text = spinner.Value.ToString(spinner.Format);
-            spinner.ValueChanged?.Invoke(spinner, (double)e.NewValue);
+            spinner.ValueChanged?.Invoke(
+                spinner,
+                new RoutedPropertyChangedEventArgs<double>(
+                    (double)e.OldValue,
+                    (double)e.NewValue));
         }
     }
 

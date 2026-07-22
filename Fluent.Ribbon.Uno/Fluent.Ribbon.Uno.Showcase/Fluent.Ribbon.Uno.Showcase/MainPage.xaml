@@ -5,6 +5,24 @@
       xmlns:fluent="using:Fluent"
       Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
+    <Page.Resources>
+        <!-- Elevated "card" surface for the showcase sections -->
+        <Style x:Key="ShowcaseCard" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource RibbonCardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="20" />
+        </Style>
+        <!-- Section heading -->
+        <Style x:Key="SectionHeading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
+            <Setter Property="Margin" Value="4,8,0,0" />
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -54,11 +72,11 @@
             </fluent:Ribbon.ContextualGroups>
 
             <!-- Quick Access Toolbar items (mirrored above/below the ribbon) -->
-            <fluent:Ribbon.QuickAccessItems>
+            <fluent:Ribbon.QuickAccessToolBarItems>
                 <fluent:RibbonButton Size="Small" IconGlyph="&#xE74E;" ToolTipService.ToolTip="Save" />
                 <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A7;" ToolTipService.ToolTip="Undo" />
                 <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A6;" ToolTipService.ToolTip="Redo" />
-            </fluent:Ribbon.QuickAccessItems>
+            </fluent:Ribbon.QuickAccessToolBarItems>
 
             <!-- Toolbar items shown on the right of the title bar -->
             <fluent:Ribbon.ToolBarItems>
@@ -637,44 +655,57 @@
             <ScrollViewer>
                 <StackPanel Padding="20" Spacing="24">
                     <!-- Hero Section -->
-                    <StackPanel HorizontalAlignment="Center" Spacing="16">
-                        <TextBlock 
-                            Text="&#x1F389; Fluent.Ribbon.Uno - Cross-Platform Ribbon UI"
-                            FontSize="24" 
-                            FontWeight="Bold"
-                            HorizontalAlignment="Center" />
-                        <TextBlock 
-                            Text="This is a demonstration of the Ribbon control library ported to Uno Platform." 
-                            FontSize="14"
-                            HorizontalAlignment="Center"
-                            TextAlignment="Center"
-                            MaxWidth="500"
-                            TextWrapping="Wrap" />
-                        <TextBlock 
-                            Text="Runs on Windows, WebAssembly, iOS, Android, macOS, and Linux!" 
-                            FontSize="12"
-                            Foreground="{ThemeResource RibbonSecondaryTextBrush}"
-                            HorizontalAlignment="Center" />
-                        <TextBlock 
-                            Text="Features: App Menu, QAT, Contextual Tabs, InRibbonGallery, ToolBar, ColorGallery, Backstage, Start Screen, DropDownButton, SplitButton, Spinner, ComboBox, TextBox, 20 Languages" 
-                            FontSize="12"
-                            Foreground="{ThemeResource RibbonAccentBrush}"
-                            HorizontalAlignment="Center"
-                            FontWeight="SemiBold" />
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <Button Content="Toggle Table Tools" Click="OnToggleTableTools" Padding="12,6" />
-                            <Button Content="Open Backstage" Click="OnOpenBackstage" Padding="12,6" />
-                            <Button Content="Toggle Minimize" Click="OnToggleMinimize" Padding="12,6" />
-                            <Button Content="Toggle Simplified" Click="OnToggleSimplified" Padding="12,6" />
-                            <ToggleButton Content="Dark Mode" Click="OnToggleTheme" Padding="12,6" />
+                    <Border CornerRadius="12" Padding="32,26" HorizontalAlignment="Stretch">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#0A66C2" Offset="0" />
+                                <GradientStop Color="#0091D5" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="860">
+                            <TextBlock
+                                Text="Fluent.Ribbon.Uno"
+                                FontSize="30"
+                                FontWeight="Bold"
+                                Foreground="White"
+                                HorizontalAlignment="Center" />
+                            <TextBlock
+                                Text="A cross-platform, Office-style Ribbon for Uno Platform &amp; WinUI 3"
+                                FontSize="15"
+                                Foreground="#EAF4FC"
+                                HorizontalAlignment="Center"
+                                TextAlignment="Center"
+                                MaxWidth="560"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Text="Windows  ·  WebAssembly  ·  iOS  ·  Android  ·  macOS  ·  Linux"
+                                FontSize="12"
+                                Foreground="#CFE6F7"
+                                HorizontalAlignment="Center" />
+                            <TextBlock
+                                Text="App Menu · Quick Access Toolbar · Contextual Tabs · Galleries · Backstage · Spinner · 20 Languages"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="#DCEBF8"
+                                HorizontalAlignment="Center"
+                                TextAlignment="Center"
+                                MaxWidth="640"
+                                TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,6,0,0">
+                                <Button Content="Toggle Table Tools" Click="OnToggleTableTools" Padding="12,6" />
+                                <Button Content="Open Backstage" Click="OnOpenBackstage" Padding="12,6" />
+                                <Button Content="Toggle Minimize" Click="OnToggleMinimize" Padding="12,6" />
+                                <Button Content="Toggle Simplified" Click="OnToggleSimplified" Padding="12,6" />
+                                <ToggleButton Content="Dark Mode" Click="OnToggleTheme" Padding="12,6" />
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
+                    </Border>
 
                     <!-- Ported Controls Showcase Section -->
-                    <TextBlock Text="Ported Controls Showcase" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" />
+                    <TextBlock Text="Ported Controls Showcase" Style="{StaticResource SectionHeading}" />
 
                     <!-- ColorGallery -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ColorGallery" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A gallery control for color selection with standard colors." FontSize="12"
@@ -687,7 +718,7 @@
                     </Border>
 
                     <!-- TwoLineLabel -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="TwoLineLabel" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A label that can split text across two lines, with an optional glyph indicator." FontSize="12"
@@ -701,7 +732,7 @@
                     </Border>
 
                     <!-- IconPresenter -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="IconPresenter" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Multi-size icon presenter that adapts to Small, Medium, and Large sizes." FontSize="12"
@@ -724,7 +755,7 @@
                     </Border>
 
                     <!-- TransitioningControl -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="TransitioningControl" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Animated content transitions when content changes." FontSize="12"
@@ -739,7 +770,7 @@
                     </Border>
 
                     <!-- GalleryGroupContainer -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="GalleryGroupContainer" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A container that groups gallery items with an optional header." FontSize="12"
@@ -770,7 +801,7 @@
                     </Border>
 
                     <!-- RibbonToolBar -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="RibbonToolBar" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A toolbar that arranges items according to declarative layout definitions (rows x columns)." FontSize="12"
@@ -781,7 +812,7 @@
                     </Border>
 
                     <!-- BackstageTabControl + BackstageButton -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="BackstageTabControl &amp; BackstageButton" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Standalone backstage tab control with navigation buttons." FontSize="12"
@@ -796,7 +827,7 @@
                     </Border>
 
                     <!-- StartScreen -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="StartScreen" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A two-pane start screen with left navigation and right content." FontSize="12"
@@ -823,7 +854,7 @@
                     </Border>
 
                     <!-- ResizeableContentControl -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ResizeableContentControl" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A content container that the user can resize by dragging." FontSize="12"
@@ -839,7 +870,7 @@
                     </Border>
 
                     <!-- RibbonScrollViewer -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="RibbonScrollViewer" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Horizontal scroller with left/right chevrons for overflowing ribbon content." FontSize="12"
@@ -860,7 +891,7 @@
                     </Border>
 
                     <!-- RibbonTitleBar -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="RibbonTitleBar" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Title bar hosting a quick access toolbar, contextual group area, and centered title." FontSize="12"
@@ -879,7 +910,7 @@
                     </Border>
 
                     <!-- RibbonToolBarControlGroup -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="RibbonToolBarControlGroup" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Groups related toolbar controls so they render as a single segmented cluster." FontSize="12"
@@ -893,7 +924,7 @@
                     </Border>
 
                     <!-- Checkable Menu Items -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="StatusBarMenuItem &amp; QuickAccessMenuItem" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Checkable menu entries used to toggle status-bar fields and quick-access commands. Click to toggle the check mark." FontSize="12"
@@ -909,7 +940,7 @@
                     </Border>
 
                     <!-- KeyTips -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="KeyTips (Alt navigation)" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Press Alt (or F10) while the ribbon is focused to show access keys, then type them to activate. Try Alt, then H (Home), V (Paste); Esc goes back." FontSize="12"
@@ -918,7 +949,7 @@
                     </Border>
 
                     <!-- Localization Demo -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="Localization" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="The ribbon supports 20 languages: English, German, French, Spanish, Chinese, Japanese, Portuguese, Russian, Italian, Dutch, Polish, Korean, Turkish, Arabic, Czech, Swedish, Danish, Norwegian, Finnish, Hungarian." FontSize="12"
@@ -939,7 +970,7 @@
                     <Border Height="20" />
 
                     <!-- ScreenTip Showcase -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ScreenTip (Enhanced Tooltip)" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Hover over the Paste, Find, and Zoom buttons in the ribbon to see enhanced tooltips with Title, Description text, and DisableReason." FontSize="12"
@@ -974,9 +1005,13 @@
         </fluent:RibbonStatusBar>
 
         <!-- Backstage Overlay (spans all rows to cover the full page) -->
-        <fluent:Backstage x:Name="BackstageView" Title="File"
-                          Grid.RowSpan="3">
-            <fluent:Backstage.Items>
+        <fluent:Backstage
+            x:Name="BackstageView"
+            Grid.RowSpan="3"
+            Header="File">
+            <fluent:Backstage.Content>
+                <fluent:BackstageTabControl BackButtonUid="BackstageView.Back">
+                    <fluent:BackstageTabControl.Items>
                 <fluent:BackstageTabItem Header="Info" IconGlyph="&#xE946;">
                     <fluent:BackstageTabItem.Content>
                         <StackPanel Spacing="16" MaxWidth="600">
@@ -1036,7 +1071,9 @@
                         </StackPanel>
                     </fluent:BackstageTabItem.Content>
                 </fluent:BackstageTabItem>
-            </fluent:Backstage.Items>
+                    </fluent:BackstageTabControl.Items>
+                </fluent:BackstageTabControl>
+            </fluent:Backstage.Content>
         </fluent:Backstage>
     </Grid>
 </Page>

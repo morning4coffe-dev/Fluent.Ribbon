@@ -3,12 +3,12 @@ namespace Fluent;
 /// <summary>
 /// Represents a menu item for adding/removing items from the quick access toolbar.
 /// </summary>
-public partial class QuickAccessMenuItem : InteractiveMenuItemBase, IHeaderedControl
+public partial class QuickAccessMenuItem : MenuItem, IHeaderedControl
 {
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
+    public new static readonly DependencyProperty HeaderProperty =
         DependencyProperty.Register(
             nameof(Header),
             typeof(object),
@@ -18,7 +18,7 @@ public partial class QuickAccessMenuItem : InteractiveMenuItemBase, IHeaderedCon
     /// <summary>
     /// Gets or sets the header/label of the menu item.
     /// </summary>
-    public object? Header
+    public new object? Header
     {
         get => GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -42,7 +42,7 @@ public partial class QuickAccessMenuItem : InteractiveMenuItemBase, IHeaderedCon
     }
 
     /// <summary>Identifies the <see cref="IsChecked"/> dependency property.</summary>
-    public static readonly DependencyProperty IsCheckedProperty =
+    public new static readonly DependencyProperty IsCheckedProperty =
         DependencyProperty.Register(
             nameof(IsChecked),
             typeof(bool),
@@ -52,7 +52,7 @@ public partial class QuickAccessMenuItem : InteractiveMenuItemBase, IHeaderedCon
     /// <summary>
     /// Gets or sets whether the item is checked (shown in the QAT).
     /// </summary>
-    public bool IsChecked
+    public new bool IsChecked
     {
         get => (bool)GetValue(IsCheckedProperty);
         set => SetValue(IsCheckedProperty, value);

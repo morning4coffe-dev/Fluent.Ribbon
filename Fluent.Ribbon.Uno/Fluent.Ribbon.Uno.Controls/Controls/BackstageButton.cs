@@ -103,7 +103,7 @@ public partial class BackstageButton : Control
         set => SetValue(KeyTipProperty, value);
     }
 
-    /// <summary>Identifies the <see cref="IsEnabled"/> dependency property.</summary>
+    /// <summary>Identifies the <c>IsEnabled</c> dependency property.</summary>
     public static new readonly DependencyProperty IsEnabledProperty =
         DependencyProperty.Register(
             nameof(IsEnabled),
