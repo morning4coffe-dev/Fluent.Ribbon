@@ -11,6 +11,11 @@ public static class StaticConverters
     public static readonly ColorToSolidColorBrushConverter ColorToSolidColorBrushConverter = new();
 
     /// <summary>
+    /// Gets the WPF-compatible color-to-brush converter instance.
+    /// </summary>
+    public static readonly ColorToSolidColorBrushValueConverter ColorToSolidColorBrushValueConverter = new();
+
+    /// <summary>
     /// Gets a static instance of <see cref="InverseBoolConverter"/>.
     /// </summary>
     public static readonly InverseBoolConverter InverseBoolConverter = new();

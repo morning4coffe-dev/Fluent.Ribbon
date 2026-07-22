@@ -1,7 +1,7 @@
 namespace Fluent;
 
 /// <summary>
-/// Represents a contextual tab group that visually groups related <see cref="RibbonTab"/> instances
+/// Represents a contextual tab group that visually groups related <see cref="RibbonTabItem"/> instances
 /// together with a shared header and color.
 /// </summary>
 public partial class RibbonContextualTabGroup : Control
@@ -118,24 +118,24 @@ public partial class RibbonContextualTabGroup : Control
     /// <summary>
     /// Gets the collection of tab items in this contextual group.
     /// </summary>
-    public List<RibbonTab> Items { get; } = new();
+    public List<RibbonTabItem> Items { get; } = new();
 
     /// <summary>
     /// Gets the first visible tab item in this group.
     /// </summary>
-    public RibbonTab? FirstVisibleItem =>
+    public RibbonTabItem? FirstVisibleItem =>
         Items.FirstOrDefault(item => item.Visibility == Visibility.Visible);
 
     /// <summary>
     /// Gets the first visible and enabled tab item in this group.
     /// </summary>
-    public RibbonTab? FirstVisibleAndEnabledItem =>
+    public RibbonTabItem? FirstVisibleAndEnabledItem =>
         Items.FirstOrDefault(item => item.Visibility == Visibility.Visible && item.IsEnabled);
 
     /// <summary>
     /// Gets the last visible tab item in this group.
     /// </summary>
-    public RibbonTab? LastVisibleItem =>
+    public RibbonTabItem? LastVisibleItem =>
         Items.LastOrDefault(item => item.Visibility == Visibility.Visible);
 
     #endregion
@@ -150,7 +150,9 @@ public partial class RibbonContextualTabGroup : Control
         DefaultStyleKey = typeof(RibbonContextualTabGroup);
         Visibility = Visibility.Collapsed;
 
-        this.RegisterPropertyChangedCallback(VisibilityProperty, (s, e) => ((RibbonContextualTabGroup)s).UpdateInnerVisibility());
+        this.RegisterPropertyChangedCallback(
+            VisibilityProperty,
+            (s, e) => ((RibbonContextualTabGroup)s).UpdateInnerVisiblityAndGroupBorders());
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -162,7 +164,12 @@ public partial class RibbonContextualTabGroup : Control
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        UpdateInnerVisibility();
+        foreach (var item in Items)
+        {
+            AttachTabItem(item);
+        }
+
+        UpdateInnerVisiblityAndGroupBorders();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -176,19 +183,25 @@ public partial class RibbonContextualTabGroup : Control
     /// <summary>
     /// Appends a tab item to this contextual group.
     /// </summary>
-    internal void AppendTabItem(RibbonTab item)
+    internal void AppendTabItem(RibbonTabItem item)
     {
-        Items.Add(item);
-        UpdateInnerVisibility();
+        if (!Items.Contains(item))
+        {
+            Items.Add(item);
+            AttachTabItem(item);
+        }
+
+        UpdateInnerVisiblityAndGroupBorders();
     }
 
     /// <summary>
     /// Removes a tab item from this contextual group.
     /// </summary>
-    internal void RemoveTabItem(RibbonTab item)
+    internal void RemoveTabItem(RibbonTabItem item)
     {
+        DetachTabItem(item);
         Items.Remove(item);
-        UpdateInnerVisibility();
+        UpdateInnerVisiblityAndGroupBorders();
     }
 
     #endregion
@@ -204,7 +217,40 @@ public partial class RibbonContextualTabGroup : Control
         if (firstVisibleItem is not null)
         {
             e.Handled = true;
+            if (firstVisibleItem.TabControlParent is { IsMinimized: true } tabControl)
+            {
+                tabControl.IsMinimized = false;
+            }
+
             firstVisibleItem.IsSelected = true;
+        }
+    }
+
+    /// <summary>Handles the WPF-compatible primary-pointer release hook.</summary>
+    protected virtual void OnMouseLeftButtonUp(PointerRoutedEventArgs e)
+    {
+        var firstVisibleItem = FirstVisibleAndEnabledItem;
+        if (firstVisibleItem is null)
+        {
+            return;
+        }
+
+        if (firstVisibleItem.TabControlParent is { IsMinimized: true } tabControl)
+        {
+            tabControl.IsMinimized = false;
+        }
+
+        firstVisibleItem.IsSelected = true;
+        e.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerReleased(PointerRoutedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        if (!e.Handled)
+        {
+            OnMouseLeftButtonUp(e);
         }
     }
 
@@ -214,15 +260,7 @@ public partial class RibbonContextualTabGroup : Control
 
     private void UpdateInnerVisibility()
     {
-        InnerVisibility = Visibility == Visibility.Visible && Items.Any(item => item.Visibility == Visibility.Visible)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
-        // Propagate visibility to child tabs so they appear/disappear in the tab strip
-        foreach (var tab in Items)
-        {
-            tab.Visibility = Visibility;
-        }
+        UpdateContextualVisibilityAndBorders();
     }
 
     #endregion

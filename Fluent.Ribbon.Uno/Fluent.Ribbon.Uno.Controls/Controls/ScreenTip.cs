@@ -1,13 +1,19 @@
 namespace Fluent;
 
+using System.Collections;
+
 /// <summary>
 /// Represents an enhanced tooltip (ScreenTip) that displays a title, description,
 /// and optional image. ScreenTips provide rich tooltip functionality as seen
 /// in Microsoft Office applications.
 /// </summary>
 [ContentProperty(Name = nameof(Text))]
-public partial class ScreenTip : ContentControl
+public partial class ScreenTip : ToolTip, ILogicalChildSupport
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        UIElement,
+        ActiveScreenTipHolder> ActiveScreenTips = new();
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
@@ -31,33 +37,50 @@ public partial class ScreenTip : ContentControl
     public static readonly DependencyProperty TextProperty =
         DependencyProperty.Register(
             nameof(Text),
-            typeof(string),
+            typeof(object),
             typeof(ScreenTip),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
     /// Gets or sets the description text of the ScreenTip.
     /// </summary>
-    public string Text
+    public object? Text
     {
-        get => (string)GetValue(TextProperty);
+        get => GetValue(TextProperty);
         set => SetValue(TextProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="TextTemplate"/> dependency property.</summary>
+    public static readonly DependencyProperty TextTemplateProperty =
+        DependencyProperty.Register(
+            nameof(TextTemplate),
+            typeof(DataTemplate),
+            typeof(ScreenTip),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets or sets the template used by custom ScreenTip styles to render <see cref="Text"/>.
+    /// </summary>
+    public DataTemplate? TextTemplate
+    {
+        get => (DataTemplate?)GetValue(TextTemplateProperty);
+        set => SetValue(TextTemplateProperty, value);
     }
 
     /// <summary>Identifies the <see cref="Image"/> dependency property.</summary>
     public static readonly DependencyProperty ImageProperty =
         DependencyProperty.Register(
             nameof(Image),
-            typeof(ImageSource),
+            typeof(object),
             typeof(ScreenTip),
             new PropertyMetadata(null));
 
     /// <summary>
     /// Gets or sets the image shown in the ScreenTip.
     /// </summary>
-    public ImageSource? Image
+    public object? Image
     {
-        get => (ImageSource?)GetValue(ImageProperty);
+        get => GetValue(ImageProperty);
         set => SetValue(ImageProperty, value);
     }
 
@@ -84,7 +107,7 @@ public partial class ScreenTip : ContentControl
             nameof(HelpTopic),
             typeof(object),
             typeof(ScreenTip),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnHelpTopicChanged));
 
     /// <summary>
     /// Gets or sets the help topic associated with this ScreenTip.
@@ -112,7 +135,7 @@ public partial class ScreenTip : ContentControl
         set => SetValue(IsRibbonAlignedProperty, value);
     }
 
-    /// <summary>Identifies the <see cref="Width"/> dependency property override.</summary>
+    /// <summary>Identifies the <see cref="MaxWidthOverride"/> dependency property.</summary>
     public static readonly DependencyProperty MaxWidthOverrideProperty =
         DependencyProperty.Register(
             nameof(MaxWidthOverride),
@@ -129,9 +152,75 @@ public partial class ScreenTip : ContentControl
         set => SetValue(MaxWidthOverrideProperty, value);
     }
 
+    /// <summary>Identifies the <see cref="HelpLabelVisibility"/> dependency property.</summary>
+    public static readonly DependencyProperty HelpLabelVisibilityProperty =
+        DependencyProperty.Register(
+            nameof(HelpLabelVisibility),
+            typeof(Visibility),
+            typeof(ScreenTip),
+            new PropertyMetadata(Visibility.Visible, OnHelpLabelVisibilityChanged));
+
+    /// <summary>
+    /// Gets or sets the visibility of the "Press F1 for help" label. The label is only
+    /// shown when this is <see cref="Visibility.Visible"/> and a <see cref="HelpTopic"/> is set.
+    /// </summary>
+    public Visibility HelpLabelVisibility
+    {
+        get => (Visibility)GetValue(HelpLabelVisibilityProperty);
+        set => SetValue(HelpLabelVisibilityProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="HelpLabelActualVisibility"/> dependency property.</summary>
+    public static readonly DependencyProperty HelpLabelActualVisibilityProperty =
+        DependencyProperty.Register(
+            nameof(HelpLabelActualVisibility),
+            typeof(Visibility),
+            typeof(ScreenTip),
+            new PropertyMetadata(Visibility.Collapsed));
+
+    /// <summary>
+    /// Gets the effective visibility of the F1 help label (combines
+    /// <see cref="HelpLabelVisibility"/> and whether a <see cref="HelpTopic"/> is present).
+    /// </summary>
+    public Visibility HelpLabelActualVisibility
+    {
+        get => (Visibility)GetValue(HelpLabelActualVisibilityProperty);
+        private set => SetValue(HelpLabelActualVisibilityProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="HelpLabelText"/> dependency property.</summary>
+    public static readonly DependencyProperty HelpLabelTextProperty =
+        DependencyProperty.Register(
+            nameof(HelpLabelText),
+            typeof(string),
+            typeof(ScreenTip),
+            new PropertyMetadata(string.Empty));
+
+    /// <summary>
+    /// Gets the localized text shown in the F1 help label.
+    /// </summary>
+    public string HelpLabelText
+    {
+        get => (string)GetValue(HelpLabelTextProperty);
+        private set => SetValue(HelpLabelTextProperty, value);
+    }
+
+    #endregion
+
+    #region Events
+
+    /// <summary>
+    /// Occurs when the user presses F1 while a ScreenTip with a <see cref="HelpTopic"/> is shown.
+    /// </summary>
+    public static event EventHandler<ScreenTipHelpEventArgs>? HelpPressed;
+
     #endregion
 
     #region Constructor
+
+    private readonly KeyEventHandler _keyDownHandler;
+    private UIElement? _keyboardRoot;
+    private bool _isLoaded;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScreenTip"/> class.
@@ -139,6 +228,115 @@ public partial class ScreenTip : ContentControl
     public ScreenTip()
     {
         DefaultStyleKey = typeof(ScreenTip);
+        HelpLabelText = RibbonLocalization.Current.Localization.ScreenTipF1LabelHeader;
+
+        _keyDownHandler = OnRootKeyDown;
+        Loaded += OnScreenTipLoaded;
+        Unloaded += OnScreenTipUnloaded;
+    }
+
+    #endregion
+
+    #region F1 Help Handling
+
+    private static void OnHelpTopicChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var screenTip = (ScreenTip)d;
+        screenTip.UpdateHelpLabelActualVisibility();
+#if WINDOWS
+        screenTip.SetValue(
+            Microsoft.UI.Xaml.Automation.AutomationProperties.AcceleratorKeyProperty,
+            e.NewValue is null ? string.Empty : "F1");
+#endif
+        screenTip.UpdateKeyboardSubscription();
+    }
+
+    private static void OnHelpLabelVisibilityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        ((ScreenTip)d).UpdateHelpLabelActualVisibility();
+    }
+
+    private void UpdateHelpLabelActualVisibility()
+    {
+        HelpLabelActualVisibility = HelpLabelVisibility == Visibility.Visible && HelpTopic is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void OnScreenTipLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        UpdateKeyboardSubscription();
+    }
+
+    private void UpdateKeyboardSubscription()
+    {
+        if (!_isLoaded || HelpTopic is null)
+        {
+            DetachKeyboard();
+            return;
+        }
+
+        var root = XamlRoot?.Content as UIElement;
+        if (root is null || ReferenceEquals(root, _keyboardRoot))
+        {
+            return;
+        }
+
+        var holder = ActiveScreenTips.GetOrCreateValue(root);
+        if (holder.Active is { } previous && !ReferenceEquals(previous, this))
+        {
+            previous.DetachKeyboard();
+        }
+
+        DetachKeyboard();
+        _keyboardRoot = root;
+        holder.Active = this;
+        _keyboardRoot.AddHandler(UIElement.KeyDownEvent, _keyDownHandler, handledEventsToo: true);
+    }
+
+    private void OnScreenTipUnloaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = false;
+        DetachKeyboard();
+    }
+
+    private void DetachKeyboard()
+    {
+        if (_keyboardRoot is null)
+        {
+            return;
+        }
+
+        if (ActiveScreenTips.TryGetValue(_keyboardRoot, out var holder)
+            && ReferenceEquals(holder.Active, this))
+        {
+            holder.Active = null;
+        }
+
+        _keyboardRoot.RemoveHandler(UIElement.KeyDownEvent, _keyDownHandler);
+        _keyboardRoot = null;
+    }
+
+    private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (TryHandleHelpKey(e.Key, e.Handled))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool TryHandleHelpKey(Windows.System.VirtualKey key, bool isAlreadyHandled)
+    {
+        if (isAlreadyHandled
+            || key != Windows.System.VirtualKey.F1
+            || HelpTopic is null)
+        {
+            return false;
+        }
+
+        HelpPressed?.Invoke(null, new ScreenTipHelpEventArgs(HelpTopic));
+        return true;
     }
 
     #endregion
@@ -165,4 +363,60 @@ public partial class ScreenTip : ContentControl
     }
 
     #endregion
+
+    /// <inheritdoc />
+    void ILogicalChildSupport.AddLogicalChild(object child)
+    {
+    }
+
+    /// <inheritdoc />
+    void ILogicalChildSupport.RemoveLogicalChild(object child)
+    {
+    }
+
+    /// <summary>Gets logical children retained for WPF source compatibility.</summary>
+    protected virtual IEnumerator LogicalChildren
+    {
+        get
+        {
+            if (Text is not null)
+            {
+                yield return Text;
+            }
+
+            if (Image is not null)
+            {
+                yield return Image;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonScreenTipAutomationPeer(this);
+
+    private sealed class ActiveScreenTipHolder
+    {
+        public ScreenTip? Active { get; set; }
+    }
+}
+
+/// <summary>
+/// Event args for the <see cref="ScreenTip.HelpPressed"/> event.
+/// </summary>
+public class ScreenTipHelpEventArgs : EventArgs
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScreenTipHelpEventArgs"/> class.
+    /// </summary>
+    /// <param name="helpTopic">The help topic associated with the ScreenTip.</param>
+    public ScreenTipHelpEventArgs(object? helpTopic)
+    {
+        HelpTopic = helpTopic;
+    }
+
+    /// <summary>
+    /// Gets the help topic associated with the ScreenTip.
+    /// </summary>
+    public object? HelpTopic { get; }
 }

@@ -1,0 +1,53 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:StartScreenTabControl">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:StartScreenTabControl">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left pane: tab items + left content -->
+                        <Grid
+                            Background="{ThemeResource RibbonBackstageBackgroundBrush}"
+                            MinWidth="200">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <StackPanel x:Name="PART_ItemsPanel" Margin="0,8" />
+                            <ContentPresenter
+                                x:Name="PART_LeftContent"
+                                Grid.Row="1"
+                                Content="{TemplateBinding LeftContent}"
+                                Margin="{TemplateBinding LeftContentMargin}" />
+                        </Grid>
+
+                        <!-- Right pane: persistent content + selected tab content -->
+                        <Grid
+                            Grid.Column="1"
+                            Background="{ThemeResource RibbonContentBrush}"
+                            Padding="24">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <ContentPresenter Content="{TemplateBinding RightContent}" />
+                            <ContentPresenter
+                                x:Name="PART_RightContent"
+                                Grid.Row="1"
+                                Content="{TemplateBinding SelectedContent}" />
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

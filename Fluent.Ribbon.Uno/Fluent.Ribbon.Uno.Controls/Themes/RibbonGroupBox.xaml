@@ -5,10 +5,10 @@
 
     <Style TargetType="fluent:RibbonGroupBox">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource RibbonSubtleBorderBrush}" />
         <Setter Property="BorderThickness" Value="0,0,1,0" />
         <Setter Property="Margin" Value="2,0" />
-        <Setter Property="Padding" Value="4,2,4,0" />
+        <Setter Property="Padding" Value="6,2,6,0" />
         <Setter Property="MinWidth" Value="60" />
         <Setter Property="Template">
             <Setter.Value>
@@ -41,9 +41,8 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <StackPanel
+                                <fluent:RibbonGroupItemsPanel
                                     x:Name="PART_ItemsPanel"
-                                    Orientation="Horizontal"
                                     VerticalAlignment="Stretch"
                                     HorizontalAlignment="Left" />
 
@@ -53,34 +52,40 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <ContentPresenter
+                                    <ContentControl
                                         x:Name="PART_HeaderPresenter"
                                         Content="{TemplateBinding Header}"
-                                        HorizontalAlignment="Center">
-                                        <ContentPresenter.ContentTemplate>
-                                            <DataTemplate>
-                                                <TextBlock
-                                                    Text="{Binding}"
-                                                    FontSize="11"
-                                                    Foreground="{ThemeResource RibbonSecondaryTextBrush}"
-                                                    TextAlignment="Center" />
-                                            </DataTemplate>
-                                        </ContentPresenter.ContentTemplate>
-                                    </ContentPresenter>
+                                        ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                        HorizontalAlignment="Center" />
 
-                                    <Button
+                                    <fluent:Button
                                         x:Name="LauncherButton"
                                         Grid.Column="1"
-                                        Width="12"
-                                        Height="12"
-                                        Padding="0"
+                                        Width="16"
+                                        Height="16"
+                                        Padding="2"
                                         Margin="4,0,0,0"
+                                        CornerRadius="4"
                                         Background="Transparent"
                                         BorderThickness="0"
                                         Visibility="{Binding IsLauncherVisible, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"
                                         Command="{TemplateBinding LauncherCommand}">
+                                        <fluent:Button.Template>
+                                            <ControlTemplate TargetType="fluent:Button">
+                                                <Border
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="{TemplateBinding CornerRadius}">
+                                                    <ContentPresenter
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Content="{TemplateBinding Content}" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </fluent:Button.Template>
                                         <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
-                                    </Button>
+                                    </fluent:Button>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -93,7 +98,7 @@
                             BorderBrush="Transparent"
                             BorderThickness="1"
                             Padding="8,4"
-                            CornerRadius="3"
+                            CornerRadius="4"
                             MinWidth="56">
                             <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                 <!-- Icon Glyph (preferred) -->
@@ -104,16 +109,18 @@
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
                                 <!-- Fallback image icon -->
                                 <Image
-                                    Source="{TemplateBinding Icon}"
+                                    Source="{TemplateBinding CollapsedIcon}"
                                     Width="32"
                                     Height="32"
                                     Stretch="Uniform"
-                                    Visibility="{Binding Icon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}}" />
-                                <TextBlock
-                                    Text="{TemplateBinding Header}"
+                                    Visibility="{Binding CollapsedIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}}" />
+                                <ContentControl
+                                    x:Name="PART_CollapsedHeaderContentControl"
+                                    Content="{TemplateBinding Header}"
+                                    ContentTemplate="{TemplateBinding HeaderTemplate}"
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     FontSize="11"
-                                    TextAlignment="Center"
+                                    HorizontalContentAlignment="Center"
                                     Margin="0,2,0,0" />
                                 <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" Margin="0,2,0,0" />
                             </StackPanel>
@@ -125,8 +132,8 @@
                                 Background="{ThemeResource RibbonBackgroundBrush}"
                                 BorderBrush="{ThemeResource RibbonBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="4"
-                                Padding="4,2,4,0">
+                                CornerRadius="8"
+                                Padding="6,4,6,2">
                                 <Border.Shadow>
                                     <ThemeShadow />
                                 </Border.Shadow>

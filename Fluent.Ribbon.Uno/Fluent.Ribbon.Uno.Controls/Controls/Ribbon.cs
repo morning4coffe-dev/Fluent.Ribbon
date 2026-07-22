@@ -9,24 +9,37 @@ namespace Fluent;
 [TemplatePart(Name = PART_QuickAccessToolBar, Type = typeof(QuickAccessToolBar))]
 [TemplatePart(Name = PART_ContextualGroupsPanel, Type = typeof(RibbonContextualGroupsContainer))]
 [TemplatePart(Name = PART_BelowRibbonQAT, Type = typeof(QuickAccessToolBar))]
+[TemplatePart(Name = PART_ToolBarItemsHost, Type = typeof(Panel))]
+[TemplatePart(Name = PART_Title, Type = typeof(FrameworkElement))]
 public partial class Ribbon : Control
 {
     private const string PART_TabControl = "PART_RibbonTabControl";
     private const string PART_QuickAccessToolBar = "PART_QuickAccessToolBar";
     private const string PART_ContextualGroupsPanel = "PART_ContextualGroupsPanel";
     private const string PART_BelowRibbonQAT = "PART_BelowRibbonQAT";
+    private const string PART_ToolBarItemsHost = "PART_ToolBarItemsHost";
+    private const string PART_Title = "PART_Title";
 
     private RibbonTabControl? _tabControl;
     private QuickAccessToolBar? _quickAccessToolBar;
     private QuickAccessToolBar? _belowRibbonQAT;
     private RibbonContextualGroupsContainer? _contextualGroupsPanel;
+    private Panel? _toolBarItemsHost;
+    private FrameworkElement? _titleText;
+    private bool _isUpdatingQatLocation;
+    private readonly KeyTipService _keyTipService;
+    private readonly HashSet<RibbonTabItem> _visibilityHookedTabs = new();
+    private readonly HashSet<RibbonContextualTabGroup> _visibilityHookedGroups = new();
+
+    // Maps a ribbon control to the compact copy it contributed to the Quick Access Toolbar.
+    private readonly Dictionary<IQuickAccessItemProvider, FrameworkElement> _quickAccessMap = new();
 
     #region Events
 
     /// <summary>
     /// Occurs when the selected tab changes.
     /// </summary>
-    public event EventHandler<RibbonTab?>? SelectedTabChanged;
+    public event SelectionChangedEventHandler? SelectedTabChanged;
 
     #endregion
 
@@ -36,23 +49,23 @@ public partial class Ribbon : Control
     public static readonly DependencyProperty TabsProperty =
         DependencyProperty.Register(
             nameof(Tabs),
-            typeof(ObservableCollection<RibbonTab>),
+            typeof(ObservableCollection<RibbonTabItem>),
             typeof(Ribbon),
             new PropertyMetadata(null));
 
     /// <summary>
     /// Gets the collection of ribbon tabs.
     /// </summary>
-    public ObservableCollection<RibbonTab> Tabs
+    public ObservableCollection<RibbonTabItem> Tabs
     {
-        get => (ObservableCollection<RibbonTab>)GetValue(TabsProperty);
+        get => (ObservableCollection<RibbonTabItem>)GetValue(TabsProperty);
         private set => SetValue(TabsProperty, value);
     }
 
-    /// <summary>Identifies the <see cref="QuickAccessItems"/> dependency property.</summary>
-    public static readonly DependencyProperty QuickAccessItemsProperty =
+    /// <summary>Identifies the <see cref="QuickAccessToolBarItems"/> dependency property.</summary>
+    public static readonly DependencyProperty QuickAccessToolBarItemsProperty =
         DependencyProperty.Register(
-            nameof(QuickAccessItems),
+            nameof(QuickAccessToolBarItems),
             typeof(ObservableCollection<UIElement>),
             typeof(Ribbon),
             new PropertyMetadata(null));
@@ -60,10 +73,10 @@ public partial class Ribbon : Control
     /// <summary>
     /// Gets the collection of quick access toolbar items.
     /// </summary>
-    public ObservableCollection<UIElement> QuickAccessItems
+    public ObservableCollection<UIElement> QuickAccessToolBarItems
     {
-        get => (ObservableCollection<UIElement>)GetValue(QuickAccessItemsProperty);
-        private set => SetValue(QuickAccessItemsProperty, value);
+        get => (ObservableCollection<UIElement>)GetValue(QuickAccessToolBarItemsProperty);
+        private set => SetValue(QuickAccessToolBarItemsProperty, value);
     }
 
     /// <summary>Identifies the <see cref="ContextualGroups"/> dependency property.</summary>
@@ -104,16 +117,16 @@ public partial class Ribbon : Control
     public static readonly DependencyProperty SelectedTabProperty =
         DependencyProperty.Register(
             nameof(SelectedTab),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             typeof(Ribbon),
             new PropertyMetadata(null, OnSelectedTabChanged));
 
     /// <summary>
     /// Gets or sets the currently selected tab.
     /// </summary>
-    public RibbonTab? SelectedTab
+    public RibbonTabItem? SelectedTab
     {
-        get => (RibbonTab?)GetValue(SelectedTabProperty);
+        get => (RibbonTabItem?)GetValue(SelectedTabProperty);
         set => SetValue(SelectedTabProperty, value);
     }
 
@@ -223,16 +236,16 @@ public partial class Ribbon : Control
     public static readonly DependencyProperty MenuProperty =
         DependencyProperty.Register(
             nameof(Menu),
-            typeof(UIElement),
+            typeof(FrameworkElement),
             typeof(Ribbon),
             new PropertyMetadata(null));
 
     /// <summary>
     /// Gets or sets the application menu (backstage).
     /// </summary>
-    public UIElement? Menu
+    public FrameworkElement? Menu
     {
-        get => (UIElement?)GetValue(MenuProperty);
+        get => (FrameworkElement?)GetValue(MenuProperty);
         set => SetValue(MenuProperty, value);
     }
 
@@ -292,6 +305,7 @@ public partial class Ribbon : Control
         if (d is Ribbon ribbon)
         {
             ribbon.UpdateSimplifiedState();
+            ribbon.SaveStateTemporaryIfAvailable();
         }
     }
 
@@ -321,7 +335,7 @@ public partial class Ribbon : Control
             _tabControl.ContentHeight = IsSimplified ? 44 : double.NaN;
         }
 
-        VisualStateManager.GoToState(this, IsSimplified ? "Simplified" : "Normal", true);
+        VisualStateManager.GoToState(this, IsSimplified ? "SimplifiedOn" : "SimplifiedOff", true);
     }
 
     /// <summary>Identifies the <see cref="AreTabHeadersVisible"/> dependency property.</summary>
@@ -368,15 +382,20 @@ public partial class Ribbon : Control
     public Ribbon()
     {
         DefaultStyleKey = typeof(Ribbon);
-        Tabs = new ObservableCollection<RibbonTab>();
-        QuickAccessItems = new ObservableCollection<UIElement>();
+        Tabs = new ObservableCollection<RibbonTabItem>();
+        QuickAccessToolBarItems = new ObservableCollection<UIElement>();
         ContextualGroups = new ObservableCollection<RibbonContextualTabGroup>();
         ToolBarItems = new ObservableCollection<UIElement>();
 
         Tabs.CollectionChanged += OnTabsCollectionChanged;
         ContextualGroups.CollectionChanged += OnContextualGroupsCollectionChanged;
+        QuickAccessToolBarItems.CollectionChanged += OnQuickAccessItemsCollectionChanged;
+        ToolBarItems.CollectionChanged += OnToolBarItemsCollectionChanged;
+        _keyTipService = new KeyTipService(this);
         Loaded += OnRibbonLoaded;
+        Unloaded += OnRibbonUnloaded;
         SizeChanged += OnRibbonSizeChanged;
+        InitializeCompatibility();
     }
 
     #endregion
@@ -392,10 +411,29 @@ public partial class Ribbon : Control
         _quickAccessToolBar = GetTemplateChild(PART_QuickAccessToolBar) as QuickAccessToolBar;
         _belowRibbonQAT = GetTemplateChild(PART_BelowRibbonQAT) as QuickAccessToolBar;
         _contextualGroupsPanel = GetTemplateChild(PART_ContextualGroupsPanel) as RibbonContextualGroupsContainer;
+        _toolBarItemsHost = GetTemplateChild(PART_ToolBarItemsHost) as Panel;
+        _titleText = GetTemplateChild(PART_Title) as FrameworkElement;
+        UpdateCompatibilityTemplateParts();
+
+        HookQuickAccessToolBar(_quickAccessToolBar);
+        HookQuickAccessToolBar(_belowRibbonQAT);
 
         SyncAllTabs();
         SyncContextualGroups();
+        SyncToolBarItems();
         UpdateQATPosition();
+        SyncQuickAccessItems();
+    }
+
+    private void HookQuickAccessToolBar(QuickAccessToolBar? qat)
+    {
+        if (qat is null)
+        {
+            return;
+        }
+
+        qat.ShowAboveRibbonChanged -= OnQatShowAboveRibbonChanged;
+        qat.ShowAboveRibbonChanged += OnQatShowAboveRibbonChanged;
     }
 
     private void OnRibbonLoaded(object sender, RoutedEventArgs e)
@@ -405,6 +443,29 @@ public partial class Ribbon : Control
         SyncAllTabs();
         SyncContextualGroups();
         LinkContextualTabGroups();
+        SyncToolBarItems();
+        SyncQuickAccessItems();
+
+        // A contextual group authored visible in XAML links its tabs here; make sure the title
+        // reflects that immediately so it doesn't overlap the header on first render.
+        UpdateTitleVisibility();
+
+        // Re-apply simplified layout now that tabs/groups are populated.
+        if (IsSimplified)
+        {
+            UpdateSimplifiedState();
+        }
+
+        // Hook keyboard for Alt/F10 KeyTip navigation (XamlRoot is available now).
+        if (IsKeyTipHandlingEnabled)
+        {
+            _keyTipService.Initialize();
+        }
+    }
+
+    private void OnRibbonUnloaded(object sender, RoutedEventArgs e)
+    {
+        _keyTipService.Teardown();
     }
 
     private void SyncAllTabs()
@@ -429,6 +490,7 @@ public partial class Ribbon : Control
         _tabControl.SelectionChanged -= OnTabControlSelectionChanged;
         _tabControl.SelectionChanged += OnTabControlSelectionChanged;
 
+        HookTabVisibility();
         SyncSelectedTab();
     }
 
@@ -440,6 +502,7 @@ public partial class Ribbon : Control
     {
         SyncContextualGroups();
         LinkContextualTabGroups();
+        UpdateTitleVisibility();
     }
 
     private void SyncContextualGroups()
@@ -450,7 +513,28 @@ public partial class Ribbon : Control
         foreach (var group in ContextualGroups)
         {
             _contextualGroupsPanel.Children.Add(group);
+
+            // Observe each group's computed InnerVisibility so the title bar reacts whenever a
+            // contextual header shows or hides (e.g. the app toggles the group's Visibility at
+            // runtime). Driving this directly off InnerVisibility - rather than off the linked
+            // tabs' visibility - avoids a load-time gap where an already-visible tab produces no
+            // change notification, which would leave the title overlapping the header. Hook once
+            // per group to avoid stacking duplicate callbacks across repeated syncs.
+            if (_visibilityHookedGroups.Add(group))
+            {
+                group.RegisterPropertyChangedCallback(
+                    RibbonContextualTabGroup.InnerVisibilityProperty,
+                    OnContextualGroupInnerVisibilityChanged);
+            }
         }
+    }
+
+    private void OnContextualGroupInnerVisibilityChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        // A contextual header appearing or disappearing changes whether the centered title would
+        // overlap it, and shifts the header row, so refresh the title and re-align the headers.
+        UpdateTitleVisibility();
+        _contextualGroupsPanel?.InvalidateArrange();
     }
 
     /// <summary>
@@ -461,24 +545,28 @@ public partial class Ribbon : Control
     {
         foreach (var tab in Tabs)
         {
-            if (!string.IsNullOrEmpty(tab.ContextualTabGroupName))
+            var group = string.IsNullOrEmpty(tab.ContextualTabGroupName)
+                ? null
+                : ContextualGroups.FirstOrDefault(g => g.Header == tab.ContextualTabGroupName);
+
+            if (!ReferenceEquals(tab.Group, group))
             {
-                var group = ContextualGroups.FirstOrDefault(g => g.Header == tab.ContextualTabGroupName);
-                if (group is not null)
-                {
-                    tab.IsContextual = true;
-                    tab.Group = group;
-
-                    // Only add if not already in the group's items
-                    if (!group.Items.Contains(tab))
-                    {
-                        group.AppendTabItem(tab);
-                    }
-
-                    // Set initial tab visibility to match the group
-                    tab.Visibility = group.Visibility;
-                }
+                tab.Group = group;
             }
+
+            if (group is null)
+            {
+                continue;
+            }
+
+            tab.IsContextual = true;
+
+            if (!group.Items.Contains(tab))
+            {
+                group.AppendTabItem(tab);
+            }
+
+            group.UpdateInnerVisiblityAndGroupBorders();
         }
     }
 
@@ -488,6 +576,9 @@ public partial class Ribbon : Control
 
     private void OnRibbonSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        // Tab positions change with width, so keep contextual-group headers aligned.
+        _contextualGroupsPanel?.InvalidateArrange();
+
         if (IsAutomaticCollapseEnabled)
         {
             // Collapse ribbon only when the available width is very small.
@@ -511,7 +602,7 @@ public partial class Ribbon : Control
             case NotifyCollectionChangedAction.Add:
                 if (e.NewItems is not null)
                 {
-                    foreach (RibbonTab tab in e.NewItems)
+                    foreach (RibbonTabItem tab in e.NewItems)
                     {
                         _tabControl.TabItems.Add(tab);
                     }
@@ -526,7 +617,7 @@ public partial class Ribbon : Control
             case NotifyCollectionChangedAction.Remove:
                 if (e.OldItems is not null)
                 {
-                    foreach (RibbonTab tab in e.OldItems)
+                    foreach (RibbonTabItem tab in e.OldItems)
                     {
                         _tabControl.TabItems.Remove(tab);
                     }
@@ -538,16 +629,18 @@ public partial class Ribbon : Control
                 break;
         }
 
+        _tabControl.NotifyTabItemsChanged(e);
         LinkContextualTabGroups();
+        HookTabVisibility();
     }
 
     private void OnTabControlSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_tabControl?.SelectedItem is RibbonTab tab)
+        if (_tabControl?.SelectedItem is RibbonTabItem tab)
         {
             SelectedTab = tab;
             SelectedTabIndex = Tabs.IndexOf(tab);
-            SelectedTabChanged?.Invoke(this, tab);
+            SelectedTabChanged?.Invoke(this, e);
         }
     }
 
@@ -575,6 +668,8 @@ public partial class Ribbon : Control
         if (d is Ribbon ribbon)
         {
             ribbon.UpdateMinimizedState();
+            ribbon.RaiseIsMinimizedChanged(e);
+            ribbon.SaveStateTemporaryIfAvailable();
         }
     }
 
@@ -583,6 +678,7 @@ public partial class Ribbon : Control
         if (d is Ribbon ribbon)
         {
             VisualStateManager.GoToState(ribbon, (bool)e.NewValue ? "Collapsed" : "Expanded", true);
+            ribbon.RaiseIsCollapsedChanged(e);
         }
     }
 
@@ -591,6 +687,8 @@ public partial class Ribbon : Control
         if (d is Ribbon ribbon)
         {
             ribbon.UpdateQATPosition();
+            ribbon.UpdateCompatibilityQatSurface();
+            ribbon.SaveStateTemporaryIfAvailable();
         }
     }
 
@@ -610,6 +708,83 @@ public partial class Ribbon : Control
         }
     }
 
+    /// <summary>
+    /// Subscribes to each tab's <see cref="UIElement.Visibility"/> so the ribbon can react when a
+    /// contextual tab is hidden (e.g. its contextual group is toggled off). Registration is tracked
+    /// per tab so repeated syncs don't add duplicate callbacks.
+    /// </summary>
+    private void HookTabVisibility()
+    {
+        foreach (var tab in Tabs)
+        {
+            if (_visibilityHookedTabs.Add(tab))
+            {
+                tab.RegisterPropertyChangedCallback(VisibilityProperty, OnTabVisibilityChanged);
+            }
+        }
+    }
+
+    private void OnTabVisibilityChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        EnsureSelectedTabVisible();
+
+        // A contextual tab appearing/disappearing shifts the tab strip, so re-align the
+        // colored contextual-group headers above their tabs.
+        _contextualGroupsPanel?.InvalidateArrange();
+
+        // The centered window title and the contextual-group headers share the title bar,
+        // so hide the title while any contextual header is showing to avoid them overlapping.
+        UpdateTitleVisibility();
+    }
+
+    /// <summary>
+    /// Hides the centered window title while any contextual-group header is visible, since both
+    /// occupy the title bar and a contextual tab near the center would otherwise overlap the title.
+    /// </summary>
+    private void UpdateTitleVisibility()
+    {
+        if (_titleText is null)
+        {
+            return;
+        }
+
+        var anyContextualVisible = false;
+        foreach (var group in ContextualGroups)
+        {
+            if (group.InnerVisibility == Visibility.Visible)
+            {
+                anyContextualVisible = true;
+                break;
+            }
+        }
+
+        _titleText.Visibility = anyContextualVisible ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Ensures the currently selected tab is visible. When the selected tab has been hidden
+    /// (a contextual tab whose group was toggled off), the ribbon falls back to the first visible
+    /// tab instead of leaving stale content with no selected header — matching WPF behaviour.
+    /// </summary>
+    private void EnsureSelectedTabVisible()
+    {
+        if (_tabControl is null)
+        {
+            return;
+        }
+
+        if (_tabControl.SelectedItem is RibbonTabItem { Visibility: Visibility.Visible })
+        {
+            return;
+        }
+
+        var fallback = Tabs.FirstOrDefault(t => t.Visibility == Visibility.Visible);
+        if (fallback is not null)
+        {
+            _tabControl.SelectedItem = fallback;
+        }
+    }
+
     private void UpdateMinimizedState()
     {
         VisualStateManager.GoToState(this, IsMinimized ? "Minimized" : "Normal", true);
@@ -624,7 +799,130 @@ public partial class Ribbon : Control
             visible && showAbove ? "QATAbove" :
             visible && !showAbove ? "QATBelow" :
             "QATHidden", true);
+
+        // Keep both toolbars' own menu state aligned with the ribbon (guarded against re-entrancy).
+        _isUpdatingQatLocation = true;
+        if (_quickAccessToolBar is not null)
+        {
+            _quickAccessToolBar.ShowAboveRibbon = showAbove;
+        }
+
+        if (_belowRibbonQAT is not null)
+        {
+            _belowRibbonQAT.ShowAboveRibbon = showAbove;
+        }
+        _isUpdatingQatLocation = false;
+
+        SyncQuickAccessItems();
     }
+
+    private void OnQatShowAboveRibbonChanged(object? sender, bool showAbove)
+    {
+        if (_isUpdatingQatLocation)
+        {
+            return;
+        }
+
+        ShowQuickAccessToolBarAboveRibbon = showAbove;
+    }
+
+    private void OnQuickAccessItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncQuickAccessItems();
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="QuickAccessToolBarItems"/> into whichever quick access toolbar is currently
+    /// active (above or below the ribbon), clearing the other so each element keeps a single parent.
+    /// </summary>
+    private void SyncQuickAccessItems()
+    {
+        var above = ShowQuickAccessToolBarAboveRibbon;
+        var active = above ? _quickAccessToolBar : _belowRibbonQAT;
+        var inactive = above ? _belowRibbonQAT : _quickAccessToolBar;
+
+        inactive?.Items.Clear();
+
+        if (active is null)
+        {
+            return;
+        }
+
+        active.Items.Clear();
+        foreach (var item in QuickAccessToolBarItems)
+        {
+            active.Items.Add(item);
+        }
+    }
+
+    private void OnToolBarItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncToolBarItems();
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="ToolBarItems"/> into the host panel on the right of the title bar.
+    /// </summary>
+    private void SyncToolBarItems()
+    {
+        if (_toolBarItemsHost is null)
+        {
+            return;
+        }
+
+        _toolBarItemsHost.Children.Clear();
+        foreach (var item in ToolBarItems)
+        {
+            _toolBarItemsHost.Children.Add(item);
+        }
+    }
+
+    #region Quick Access Toolbar integration
+
+    /// <summary>
+    /// Returns whether the given control currently has an item in the Quick Access Toolbar.
+    /// </summary>
+    public bool IsInQuickAccessToolBar(IQuickAccessItemProvider provider)
+    {
+        return provider is not null && _quickAccessMap.ContainsKey(provider);
+    }
+
+    /// <summary>
+    /// Adds a compact copy of the given control to the Quick Access Toolbar. Does nothing
+    /// if the control is already present or cannot provide a quick access item.
+    /// </summary>
+    public void AddToQuickAccessToolBar(IQuickAccessItemProvider provider)
+    {
+        if (provider is null || _quickAccessMap.ContainsKey(provider))
+        {
+            return;
+        }
+
+        var item = provider.CreateQuickAccessItem();
+        if (item is null)
+        {
+            return;
+        }
+
+        _quickAccessMap[provider] = item;
+        QuickAccessToolBarItems.Add(item);
+    }
+
+    /// <summary>
+    /// Removes the Quick Access Toolbar item previously created for the given control.
+    /// </summary>
+    public void RemoveFromQuickAccessToolBar(IQuickAccessItemProvider provider)
+    {
+        if (provider is null || !_quickAccessMap.TryGetValue(provider, out var item))
+        {
+            return;
+        }
+
+        _quickAccessMap.Remove(provider);
+        QuickAccessToolBarItems.Remove(item);
+    }
+
+    #endregion
 
     /// <summary>
     /// Toggles the minimize state of the ribbon (if CanMinimize is true).

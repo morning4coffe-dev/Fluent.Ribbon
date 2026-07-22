@@ -1,77 +1,154 @@
 namespace Fluent;
 
 /// <summary>
-/// A panel for the <see cref="RibbonStatusBar"/> that arranges children from left to right,
-/// with right-aligned items placed at the end.
+/// Arranges left- and right-aligned status-bar children and zero-measures overflow.
 /// </summary>
-/// <remarks>
-/// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
-/// </remarks>
 public partial class StatusBarPanel : Panel
 {
-    /// <inheritdoc/>
-    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
-    {
-        double maxHeight = 0;
-        double totalWidth = 0;
+    private readonly List<UIElement> _leftChildren = new();
+    private readonly List<UIElement> _rightChildren = new();
+    private readonly List<UIElement> _otherChildren = new();
 
-        foreach (var child in Children)
+    private int _lastRightIndex;
+    private int _lastLeftIndex;
+
+    /// <inheritdoc />
+    protected override Windows.Foundation.Size MeasureOverride(
+        Windows.Foundation.Size availableSize)
+    {
+        _leftChildren.Clear();
+        _rightChildren.Clear();
+        _otherChildren.Clear();
+
+        foreach (var child in Children.OfType<FrameworkElement>())
         {
-            child.Measure(availableSize);
-            totalWidth += child.DesiredSize.Width;
-            maxHeight = Math.Max(maxHeight, child.DesiredSize.Height);
+            switch (child.HorizontalAlignment)
+            {
+                case HorizontalAlignment.Left:
+                    _leftChildren.Add(child);
+                    break;
+                case HorizontalAlignment.Right:
+                    _rightChildren.Add(child);
+                    break;
+                default:
+                    _otherChildren.Add(child);
+                    break;
+            }
         }
 
-        var width = double.IsPositiveInfinity(availableSize.Width)
-            ? totalWidth
-            : availableSize.Width;
+        _lastRightIndex = _rightChildren.Count;
+        _lastLeftIndex = _leftChildren.Count;
 
-        return new Windows.Foundation.Size(width, maxHeight);
-    }
+        var zero = new Windows.Foundation.Size(0, 0);
+        var infinite = new Windows.Foundation.Size(
+            double.PositiveInfinity,
+            double.PositiveInfinity);
+        var width = 0D;
+        var height = 0D;
+        var canAdd = true;
 
-    /// <inheritdoc/>
-    protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize)
-    {
-        // Separate left-aligned and right-aligned children
-        var leftChildren = new List<UIElement>();
-        var rightChildren = new List<UIElement>();
-
-        foreach (var child in Children)
+        for (var index = 0; index < _rightChildren.Count; index++)
         {
-            if (child.Visibility == Visibility.Collapsed)
+            var child = _rightChildren[index];
+            if (!canAdd)
             {
+                child.Measure(zero);
                 continue;
             }
 
-            if (child is FrameworkElement fe && fe.HorizontalAlignment == HorizontalAlignment.Right)
+            child.Measure(infinite);
+            height = Math.Max(height, child.DesiredSize.Height);
+            if (width + child.DesiredSize.Width <= availableSize.Width)
             {
-                rightChildren.Add(child);
+                width += child.DesiredSize.Width;
+                continue;
+            }
+
+            canAdd = false;
+            child.Measure(zero);
+            _lastRightIndex = index;
+            _lastLeftIndex = 0;
+        }
+
+        for (var index = 0; index < _leftChildren.Count; index++)
+        {
+            var child = _leftChildren[index];
+            if (!canAdd)
+            {
+                child.Measure(zero);
+                continue;
+            }
+
+            child.Measure(infinite);
+            height = Math.Max(height, child.DesiredSize.Height);
+            if (width + child.DesiredSize.Width <= availableSize.Width)
+            {
+                width += child.DesiredSize.Width;
+                continue;
+            }
+
+            canAdd = false;
+            child.Measure(zero);
+            _lastLeftIndex = index;
+        }
+
+        foreach (var child in _otherChildren)
+        {
+            child.Measure(zero);
+        }
+
+        return new Windows.Foundation.Size(width, height);
+    }
+
+    /// <inheritdoc />
+    protected override Windows.Foundation.Size ArrangeOverride(
+        Windows.Foundation.Size finalSize)
+    {
+        var zero = new Windows.Foundation.Rect(0, 0, 0, 0);
+        var rightShift = 0D;
+
+        for (var index = _rightChildren.Count - 1; index >= 0; index--)
+        {
+            var child = _rightChildren[index];
+            if (_lastRightIndex > index)
+            {
+                rightShift += child.DesiredSize.Width;
+                child.Arrange(
+                    new Windows.Foundation.Rect(
+                        finalSize.Width - rightShift,
+                        0,
+                        child.DesiredSize.Width,
+                        finalSize.Height));
             }
             else
             {
-                leftChildren.Add(child);
+                child.Arrange(zero);
             }
         }
 
-        // Arrange left-aligned children
-        double leftOffset = 0;
-
-        foreach (var child in leftChildren)
+        var leftShift = 0D;
+        for (var index = 0; index < _leftChildren.Count; index++)
         {
-            var width = child.DesiredSize.Width;
-            child.Arrange(new Windows.Foundation.Rect(leftOffset, 0, width, finalSize.Height));
-            leftOffset += width;
+            var child = _leftChildren[index];
+            if (index < _lastLeftIndex)
+            {
+                child.Arrange(
+                    new Windows.Foundation.Rect(
+                        leftShift,
+                        0,
+                        child.DesiredSize.Width,
+                        finalSize.Height));
+                leftShift += child.DesiredSize.Width;
+            }
+            else
+            {
+                child.Arrange(zero);
+            }
         }
 
-        // Arrange right-aligned children (from right edge)
-        double rightOffset = finalSize.Width;
-
-        for (var i = rightChildren.Count - 1; i >= 0; i--)
+        foreach (var child in _otherChildren)
         {
-            var child = rightChildren[i];
-            var width = child.DesiredSize.Width;
-            rightOffset -= width;
-            child.Arrange(new Windows.Foundation.Rect(rightOffset, 0, width, finalSize.Height));
+            child.Arrange(zero);
         }
 
         return finalSize;

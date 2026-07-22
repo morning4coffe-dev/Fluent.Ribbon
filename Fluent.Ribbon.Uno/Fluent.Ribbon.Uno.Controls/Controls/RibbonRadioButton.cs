@@ -141,4 +141,8 @@ public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IH
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonRadioButtonAutomationPeer(this);
 }

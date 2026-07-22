@@ -26,6 +26,17 @@ public static class CommandHelper
     }
 
     /// <summary>
+    /// Determines whether the command can execute for a portable target descriptor.
+    /// </summary>
+    public static bool CanExecute(
+        ICommand? command,
+        object? commandParameter,
+        UIElement? commandTarget)
+    {
+        return CanExecute(command, commandParameter);
+    }
+
+    /// <summary>
     /// Executes the command with the given parameter.
     /// </summary>
     /// <param name="command">The command.</param>
@@ -41,5 +52,14 @@ public static class CommandHelper
         {
             command.Execute(commandParameter);
         }
+    }
+
+    /// <summary>Executes the command for a portable target descriptor.</summary>
+    public static void Execute(
+        ICommand? command,
+        object? commandParameter,
+        UIElement? commandTarget)
+    {
+        Execute(command, commandParameter);
     }
 }

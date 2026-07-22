@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks />
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Fluent.Ribbon.ApiCompatibility.Tests</RootNamespace>
+    <AssemblyName>Fluent.Ribbon.ApiCompatibility.Tests</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWpf>false</UseWpf>
+    <UseWindowsForms>false</UseWindowsForms>
+    <SignAssembly>false</SignAssembly>
+    <PublicSign>false</PublicSign>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
+    <None Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
+    <PackageReference Remove="GitVersion.MsBuild" />
+    <PackageReference Remove="JetBrains.Annotations" />
+    <PackageReference Remove="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Remove="StyleCop.Analyzers" />
+    <PackageReference Remove="WpfAnalyzers" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fluent.Ribbon.ApiCompatibility\Fluent.Ribbon.ApiCompatibility.csproj" />
+    <ProjectReference Include="..\..\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj" />
+  </ItemGroup>
+</Project>

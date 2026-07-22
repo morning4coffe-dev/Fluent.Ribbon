@@ -1,0 +1,36 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop</TargetFrameworks>
+    <UnoSingleProject>false</UnoSingleProject>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FluentUno.PackageConsumer</RootNamespace>
+    <AssemblyName>Fluent.Ribbon.Uno.PackageConsumer</AssemblyName>
+    <UnoFeatures>SkiaRenderer;</UnoFeatures>
+    <UseWpf>false</UseWpf>
+    <UseWindowsForms>false</UseWindowsForms>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+    <SignAssembly>false</SignAssembly>
+    <PublicSign>false</PublicSign>
+    <FluentRibbonUnoPackageVersion Condition="'$(FluentRibbonUnoPackageVersion)' == ''">0.1.0-local</FluentRibbonUnoPackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fluent.Ribbon.Uno" Version="$(FluentRibbonUnoPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
+    <None Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
+    <PackageReference Remove="GitVersion.MsBuild" />
+    <PackageReference Remove="JetBrains.Annotations" />
+    <PackageReference Remove="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Remove="StyleCop.Analyzers" />
+    <PackageReference Remove="WpfAnalyzers" />
+  </ItemGroup>
+</Project>

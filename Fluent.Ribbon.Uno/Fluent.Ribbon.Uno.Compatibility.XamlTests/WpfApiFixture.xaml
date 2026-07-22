@@ -1,0 +1,35 @@
+<UserControl
+    x:Class="FluentUno.Compatibility.XamlTests.WpfApiFixture"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+    <fluent:Ribbon>
+        <fluent:Ribbon.Tabs>
+            <fluent:RibbonTabItem Header="Home">
+                <fluent:RibbonTabItem.Groups>
+                    <fluent:RibbonGroupBox Header="Clipboard">
+                        <fluent:RibbonGroupBox.Items>
+                            <fluent:Button
+                                CanAddToQuickAccessToolBar="True"
+                                Header="Paste"
+                                KeyTip="V"
+                                Size="Large"
+                                SizeDefinition="Large Middle Small">
+                                <fluent:Button.ContextFlyout>
+                                    <fluent:ContextMenu />
+                                </fluent:Button.ContextFlyout>
+                            </fluent:Button>
+                            <fluent:ToggleButton
+                                Header="Pin"
+                                KeyTip="P"
+                                Size="Middle" />
+                            <fluent:CheckBox
+                                Header="Option"
+                                Size="Small" />
+                        </fluent:RibbonGroupBox.Items>
+                    </fluent:RibbonGroupBox>
+                </fluent:RibbonTabItem.Groups>
+            </fluent:RibbonTabItem>
+        </fluent:Ribbon.Tabs>
+    </fluent:Ribbon>
+</UserControl>

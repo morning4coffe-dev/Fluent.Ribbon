@@ -1,0 +1,37 @@
+<UserControl
+    x:Class="FluentUno.PackageConsumer.PackageFixture"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Generic.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <fluent:Ribbon>
+        <fluent:Ribbon.Tabs>
+            <fluent:RibbonTabItem Header="Home">
+                <fluent:RibbonTabItem.Groups>
+                    <fluent:RibbonGroupBox Header="Package">
+                        <fluent:RibbonGroupBox.Items>
+                            <fluent:Button
+                                Header="Packaged command"
+                                KeyTip="P"
+                                Size="Middle"
+                                SizeDefinition="Large Middle Small">
+                                <fluent:Button.ContextFlyout>
+                                    <fluent:ContextMenu ResizeMode="Both">
+                                        <MenuFlyoutItem Text="Package context action" />
+                                    </fluent:ContextMenu>
+                                </fluent:Button.ContextFlyout>
+                            </fluent:Button>
+                        </fluent:RibbonGroupBox.Items>
+                    </fluent:RibbonGroupBox>
+                </fluent:RibbonTabItem.Groups>
+            </fluent:RibbonTabItem>
+        </fluent:Ribbon.Tabs>
+    </fluent:Ribbon>
+</UserControl>

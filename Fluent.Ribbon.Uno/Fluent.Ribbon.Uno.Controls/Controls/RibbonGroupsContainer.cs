@@ -12,7 +12,7 @@ using Fluent.Internal;
 /// Ported from WPF Fluent.Ribbon, adapted for Uno/WinUI.
 /// WinUI does not have IScrollInfo; horizontal scrolling is handled by a parent ScrollViewer.
 /// </remarks>
-public partial class RibbonGroupsContainer : Panel
+public partial class RibbonGroupsContainer : Panel, IScrollInfo
 {
     #region Reduce Order
 
@@ -251,6 +251,26 @@ public partial class RibbonGroupsContainer : Panel
         }
 
         return null;
+    }
+
+    internal void GroupBoxCacheClearedAndStateAndScaleResetted(RibbonGroupBox groupBox)
+    {
+        _reduceOrderIndex = _reduceOrder.Length - 1;
+        InvalidateMeasure();
+        InvalidateArrange();
+    }
+
+    /// <summary>Returns the panel's child collection.</summary>
+    protected virtual UIElementCollection CreateUIElementCollection(
+        FrameworkElement logicalParent)
+    {
+        return Children;
+    }
+
+    /// <summary>Handles a child desired-size change.</summary>
+    protected virtual void OnChildDesiredSizeChanged(UIElement child)
+    {
+        InvalidateMeasure();
     }
 
     #endregion

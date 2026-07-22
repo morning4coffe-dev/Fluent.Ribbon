@@ -5,7 +5,7 @@ namespace Fluent;
 /// </summary>
 [TemplatePart(Name = PART_Icon, Type = typeof(Image))]
 [TemplatePart(Name = PART_Label, Type = typeof(TextBlock))]
-public partial class RibbonButton : Button, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl
+public partial class RibbonButton : Microsoft.UI.Xaml.Controls.Button, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl, IQuickAccessItemProvider
 {
     private const string PART_Icon = "PART_Icon";
     private const string PART_Label = "PART_Label";
@@ -243,6 +243,7 @@ public partial class RibbonButton : Button, IRibbonControl, IScalableRibbonContr
     {
         DefaultStyleKey = typeof(RibbonButton);
         Loaded += OnLoaded;
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -341,18 +342,22 @@ public partial class RibbonButton : Button, IRibbonControl, IScalableRibbonContr
     #region IKeyTipedControl
 
     /// <inheritdoc />
-    public void OnKeyTipPressed()
+    public KeyTipPressedResult OnKeyTipPressed()
     {
-        if (Microsoft.UI.Xaml.Automation.Peers.AutomationPeer.ListenerExists(Microsoft.UI.Xaml.Automation.Peers.AutomationEvents.InvokePatternOnInvoked))
+        var peer =
+            Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(this);
+        if (peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+            is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invokeProvider)
         {
-            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this) ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(this);
-            var invokeProv = peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
-            invokeProv?.Invoke();
+            invokeProvider.Invoke();
         }
         else
         {
             Command?.Execute(CommandParameter);
         }
+
+        return KeyTipPressedResult.Empty;
     }
 
     /// <inheritdoc />
@@ -371,4 +376,40 @@ public partial class RibbonButton : Button, IRibbonControl, IScalableRibbonContr
     }
 
     #endregion
+
+    #region IQuickAccessItemProvider
+
+    /// <inheritdoc />
+    public bool CanAddToQuickAccessToolBar
+    {
+        get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
+        set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
+    }
+
+    /// <inheritdoc />
+    public FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonButton
+        {
+            Size = RibbonControlSize.Small,
+            Header = QuickAccessHelper.ClonePresentationValue(Header),
+            Icon = QuickAccessHelper.ClonePresentationValue(Icon),
+            LargeIcon = LargeIcon,
+            MediumIcon = MediumIcon,
+            IconGlyph = IconGlyph,
+            ScreenTipTitle = ScreenTipTitle,
+            ScreenTipText = ScreenTipText,
+            // The copy itself is not addable, so right-clicking it does nothing.
+            CanAddToQuickAccessToolBar = false,
+        };
+        clone.Click += (_, _) => Fluent.Modern.Commands.RibbonInvoker.Invoke(this);
+
+        return clone;
+    }
+
+    #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonButtonAutomationPeer(this);
 }

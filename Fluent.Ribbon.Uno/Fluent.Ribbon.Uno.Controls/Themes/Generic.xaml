@@ -31,7 +31,19 @@
         <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/RibbonComboBox.xaml" />
         <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/RibbonTextBox.xaml" />
         <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/StartScreen.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/StartScreenTabControl.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/BackstageTabControl.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/BackstageButton.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/ColorGallery.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/TransitioningControl.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/ResizeableContentControl.xaml" />
         <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/RibbonToolBar.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/RibbonToolBarControlGroup.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/RibbonScrollViewer.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/RibbonTitleBar.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/StatusBarMenuItem.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/QuickAccessMenuItem.xaml" />
+        <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/KeyTip.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

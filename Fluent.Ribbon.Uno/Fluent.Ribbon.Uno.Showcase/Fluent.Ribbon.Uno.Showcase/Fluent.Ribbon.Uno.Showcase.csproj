@@ -1,6 +1,6 @@
 <Project Sdk="Uno.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-browserwasm;net10.0-desktop</TargetFrameworks>
+    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-windows10.0.26100;net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
 
     <OutputType>Exe</OutputType>
     <UnoSingleProject>true</UnoSingleProject>
@@ -21,9 +21,7 @@
       UnoFeatures are used to quickly add and manage features enabled for your app.
       https://aka.platform.uno/singleproject-features
     -->
-    <UnoFeatures>
-      SkiaRenderer;
-    </UnoFeatures>
+    <UnoFeatures>SkiaRenderer;Svg;</UnoFeatures>
     <!-- Ensure this Uno project is not affected by repository-wide WPF/WinForms settings -->
     <UseWpf>false</UseWpf>
     <UseWindowsForms>false</UseWindowsForms>
@@ -32,6 +30,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj" />
+    <ProjectReference Include="..\..\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj" />
+  </ItemGroup>
+
+  <!--
+    Security: override transitive dependencies that carry known high-severity
+    vulnerabilities (NU1903). Versions come from Directory.Packages.props.
+  -->
+  <ItemGroup>
+    <!-- Portable managed package pulled in on every head. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.EndsWith('-desktop'))">
+    <!-- Tmds.DBus.Protocol is only pulled in by the desktop (Skia/X11) head. -->
+    <PackageReference Include="Tmds.DBus.Protocol" />
   </ItemGroup>
 
   <!-- Exclude repository-wide shared WPF assembly attributes not applicable to Uno projects -->
@@ -39,5 +51,30 @@
     <Compile Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
     <None Remove="$(MSBuildThisFileDirectory)..\..\..\Shared\GlobalAssemblyInfo.cs" />
   </ItemGroup>
+
+  <!--
+    WinUI3 (unpackaged) library-resource fallback.
+    When built with `dotnet build` (Core MSBuild, no full msbuild.exe), Uno cannot
+    emit the Core-MRT library layout for referenced WinUI class libraries
+    (see UNOB0008 / WindowsAppSDK #3548). The Controls library's XAML resources are
+    therefore copied flat into the app output `Themes\` folder and are NOT indexed in
+    resources.pri under the library name, so `ms-appx:///Fluent.Ribbon.Uno/Themes/...`
+    lookups (App.xaml merge + every control's default style) fail at runtime.
+    The unpackaged WinUI3 runtime falls back to loose files on disk, so we mirror
+    `Themes\` into `Fluent.Ribbon.Uno\Themes\` (the library's assembly-name layout) to
+    satisfy those lookups. This runs only when the proper Core-MRT layout was NOT
+    generated, so it is a no-op on a full msbuild/VS build (the PRI takes precedence).
+  -->
+  <Target Name="_MirrorFluentThemesForUnpackagedWinUI"
+          AfterTargets="Build"
+          Condition="$(TargetFramework.Contains('windows10')) AND '$(EnableCoreMrtTooling)' != 'true'">
+    <ItemGroup>
+      <_FluentThemeFiles Include="$(OutDir)Themes\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_FluentThemeFiles)"
+          DestinationFiles="@(_FluentThemeFiles-&gt;'$(OutDir)Fluent.Ribbon.Uno\Themes\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(_FluentThemeFiles)' != ''" />
+  </Target>
 
 </Project>

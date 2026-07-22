@@ -79,6 +79,41 @@ public partial class UniformGridWithItemSize : Panel
         set => SetValue(MaxItemsInRowProperty, value);
     }
 
+    /// <summary>Identifies the WPF-compatible minimum-column property.</summary>
+    public static readonly DependencyProperty MinColumnsProperty = MinItemsInRowProperty;
+
+    /// <summary>Gets or sets the minimum number of columns.</summary>
+    public int MinColumns
+    {
+        get => Orientation == Orientation.Horizontal ? MinItemsInRow : 1;
+        set => MinItemsInRow = value;
+    }
+
+    /// <summary>Identifies the WPF-compatible maximum-column property.</summary>
+    public static readonly DependencyProperty MaxColumnsProperty = MaxItemsInRowProperty;
+
+    /// <summary>Gets or sets the maximum number of columns.</summary>
+    public int MaxColumns
+    {
+        get => Orientation == Orientation.Horizontal ? MaxItemsInRow : 1;
+        set => MaxItemsInRow = value;
+    }
+
+    /// <summary>Identifies the <see cref="Orientation"/> dependency property.</summary>
+    public static readonly DependencyProperty OrientationProperty =
+        DependencyProperty.Register(
+            nameof(Orientation),
+            typeof(Orientation),
+            typeof(UniformGridWithItemSize),
+            new PropertyMetadata(Orientation.Horizontal, OnLayoutPropertyChanged));
+
+    /// <summary>Gets or sets the panel orientation.</summary>
+    public Orientation Orientation
+    {
+        get => (Orientation)GetValue(OrientationProperty);
+        set => SetValue(OrientationProperty, value);
+    }
+
     #endregion
 
     #region Fields
@@ -167,7 +202,7 @@ public partial class UniformGridWithItemSize : Panel
             ? visibleCount
             : Math.Max(1, (int)(availableSize.Width / ItemWidth));
 
-        _columns = Math.Max(MinItemsInRow, Math.Min(maxColumns, MaxItemsInRow));
+        _columns = Math.Max(MinColumns, Math.Min(maxColumns, MaxColumns));
         _columns = Math.Min(_columns, visibleCount);
 
         _rows = _columns > 0 ? (int)Math.Ceiling((double)visibleCount / _columns) : 0;

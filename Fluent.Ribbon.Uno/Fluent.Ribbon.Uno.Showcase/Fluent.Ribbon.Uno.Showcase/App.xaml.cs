@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Uno.Resizetizer;
 
@@ -12,16 +14,89 @@ public partial class App : Application
     /// </summary>
     public App()
     {
+        LogAutoTestStartup("APP CONSTRUCTOR BEGIN");
         this.InitializeComponent();
+        WireCrashCapture();
+        LogAutoTestStartup("APP CONSTRUCTOR END");
+    }
+
+    // Opt-in (SHOWCASE_AUTOTEST): capture otherwise-unhandled exceptions so the auto-test
+    // harness can record layout/dispatcher crashes and keep walking instead of dying.
+    // No effect on normal runs.
+    private void WireCrashCapture()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST")))
+        {
+            return;
+        }
+
+        this.UnhandledException += (_, e) =>
+        {
+            LogCrash($"App.UnhandledException: {e.Exception}");
+            e.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            LogCrash($"AppDomain.UnhandledException: {e.ExceptionObject}");
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            LogCrash($"TaskScheduler.UnobservedTaskException: {e.Exception}");
+            e.SetObserved();
+        };
+
+        // Opt-in deep diagnosis: capture the *real* managed exception at its throw
+        // point (before it is marshaled across the WinRT ABI as an opaque COMException).
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_FIRSTCHANCE")))
+        {
+            AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+            {
+                var ex = e.Exception;
+                // ex.StackTrace is empty at first-chance time; capture the LIVE stack instead.
+                if (ex is System.Runtime.InteropServices.COMException com &&
+                    (uint)com.HResult == 0x80004005)
+                {
+                    var live = Environment.StackTrace;
+                    if (live.Contains("Fluent."))
+                    {
+                        LogCrash($"FirstChance COMException E_FAIL: {ex.Message}\nLIVE STACK:\n{live}");
+                    }
+                }
+            };
+        }
+    }
+
+    private static void LogCrash(string message)
+    {
+        var line = $"[CRASH] {DateTime.Now:HH:mm:ss.fff} {message}";
+        Console.Error.WriteLine(line);
+        try
+        {
+            var path = Environment.GetEnvironmentVariable("SHOWCASE_CRASH_LOG");
+            if (!string.IsNullOrEmpty(path))
+            {
+                File.AppendAllText(path, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // logging must never throw
+        }
     }
 
     protected Window? MainWindow { get; private set; }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        LogAutoTestStartup("APP LAUNCHED BEGIN");
         MainWindow = new Window();
 #if DEBUG
-        MainWindow.UseStudio();
+        // The Uno Studio / Hot Design dev-server injects extra layout passes and raises its own
+        // background task exceptions; skip it under the auto-test harness so results are clean.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST")))
+        {
+            MainWindow.UseStudio();
+        }
 #endif
 
 
@@ -43,12 +118,36 @@ public partial class App : Application
             // When the navigation stack isn't restored navigate to the first page,
             // configuring the new page by passing required information as a navigation
             // parameter
-            rootFrame.Navigate(typeof(MainPage), args.Arguments);
+            var navigated = rootFrame.Navigate(typeof(MainPage), args.Arguments);
+            LogAutoTestStartup($"MAIN PAGE NAVIGATED {navigated}");
         }
 
         MainWindow.SetWindowIcon();
         // Ensure the current window is active
         MainWindow.Activate();
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST"))
+            && rootFrame.Content is MainPage mainPage)
+        {
+            mainPage.StartAutoTestFromHost();
+        }
+
+        LogAutoTestStartup("APP LAUNCHED END");
+    }
+
+    internal static void LogAutoTestStartup(string message)
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST")))
+        {
+            return;
+        }
+
+        var line = $"[AUTOTEST] {DateTime.Now:HH:mm:ss.fff} {message}";
+        Console.WriteLine(line);
+        var path = Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST_LOG");
+        if (!string.IsNullOrEmpty(path))
+        {
+            File.AppendAllText(path, line + Environment.NewLine);
+        }
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ namespace Fluent;
 /// <summary>
 /// Holds transitionable states when the ribbon automatically resizes the <see cref="RibbonGroupBox"/>.
 /// </summary>
+[System.ComponentModel.TypeConverter(typeof(Converters.RibbonGroupBoxStateDefinitionConverter))]
 public readonly struct RibbonGroupBoxStateDefinition : IEquatable<RibbonGroupBoxStateDefinition>
 {
     private const int MaxStateDefinitionParts = 4;
@@ -72,6 +73,22 @@ public readonly struct RibbonGroupBoxStateDefinition : IEquatable<RibbonGroupBox
     public static RibbonGroupBoxStateDefinition FromString(string stateDefinition)
     {
         return new RibbonGroupBoxStateDefinition(stateDefinition);
+    }
+
+    /// <summary>
+    /// Converts a string to a group-box state definition.
+    /// </summary>
+    public static implicit operator RibbonGroupBoxStateDefinition(string stateDefinition)
+    {
+        return FromString(stateDefinition);
+    }
+
+    /// <summary>
+    /// Converts a group-box state definition to its string representation.
+    /// </summary>
+    public static implicit operator string(RibbonGroupBoxStateDefinition stateDefinition)
+    {
+        return string.Join(",", stateDefinition.States.Select(ToWpfName));
     }
 
     /// <summary>
@@ -205,5 +222,10 @@ public readonly struct RibbonGroupBoxStateDefinition : IEquatable<RibbonGroupBox
     public override string ToString()
     {
         return string.Join(",", States);
+    }
+
+    private static string ToWpfName(RibbonGroupBoxState state)
+    {
+        return state == RibbonGroupBoxState.Medium ? "Middle" : state.ToString();
     }
 }

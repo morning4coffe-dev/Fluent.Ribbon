@@ -1,23 +1,32 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a gallery that is displayed inline within a RibbonGroupBox,
 /// showing a subset of items directly in the ribbon with an expand button
 /// to show all items in a popup.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_GalleryPanel, Type = typeof(ItemsRepeater))]
-[TemplatePart(Name = PART_ExpandButton, Type = typeof(Button))]
-[TemplatePart(Name = PART_UpButton, Type = typeof(Button))]
-[TemplatePart(Name = PART_DownButton, Type = typeof(Button))]
-public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeaderedControl
+[TemplatePart(Name = PART_GalleryPanel, Type = typeof(UniformItemsPanel))]
+[TemplatePart(Name = PART_ExpandButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_UpButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_DownButton, Type = typeof(WinUIButton))]
+#if WINDOWS
+public partial class InRibbonGallery : ListBox, IScalableRibbonControl, IHeaderedControl
+#else
+public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeaderedControl
+#endif
 {
-    private ItemsRepeater? _galleryPanel;
-    private Button? _expandButton;
-    private Button? _upButton;
-    private Button? _downButton;
+    private UniformItemsPanel? _galleryPanel;
+    private WinUIButton? _expandButton;
+    private WinUIButton? _upButton;
+    private WinUIButton? _downButton;
     private ScrollViewer? _scrollViewer;
-    private Flyout? _popupFlyout;
+    private Popup? _popup;
+    private ScrollViewer? _popupScroller;
+    private StackPanel? _popupPanel;
+    private bool _isPopupOpen;
 #pragma warning disable CS0169
     private int _scrollOffset;
 #pragma warning restore CS0169
@@ -57,7 +66,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     /// <summary>
     /// Gets the collection of gallery items.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -69,7 +78,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             nameof(ItemWidth),
             typeof(double),
             typeof(InRibbonGallery),
-            new PropertyMetadata(60.0));
+            new PropertyMetadata(60.0, OnGalleryLayoutPropertyChanged));
 
     /// <summary>
     /// Gets or sets the width of each gallery item.
@@ -86,7 +95,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             nameof(ItemHeight),
             typeof(double),
             typeof(InRibbonGallery),
-            new PropertyMetadata(24.0));
+            new PropertyMetadata(24.0, OnGalleryLayoutPropertyChanged));
 
     /// <summary>
     /// Gets or sets the height of each gallery item.
@@ -103,7 +112,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             nameof(MaxItemsInRow),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(9));
+            new PropertyMetadata(9, OnGalleryLayoutPropertyChanged));
 
     /// <summary>
     /// Gets or sets the maximum number of items in a row for inline display.
@@ -120,7 +129,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             nameof(MinItemsInRow),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(1));
+            new PropertyMetadata(1, OnGalleryLayoutPropertyChanged));
 
     /// <summary>
     /// Gets or sets the minimum number of items in a row.
@@ -133,11 +142,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
     /// <summary>Identifies the <see cref="MaxDropDownItemsInRow"/> dependency property.</summary>
     public static readonly DependencyProperty MaxDropDownItemsInRowProperty =
-        DependencyProperty.Register(
-            nameof(MaxDropDownItemsInRow),
-            typeof(int),
-            typeof(InRibbonGallery),
-            new PropertyMetadata(10));
+        MaxItemsInDropDownRowProperty;
 
     /// <summary>
     /// Gets or sets the maximum number of items in a row for dropdown display.
@@ -149,7 +154,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     }
 
     /// <summary>Identifies the <see cref="SelectedItem"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedItemProperty =
+    public new static readonly DependencyProperty SelectedItemProperty =
         DependencyProperty.Register(
             nameof(SelectedItem),
             typeof(object),
@@ -159,24 +164,24 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     /// <summary>
     /// Gets or sets the currently selected item.
     /// </summary>
-    public object? SelectedItem
+    public new object? SelectedItem
     {
         get => GetValue(SelectedItemProperty);
         set => SetValue(SelectedItemProperty, value);
     }
 
     /// <summary>Identifies the <see cref="SelectedIndex"/> dependency property.</summary>
-    public static readonly DependencyProperty SelectedIndexProperty =
+    public new static readonly DependencyProperty SelectedIndexProperty =
         DependencyProperty.Register(
             nameof(SelectedIndex),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(-1));
+            new PropertyMetadata(-1, OnSelectedIndexChanged));
 
     /// <summary>
     /// Gets or sets the index of the selected item.
     /// </summary>
-    public int SelectedIndex
+    public new int SelectedIndex
     {
         get => (int)GetValue(SelectedIndexProperty);
         set => SetValue(SelectedIndexProperty, value);
@@ -188,7 +193,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             nameof(IsDropDownOpen),
             typeof(bool),
             typeof(InRibbonGallery),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnIsDropDownOpenChanged));
 
     /// <summary>
     /// Gets or sets whether the gallery dropdown popup is open.
@@ -200,12 +205,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     }
 
     /// <summary>Identifies the <see cref="Size"/> dependency property.</summary>
-    public static readonly DependencyProperty SizeProperty =
-        DependencyProperty.Register(
-            nameof(Size),
-            typeof(RibbonControlSize),
-            typeof(InRibbonGallery),
-            new PropertyMetadata(RibbonControlSize.Large));
+    public static readonly DependencyProperty SizeProperty = RibbonProperties.SizeProperty;
 
     /// <summary>
     /// Gets or sets the ribbon control size.
@@ -227,9 +227,9 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     /// <summary>
     /// Gets or sets the key tip.
     /// </summary>
-    public string KeyTip
+    public string? KeyTip
     {
-        get => (string)GetValue(KeyTipProperty);
+        get => (string?)GetValue(KeyTipProperty);
         set => SetValue(KeyTipProperty, value);
     }
 
@@ -237,16 +237,16 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     public static readonly DependencyProperty LargeIconProperty =
         DependencyProperty.Register(
             nameof(LargeIcon),
-            typeof(ImageSource),
+            typeof(object),
             typeof(InRibbonGallery),
             new PropertyMetadata(null));
 
     /// <summary>
     /// Gets or sets the large icon for collapsed display.
     /// </summary>
-    public ImageSource? LargeIcon
+    public object? LargeIcon
     {
-        get => (ImageSource?)GetValue(LargeIconProperty);
+        get => GetValue(LargeIconProperty);
         set => SetValue(LargeIconProperty, value);
     }
 
@@ -348,6 +348,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
         Items = new ObservableCollection<UIElement>();
         MenuItems = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
+        InitializeCompatibility();
     }
 
     #endregion
@@ -359,14 +360,14 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     {
         base.OnApplyTemplate();
 
-        _galleryPanel = GetTemplateChild(PART_GalleryPanel) as ItemsRepeater;
+        _galleryPanel = GetTemplateChild(PART_GalleryPanel) as UniformItemsPanel;
 
         if (_expandButton is not null)
         {
             _expandButton.Click -= OnExpandButtonClick;
         }
 
-        _expandButton = GetTemplateChild(PART_ExpandButton) as Button;
+        _expandButton = GetTemplateChild(PART_ExpandButton) as WinUIButton;
         if (_expandButton is not null)
         {
             _expandButton.Click += OnExpandButtonClick;
@@ -377,7 +378,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             _upButton.Click -= OnUpButtonClick;
         }
 
-        _upButton = GetTemplateChild(PART_UpButton) as Button;
+        _upButton = GetTemplateChild(PART_UpButton) as WinUIButton;
         if (_upButton is not null)
         {
             _upButton.Click += OnUpButtonClick;
@@ -388,7 +389,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
             _downButton.Click -= OnDownButtonClick;
         }
 
-        _downButton = GetTemplateChild(PART_DownButton) as Button;
+        _downButton = GetTemplateChild(PART_DownButton) as WinUIButton;
         if (_downButton is not null)
         {
             _downButton.Click += OnDownButtonClick;
@@ -399,6 +400,7 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
         SetupGalleryPanel();
         UpdateVisualState();
+        UpdateCompatibilityTemplate();
     }
 
     #endregion
@@ -408,11 +410,17 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     /// <inheritdoc/>
     public void ScaleTo(RibbonControlSize size)
     {
+        var previous = Size;
         Size = size;
 
         if (CanCollapseToButton)
         {
             IsCollapsed = size == RibbonControlSize.Small;
+        }
+
+        if (previous != size)
+        {
+            Scaled?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -425,10 +433,12 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
         {
             MaxItemsInRow--;
             UpdateGalleryLayout();
+            Scaled?.Invoke(this, EventArgs.Empty);
         }
         else if (CanCollapseToButton && !IsCollapsed)
         {
             IsCollapsed = true;
+            Scaled?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -440,11 +450,13 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
         if (IsCollapsed)
         {
             IsCollapsed = false;
+            Scaled?.Invoke(this, EventArgs.Empty);
         }
         else
         {
             MaxItemsInRow++;
             UpdateGalleryLayout();
+            Scaled?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -454,31 +466,56 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        SetupGalleryPanel();
+        OnCompatibilityItemsChanged(e);
+        SyncInlineChildren();
     }
 
-    private void SetupGalleryPanel()
+    // Hosts the live gallery UIElements directly as panel children (non-virtualizing). While the
+    // popup is open the items live in the popup panel, so inline syncing is skipped until it closes.
+    private void SyncInlineChildren()
     {
-        if (_galleryPanel is null) return;
-
-        _galleryPanel.Layout = new UniformGridLayout
+        if (_galleryPanel is null)
         {
-            MinItemWidth = ItemWidth,
-            MinItemHeight = ItemHeight,
-            MaximumRowsOrColumns = MaxItemsInRow,
-            Orientation = Orientation.Horizontal,
-            MinRowSpacing = 0,
-            MinColumnSpacing = 0,
-        };
+            return;
+        }
 
-        _galleryPanel.ItemsSource = Items;
+        _galleryPanel.ItemWidth = ItemWidth;
+        _galleryPanel.ItemHeight = ItemHeight;
+        _galleryPanel.MaxColumns = Orientation == Orientation.Vertical ? 1 : MaxItemsInRow;
+
+        if (_isPopupOpen)
+        {
+            return;
+        }
+
+        _galleryPanel.Children.Clear();
+        foreach (var item in Items)
+        {
+            DetachFromParent(item);
+            _galleryPanel.Children.Add(item);
+        }
+
+        ApplyCurrentFilter();
     }
+
+    // Keeps the old method name as a thin wrapper so callers (OnApplyTemplate) stay unchanged.
+    private void SetupGalleryPanel() => SyncInlineChildren();
 
     private void UpdateGalleryLayout()
     {
-        if (_galleryPanel?.Layout is UniformGridLayout layout)
+        if (_galleryPanel is not null)
         {
-            layout.MaximumRowsOrColumns = MaxItemsInRow;
+            _galleryPanel.MaxColumns = Orientation == Orientation.Vertical ? 1 : MaxItemsInRow;
+        }
+    }
+
+    // A UIElement can only have a single parent; moving items between the inline and popup panels
+    // requires first detaching from whichever panel currently owns them.
+    private static void DetachFromParent(UIElement element)
+    {
+        if (element is FrameworkElement fe && fe.Parent is Panel panel)
+        {
+            panel.Children.Remove(element);
         }
     }
 
@@ -505,83 +542,132 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
     private void ShowPopup()
     {
-        if (_popupFlyout is null)
+        if (_galleryPanel is null || _scrollViewer is null)
         {
-            _popupFlyout = new Flyout
-            {
-                Placement = FlyoutPlacementMode.Bottom,
-            };
-            _popupFlyout.Closed += OnPopupFlyoutClosed;
+            IsDropDownOpen = true;
+            return;
         }
 
-        var panel = new StackPanel();
+        EnsurePopup();
 
-        // Move items from the internal inline collection to the popup list
-        var expandedItems = new List<UIElement>();
-        foreach (var item in Items)
+        _isPopupOpen = true;
+
+        // Move the whole live gallery panel (a single container we own) from the inline
+        // ScrollViewer into a persistent Popup, rather than churning each shared user
+        // UIElement in and out of a Flyout. A Flyout tears its content subtree down on close,
+        // corrupting the items' native peers on the WinUI3 head so that re-adding them throws
+        // COMException (0x800F1000). Moving one container into a Popup (whose child stays alive)
+        // avoids that entirely and behaves the same on the Skia head.
+        _scrollViewer.Content = null;
+        PreparePopupContent();
+        RebuildPopupSupplementalContent();
+        ApplyDropDownDimensions();
+
+        IsDropDownOpen = true;
+
+        // Anchor the popup just below the gallery. Offsets are relative to the XamlRoot content,
+        // matching the approach used by KeyTipService and working on both heads.
+        if (_popup is not null)
         {
-            expandedItems.Add(item);
+            _popup.XamlRoot = this.XamlRoot;
+
+            if (this.XamlRoot?.Content is UIElement root)
+            {
+                try
+                {
+                    var point = this.TransformToVisual(root)
+                        .TransformPoint(new Windows.Foundation.Point(0, this.ActualHeight));
+                    _popup.HorizontalOffset = point.X;
+                    _popup.VerticalOffset = point.Y;
+                }
+                catch
+                {
+                    // Keep the default placement if the transform cannot be computed yet.
+                }
+            }
+
+            _popup.IsOpen = true;
         }
 
-        // Temporarily clear inline items so they can join the visual tree of the popup
-        _galleryPanel!.ItemsSource = null;
+    }
 
-        var expandedRepeater = new ItemsRepeater
+    internal void ExpandForAutomation()
+    {
+        if (_galleryPanel is not null && _scrollViewer is not null)
         {
-            Layout = new UniformGridLayout
-            {
-                MinItemWidth = ItemWidth,
-                MinItemHeight = ItemHeight,
-                MaximumRowsOrColumns = MaxDropDownItemsInRow,
-                Orientation = Orientation.Horizontal,
-                MinRowSpacing = 0,
-                MinColumnSpacing = 0,
-            },
-            ItemsSource = expandedItems,
-        };
+            ShowPopup();
+        }
+        else
+        {
+            IsDropDownOpen = true;
+        }
+    }
 
-        var galleryScroller = new ScrollViewer
+    internal void CollapseForAutomation()
+    {
+        if (_popup is not null)
         {
-            Content = expandedRepeater,
+            _popup.IsOpen = false;
+        }
+        else
+        {
+            IsDropDownOpen = false;
+            _isPopupOpen = false;
+        }
+    }
+
+    private void EnsurePopup()
+    {
+        if (_popup is not null)
+        {
+            return;
+        }
+
+        _popupScroller = new ScrollViewer
+        {
             MaxHeight = 300,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
 
-        panel.Children.Add(galleryScroller);
+        _popupPanel = new StackPanel();
+        _popupPanel.Children.Add(_popupScroller);
 
-        // Menu items
-        if (MenuItems.Count > 0)
+        _popupBorder = new Border
         {
-            panel.Children.Add(new Rectangle
-            {
-                Height = 1,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = new Thickness(0, 4, 0, 4),
-            });
+            Background = GetBrush("RibbonBackgroundBrush", Microsoft.UI.Colors.White),
+            BorderBrush = GetBrush("RibbonBorderBrush", Microsoft.UI.Colors.Gray),
+            BorderThickness = new Thickness(1),
+            Child = _popupPanel,
+        };
 
-            foreach (var menuItem in MenuItems)
-            {
-                if (menuItem is FrameworkElement mfe && mfe.Parent is Panel parent)
-                {
-                    parent.Children.Remove(menuItem);
-                }
+        _popupResizeHost = new ResizeableContentControl
+        {
+            Content = _popupBorder,
+        };
 
-                panel.Children.Add(menuItem);
-            }
-        }
-
-        _popupFlyout.Content = panel;
-        IsDropDownOpen = true;
-        _popupFlyout.ShowAt(this);
+        _popup = new Popup
+        {
+            IsLightDismissEnabled = true,
+            Child = _popupResizeHost,
+        };
+        _popup.Closed += OnPopupClosed;
     }
 
-    private void OnPopupFlyoutClosed(object? sender, object e)
+    private static Microsoft.UI.Xaml.Media.Brush GetBrush(string resourceKey, Windows.UI.Color fallback)
+    {
+        if (Application.Current.Resources.TryGetValue(resourceKey, out var value)
+            && value is Microsoft.UI.Xaml.Media.Brush brush)
+        {
+            return brush;
+        }
+
+        return new Microsoft.UI.Xaml.Media.SolidColorBrush(fallback);
+    }
+
+    private void OnPopupClosed(object? sender, object e)
     {
         IsDropDownOpen = false;
-        
-        // Restore items back to the inline gallery repeater
-        SetupGalleryPanel();
     }
 
     private void UpdateVisualState()
@@ -593,10 +679,15 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
     {
         if (d is InRibbonGallery gallery)
         {
-            if (e.NewValue is not null)
-            {
-                gallery.SelectedIndex = gallery.Items.IndexOf((e.NewValue as UIElement)!);
-            }
+            gallery.HandleSelectedItemChanged(e.OldValue, e.NewValue);
+        }
+    }
+
+    private static void OnSelectedIndexChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is InRibbonGallery gallery)
+        {
+            gallery.HandleSelectedIndexChanged((int)e.NewValue);
         }
     }
 
@@ -623,6 +714,10 @@ public partial class InRibbonGallery : Control, IScalableRibbonControl, IHeadere
 
         return null;
     }
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonInRibbonGalleryAutomationPeer(this);
 
     #endregion
 }

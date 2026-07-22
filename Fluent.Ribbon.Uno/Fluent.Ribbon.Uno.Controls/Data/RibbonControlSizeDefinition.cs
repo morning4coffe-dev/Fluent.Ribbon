@@ -4,6 +4,7 @@ namespace Fluent;
 /// Struct to map from <see cref="RibbonGroupBoxState"/> to <see cref="RibbonControlSize"/>.
 /// Defines what size a ribbon control should be at each group box state.
 /// </summary>
+[System.ComponentModel.TypeConverter(typeof(Converters.SizeDefinitionConverter))]
 public struct RibbonControlSizeDefinition : IEquatable<RibbonControlSizeDefinition>
 {
     private const int MaxSizeDefinitionParts = 3;
@@ -67,6 +68,15 @@ public struct RibbonControlSizeDefinition : IEquatable<RibbonControlSizeDefiniti
     public RibbonControlSize Medium { get; set; }
 
     /// <summary>
+    /// Gets or sets the WPF-compatible middle-size value.
+    /// </summary>
+    public RibbonControlSize Middle
+    {
+        get => Medium;
+        set => Medium = value;
+    }
+
+    /// <summary>
     /// Gets or sets the value for small group sizes.
     /// </summary>
     public RibbonControlSize Small { get; set; }
@@ -77,6 +87,22 @@ public struct RibbonControlSizeDefinition : IEquatable<RibbonControlSizeDefiniti
     public static RibbonControlSizeDefinition FromString(string sizeDefinition)
     {
         return new RibbonControlSizeDefinition(sizeDefinition);
+    }
+
+    /// <summary>
+    /// Converts a string to a size definition.
+    /// </summary>
+    public static implicit operator RibbonControlSizeDefinition(string sizeDefinition)
+    {
+        return FromString(sizeDefinition);
+    }
+
+    /// <summary>
+    /// Converts a size definition to its string representation.
+    /// </summary>
+    public static implicit operator string(RibbonControlSizeDefinition sizeDefinition)
+    {
+        return $"{ToWpfName(sizeDefinition.Large)} {ToWpfName(sizeDefinition.Middle)} {ToWpfName(sizeDefinition.Small)}";
     }
 
     /// <summary>
@@ -164,5 +190,10 @@ public struct RibbonControlSizeDefinition : IEquatable<RibbonControlSizeDefiniti
     public override string ToString()
     {
         return $"{Large} {Medium} {Small}";
+    }
+
+    private static string ToWpfName(RibbonControlSize size)
+    {
+        return size == RibbonControlSize.Medium ? "Middle" : size.ToString();
     }
 }

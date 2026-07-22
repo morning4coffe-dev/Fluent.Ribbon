@@ -28,6 +28,13 @@ Fluent.Ribbon is a library that implements an Office-like user interface for the
 
 - [More Screenshots](../../wiki/Screenshots)
 
+## Uno Platform port
+
+The cross-platform Uno/WinUI port lives in [Fluent.Ribbon.Uno](Fluent.Ribbon.Uno).
+Its README covers supported targets and current feature status; the
+[migration guide](Fluent.Ribbon.Uno/MIGRATION.md) documents WPF-compatible type
+names, framework substitutions, and explicit platform exceptions.
+
 ## Documentation
 
 Visit the [documentation](http://fluentribbon.github.io/documentation/).  

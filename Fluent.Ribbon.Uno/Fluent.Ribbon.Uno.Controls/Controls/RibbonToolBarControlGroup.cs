@@ -8,8 +8,13 @@ namespace Fluent;
 /// WPF uses ItemsControl; Uno uses Panel-based approach.
 /// </remarks>
 [ContentProperty(Name = nameof(Items))]
-public partial class RibbonToolBarControlGroup : Control
+[TemplatePart(Name = PART_ItemsHost, Type = typeof(Panel))]
+public partial class RibbonToolBarControlGroup : ItemsControl
 {
+    private const string PART_ItemsHost = "PART_ItemsHost";
+
+    private Panel? _itemsHost;
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
@@ -23,7 +28,7 @@ public partial class RibbonToolBarControlGroup : Control
     /// <summary>
     /// Gets the collection of controls in this group.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -35,7 +40,7 @@ public partial class RibbonToolBarControlGroup : Control
             nameof(IsFirstInRow),
             typeof(bool),
             typeof(RibbonToolBarControlGroup),
-            new PropertyMetadata(false));
+            new PropertyMetadata(true));
 
     /// <summary>
     /// Gets or sets whether this group is the first in its row.
@@ -52,7 +57,7 @@ public partial class RibbonToolBarControlGroup : Control
             nameof(IsLastInRow),
             typeof(bool),
             typeof(RibbonToolBarControlGroup),
-            new PropertyMetadata(false));
+            new PropertyMetadata(true));
 
     /// <summary>
     /// Gets or sets whether this group is the last in its row.
@@ -74,6 +79,39 @@ public partial class RibbonToolBarControlGroup : Control
     {
         DefaultStyleKey = typeof(RibbonToolBarControlGroup);
         Items = new ObservableCollection<UIElement>();
+        Items.CollectionChanged += OnItemsCollectionChanged;
+    }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        _itemsHost = GetTemplateChild(PART_ItemsHost) as Panel;
+        SyncItems();
+    }
+
+    private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncItems();
+    }
+
+    private void SyncItems()
+    {
+        if (_itemsHost is null)
+        {
+            return;
+        }
+
+        _itemsHost.Children.Clear();
+        foreach (var item in Items)
+        {
+            _itemsHost.Children.Add(item);
+        }
     }
 
     #endregion

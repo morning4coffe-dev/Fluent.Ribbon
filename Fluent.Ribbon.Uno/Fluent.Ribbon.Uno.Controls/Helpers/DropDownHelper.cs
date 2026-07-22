@@ -9,6 +9,31 @@ namespace Fluent.Helpers;
 /// </remarks>
 public static class DropDownHelper
 {
+    /// <summary>Coerces a maximum drop-down height to the portable work area.</summary>
+    public static object? CoerceMaxDropDownHeight(
+        DependencyObject d,
+        object? baseValue)
+    {
+        return baseValue is double value
+            ? GetMaxDropDownHeight(d, value)
+            : baseValue;
+    }
+
+    /// <summary>Gets the requested height or one third of the current XAML root.</summary>
+    public static double GetMaxDropDownHeight(
+        DependencyObject d,
+        double baseValue)
+    {
+        if (double.IsNaN(baseValue) is false)
+        {
+            return baseValue;
+        }
+
+        return d is FrameworkElement { XamlRoot: { } xamlRoot }
+            ? Math.Floor(xamlRoot.Size.Height / 3D)
+            : double.NaN;
+    }
+
     /// <summary>
     /// Opens a <see cref="Popup"/> below the specified placement target.
     /// </summary>

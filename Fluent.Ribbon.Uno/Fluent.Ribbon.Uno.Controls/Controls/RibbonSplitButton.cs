@@ -1,166 +1,35 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
-/// Represents a split button control within a Ribbon that has both a primary action
-/// and a dropdown menu.
+/// Represents a ribbon button with separate primary and drop-down actions.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_Button, Type = typeof(Button))]
-[TemplatePart(Name = PART_DropDownButton, Type = typeof(Button))]
-public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl, IToggleButton, IDropDownControl
+[TemplatePart(Name = PART_Button, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_DropDownButton, Type = typeof(WinUIButton))]
+public partial class RibbonSplitButton : DropDownButton, IToggleButton
 {
     private const string PART_Button = "PART_Button";
     private const string PART_DropDownButton = "PART_DropDownButton";
 
-    private Button? _button;
-    private Button? _dropDownButton;
-    private Flyout? _flyout;
+    private WinUIButton? button;
+    private WinUIButton? dropDownButton;
 
-    #region Events
+    /// <summary>Gets the template part used for the primary action.</summary>
+    protected FrameworkElement? PrimaryActionTarget => button;
 
-    /// <summary>
-    /// Occurs when the primary button is clicked.
-    /// </summary>
+    /// <summary>Occurs when the primary button is clicked.</summary>
     public event RoutedEventHandler? Click;
 
-    /// <summary>
-    /// Occurs when the button becomes checked.
-    /// </summary>
+    /// <summary>Occurs when the button becomes checked.</summary>
     public event RoutedEventHandler? Checked;
 
-    /// <summary>
-    /// Occurs when the button becomes unchecked.
-    /// </summary>
+    /// <summary>Occurs when the button becomes unchecked.</summary>
     public event RoutedEventHandler? Unchecked;
 
-    /// <inheritdoc />
-    public event EventHandler? DropDownOpened;
-
-    /// <inheritdoc />
-    public event EventHandler? DropDownClosed;
-
-    #endregion
-
-    #region Dependency Properties
-
-    /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets or sets the header/label of the button.
-    /// </summary>
-    public object? Header
-    {
-        get => GetValue(HeaderProperty);
-        set => SetValue(HeaderProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="LargeIcon"/> dependency property.</summary>
-    public static readonly DependencyProperty LargeIconProperty =
-        DependencyProperty.Register(
-            nameof(LargeIcon),
-            typeof(ImageSource),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(null, OnIconChanged));
-
-    /// <summary>
-    /// Gets or sets the large icon (32x32).
-    /// </summary>
-    public ImageSource? LargeIcon
-    {
-        get => (ImageSource?)GetValue(LargeIconProperty);
-        set => SetValue(LargeIconProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="MediumIcon"/> dependency property.</summary>
-    public static readonly DependencyProperty MediumIconProperty =
-        DependencyProperty.Register(
-            nameof(MediumIcon),
-            typeof(ImageSource),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(null, OnIconChanged));
-
-    /// <summary>
-    /// Gets or sets the medium/small icon (16x16).
-    /// </summary>
-    public ImageSource? MediumIcon
-    {
-        get => (ImageSource?)GetValue(MediumIconProperty);
-        set => SetValue(MediumIconProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Icon"/> dependency property.</summary>
-    public static readonly DependencyProperty IconProperty =
-        DependencyProperty.Register(
-            nameof(Icon),
-            typeof(object),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(null, OnIconChanged));
-
-    /// <summary>
-    /// Gets or sets the icon.
-    /// </summary>
-    public object? Icon
-    {
-        get => GetValue(IconProperty);
-        set => SetValue(IconProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="CurrentIcon"/> dependency property.</summary>
-    public static readonly DependencyProperty CurrentIconProperty =
-        DependencyProperty.Register(
-            nameof(CurrentIcon),
-            typeof(ImageSource),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets the current icon based on size.
-    /// </summary>
-    public ImageSource? CurrentIcon
-    {
-        get => (ImageSource?)GetValue(CurrentIconProperty);
-        private set => SetValue(CurrentIconProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Size"/> dependency property.</summary>
-    public static readonly DependencyProperty SizeProperty =
-        DependencyProperty.Register(
-            nameof(Size),
-            typeof(RibbonControlSize),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(RibbonControlSize.Large, OnSizeChanged));
-
-    /// <summary>
-    /// Gets or sets the size of the button.
-    /// </summary>
-    public RibbonControlSize Size
-    {
-        get => (RibbonControlSize)GetValue(SizeProperty);
-        set => SetValue(SizeProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
-    public static readonly DependencyProperty ItemsProperty =
-        DependencyProperty.Register(
-            nameof(Items),
-            typeof(ObservableCollection<UIElement>),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets the collection of dropdown menu items.
-    /// </summary>
-    public ObservableCollection<UIElement> Items
-    {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
-        private set => SetValue(ItemsProperty, value);
-    }
+    /// <summary>Occurs when the three-state value becomes indeterminate.</summary>
+    public event RoutedEventHandler? Indeterminate;
 
     /// <summary>Identifies the <see cref="Command"/> dependency property.</summary>
     public static readonly DependencyProperty CommandProperty =
@@ -170,9 +39,7 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             typeof(RibbonSplitButton),
             new PropertyMetadata(null));
 
-    /// <summary>
-    /// Gets or sets the command for the primary button.
-    /// </summary>
+    /// <summary>Gets or sets the command for the primary action.</summary>
     public ICommand? Command
     {
         get => (ICommand?)GetValue(CommandProperty);
@@ -187,64 +54,11 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             typeof(RibbonSplitButton),
             new PropertyMetadata(null));
 
-    /// <summary>
-    /// Gets or sets the command parameter.
-    /// </summary>
+    /// <summary>Gets or sets the primary command parameter.</summary>
     public object? CommandParameter
     {
         get => GetValue(CommandParameterProperty);
         set => SetValue(CommandParameterProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="KeyTip"/> dependency property.</summary>
-    public static readonly DependencyProperty KeyTipProperty =
-        DependencyProperty.Register(
-            nameof(KeyTip),
-            typeof(string),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(string.Empty));
-
-    /// <summary>
-    /// Gets or sets the key tip for keyboard navigation.
-    /// </summary>
-    public string? KeyTip
-    {
-        get => (string?)GetValue(KeyTipProperty);
-        set => SetValue(KeyTipProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="IsDropDownOpen"/> dependency property.</summary>
-    public static readonly DependencyProperty IsDropDownOpenProperty =
-        DependencyProperty.Register(
-            nameof(IsDropDownOpen),
-            typeof(bool),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(false));
-
-    /// <summary>
-    /// Gets or sets whether the dropdown is open.
-    /// </summary>
-    public bool IsDropDownOpen
-    {
-        get => (bool)GetValue(IsDropDownOpenProperty);
-        set => SetValue(IsDropDownOpenProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="IconGlyph"/> dependency property.</summary>
-    public static readonly DependencyProperty IconGlyphProperty =
-        DependencyProperty.Register(
-            nameof(IconGlyph),
-            typeof(string),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(string.Empty));
-
-    /// <summary>
-    /// Gets or sets the icon glyph character (Segoe Fluent Icons / MDL2 Assets).
-    /// </summary>
-    public string IconGlyph
-    {
-        get => (string)GetValue(IconGlyphProperty);
-        set => SetValue(IconGlyphProperty, value);
     }
 
     /// <summary>Identifies the <see cref="IsChecked"/> dependency property.</summary>
@@ -255,9 +69,7 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             typeof(RibbonSplitButton),
             new PropertyMetadata(false, OnIsCheckedChanged));
 
-    /// <summary>
-    /// Gets or sets a value indicating whether the button is checked.
-    /// </summary>
+    /// <summary>Gets or sets whether the primary action is checked.</summary>
     public bool? IsChecked
     {
         get => (bool?)GetValue(IsCheckedProperty);
@@ -270,11 +82,9 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             nameof(IsCheckable),
             typeof(bool),
             typeof(RibbonSplitButton),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnIsCheckableChanged));
 
-    /// <summary>
-    /// Gets or sets whether the button supports toggle/check behavior.
-    /// </summary>
+    /// <summary>Gets or sets whether the primary action supports checked state.</summary>
     public bool IsCheckable
     {
         get => (bool)GetValue(IsCheckableProperty);
@@ -289,9 +99,7 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             typeof(RibbonSplitButton),
             new PropertyMetadata(null));
 
-    /// <summary>
-    /// Gets or sets the name of the group for mutually exclusive toggle behavior.
-    /// </summary>
+    /// <summary>Gets or sets the mutually exclusive toggle group name.</summary>
     public string? GroupName
     {
         get => (string?)GetValue(GroupNameProperty);
@@ -304,11 +112,9 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             nameof(DropDownToolTip),
             typeof(object),
             typeof(RibbonSplitButton),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnDropDownToolTipChanged));
 
-    /// <summary>
-    /// Gets or sets the tooltip for the dropdown portion of the button.
-    /// </summary>
+    /// <summary>Gets or sets the tooltip for the drop-down action.</summary>
     public object? DropDownToolTip
     {
         get => GetValue(DropDownToolTipProperty);
@@ -321,11 +127,9 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             nameof(IsButtonEnabled),
             typeof(bool),
             typeof(RibbonSplitButton),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnIsButtonEnabledChanged));
 
-    /// <summary>
-    /// Gets or sets whether the primary button part is enabled.
-    /// </summary>
+    /// <summary>Gets or sets whether the primary action is enabled.</summary>
     public bool IsButtonEnabled
     {
         get => (bool)GetValue(IsButtonEnabledProperty);
@@ -340,191 +144,60 @@ public partial class RibbonSplitButton : Control, IRibbonControl, IScalableRibbo
             typeof(RibbonSplitButton),
             new PropertyMetadata(true));
 
-    /// <summary>
-    /// Gets or sets whether clicking the button is a definitive action (e.g. closes backstage).
-    /// </summary>
+    /// <summary>Gets or sets whether the primary action dismisses an ancestor popup.</summary>
     public bool IsDefinitive
     {
         get => (bool)GetValue(IsDefinitiveProperty);
         set => SetValue(IsDefinitiveProperty, value);
     }
-/// <summary>Identifies the <see cref="IsSimplified"/> dependency property.</summary>
-public static readonly DependencyProperty IsSimplifiedProperty =
-    DependencyProperty.Register(
-        nameof(IsSimplified),
-        typeof(bool),
-        typeof(RibbonSplitButton),
-        new PropertyMetadata(false));
 
-/// <summary>
-/// Gets or sets whether the ribbon is in Simplified mode.
-/// </summary>
-public bool IsSimplified
-{
-    get => (bool)GetValue(IsSimplifiedProperty);
-    set => SetValue(IsSimplifiedProperty, value);
-}
-
-/// <summary>Identifies the <see cref="SizeDefinition"/> dependency property.</summary>
-public static readonly DependencyProperty SizeDefinitionProperty = RibbonProperties.SizeDefinitionProperty;
-
-/// <summary>
-/// Gets or sets the size definition.
-/// </summary>
-public string? SizeDefinition
-{
-    get => (string?)GetValue(SizeDefinitionProperty);
-    set => SetValue(SizeDefinitionProperty, value);
-}
-
-/// <summary>Identifies the <see cref="SimplifiedSizeDefinition"/> dependency property.</summary>
-public static readonly DependencyProperty SimplifiedSizeDefinitionProperty =
-    DependencyProperty.RegisterAttached(
-        "SimplifiedSizeDefinition",
-        typeof(string),
-        typeof(RibbonSplitButton),
-        new PropertyMetadata(null));
-
-/// <summary>
-/// Gets or sets the simplified size definition.
-/// </summary>
-public string? SimplifiedSizeDefinition
-{
-    get => (string?)GetValue(SimplifiedSizeDefinitionProperty);
-    set => SetValue(SimplifiedSizeDefinitionProperty, value);
-}
-
-    /// <summary>Identifies the <see cref="HasTriangle"/> dependency property.</summary>
-    public static readonly DependencyProperty HasTriangleProperty =
-        DependencyProperty.Register(
-            nameof(HasTriangle),
-            typeof(bool),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(true));
-
-    /// <summary>
-    /// Gets or sets whether the dropdown triangle/arrow is visible.
-    /// </summary>
-    public bool HasTriangle
-    {
-        get => (bool)GetValue(HasTriangleProperty);
-        set => SetValue(HasTriangleProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="ResizeMode"/> dependency property.</summary>
-    public static readonly DependencyProperty ResizeModeProperty =
-        DependencyProperty.Register(
-            nameof(ResizeMode),
-            typeof(ContextMenuResizeMode),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(ContextMenuResizeMode.None));
-
-    /// <summary>
-    /// Gets or sets the context menu resize mode for the dropdown.
-    /// </summary>
-    public ContextMenuResizeMode ResizeMode
-    {
-        get => (ContextMenuResizeMode)GetValue(ResizeModeProperty);
-        set => SetValue(ResizeModeProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="MaxDropDownHeight"/> dependency property.</summary>
-    public static readonly DependencyProperty MaxDropDownHeightProperty =
-        DependencyProperty.Register(
-            nameof(MaxDropDownHeight),
-            typeof(double),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(double.NaN));
-
-    /// <summary>
-    /// Gets or sets the maximum dropdown height.
-    /// </summary>
-    public double MaxDropDownHeight
-    {
-        get => (double)GetValue(MaxDropDownHeightProperty);
-        set => SetValue(MaxDropDownHeightProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="DropDownHeight"/> dependency property.</summary>
-    public static readonly DependencyProperty DropDownHeightProperty =
-        DependencyProperty.Register(
-            nameof(DropDownHeight),
-            typeof(double),
-            typeof(RibbonSplitButton),
-            new PropertyMetadata(double.NaN));
-
-    /// <summary>
-    /// Gets or sets the initial dropdown height.
-    /// </summary>
-    public double DropDownHeight
-    {
-        get => (double)GetValue(DropDownHeightProperty);
-        set => SetValue(DropDownHeightProperty, value);
-    }
-
-    #endregion
-
-    #region Constructor
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RibbonSplitButton"/> class.
-    /// </summary>
+    /// <summary>Initializes a new instance of the <see cref="RibbonSplitButton"/> class.</summary>
     public RibbonSplitButton()
     {
         DefaultStyleKey = typeof(RibbonSplitButton);
-        Items = new ObservableCollection<UIElement>();
     }
 
-    #endregion
+    /// <inheritdoc />
+    protected override string DropDownButtonTemplatePartName => PART_DropDownButton;
 
-    #region Template
-
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
+        if (button is not null)
+        {
+            button.Click -= OnButtonClick;
+        }
+
         base.OnApplyTemplate();
 
-        if (_button is not null)
+        button = GetTemplateChild(PART_Button) as WinUIButton;
+        dropDownButton = GetTemplateChild(PART_DropDownButton) as WinUIButton;
+
+        if (button is not null)
         {
-            _button.Click -= OnButtonClick;
+            button.Click += OnButtonClick;
+            button.IsEnabled = IsButtonEnabled;
         }
 
-        if (_dropDownButton is not null)
+        if (dropDownButton is not null)
         {
-            _dropDownButton.Click -= OnDropDownButtonClick;
+            ToolTipService.SetToolTip(dropDownButton, DropDownToolTip);
         }
 
-        _button = GetTemplateChild(PART_Button) as Button;
-        _dropDownButton = GetTemplateChild(PART_DropDownButton) as Button;
-
-        if (_button is not null)
-        {
-            _button.Click += OnButtonClick;
-        }
-
-        if (_dropDownButton is not null)
-        {
-            _dropDownButton.Click += OnDropDownButtonClick;
-        }
-
-        UpdateVisualState();
+        UpdateSplitButtonVisualState();
     }
-
-    #endregion
-
-    #region IScalableRibbonControl
-
-    /// <inheritdoc/>
-    public void ScaleTo(RibbonControlSize size)
-    {
-        Size = size;
-    }
-
-    #endregion
-
-    #region Methods
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
+    {
+        InvokePrimaryAction(e);
+    }
+
+    protected internal void InvokePrimaryAction()
+    {
+        InvokePrimaryAction(new RoutedEventArgs());
+    }
+
+    private void InvokePrimaryAction(RoutedEventArgs e)
     {
         if (IsCheckable)
         {
@@ -532,180 +205,135 @@ public string? SimplifiedSizeDefinition
         }
 
         Click?.Invoke(this, e);
-        
+
+        if (Command?.CanExecute(CommandParameter) == true)
+        {
+            Command.Execute(CommandParameter);
+        }
+
+        if (IsDefinitive)
+        {
+            PopupService.RaiseDismissPopupEvent(
+                this,
+                DismissPopupMode.Always,
+                DismissPopupReason.Undefined);
+        }
+    }
+
+    protected internal void ForwardQuickAccessPrimaryAction(RoutedEventArgs e)
+    {
+        Click?.Invoke(this, e);
+
         if (Command?.CanExecute(CommandParameter) == true)
         {
             Command.Execute(CommandParameter);
         }
     }
 
-    private void OnDropDownButtonClick(object sender, RoutedEventArgs e)
+    private static void OnIsCheckedChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
     {
-        ShowDropDown();
-    }
-
-    private void ShowDropDown()
-    {
-        if (_flyout is null)
+        var splitButton = (RibbonSplitButton)sender;
+        if (splitButton.IsCheckable)
         {
-            var panel = new StackPanel { MinWidth = 200 };
-            foreach (var item in Items)
+            switch ((bool?)args.NewValue)
             {
-                panel.Children.Add(item);
+                case true:
+                    splitButton.Checked?.Invoke(splitButton, new RoutedEventArgs());
+                    break;
+                case false:
+                    splitButton.Unchecked?.Invoke(splitButton, new RoutedEventArgs());
+                    break;
+                default:
+                    splitButton.Indeterminate?.Invoke(splitButton, new RoutedEventArgs());
+                    break;
             }
-
-            FrameworkElement flyoutContent = panel;
-
-            // Apply height constraints
-            if (!double.IsNaN(DropDownHeight))
-            {
-                var scrollViewer = new ScrollViewer
-                {
-                    Content = panel,
-                    Height = DropDownHeight,
-                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                };
-                flyoutContent = scrollViewer;
-            }
-            else
-            {
-                if (!double.IsNaN(MaxDropDownHeight))
-                {
-                    panel.MaxHeight = MaxDropDownHeight;
-                }
-            }
-
-            _flyout = new Flyout
-            {
-                Content = flyoutContent,
-                Placement = FlyoutPlacementMode.Bottom
-            };
-
-            _flyout.Opened += (s, e) =>
-            {
-                IsDropDownOpen = true;
-                DropDownOpened?.Invoke(this, EventArgs.Empty);
-            };
-
-            _flyout.Closed += (s, e) =>
-            {
-                IsDropDownOpen = false;
-                DropDownClosed?.Invoke(this, EventArgs.Empty);
-            };
         }
 
-        _flyout.ShowAt((FrameworkElement?)_dropDownButton ?? this);
+        splitButton.UpdateSplitButtonVisualState();
     }
 
-    /// <summary>
-    /// Closes the drop-down if it is currently open.
-    /// </summary>
-    public void CloseDropDown()
+    private static void OnIsCheckableChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
     {
-        if (_flyout is not null && IsDropDownOpen)
+        var splitButton = (RibbonSplitButton)sender;
+        if ((bool)args.NewValue is false && splitButton.IsChecked != false)
         {
-            _flyout.Hide();
+            splitButton.IsChecked = false;
+        }
+
+        splitButton.UpdateSplitButtonVisualState();
+    }
+
+    private static void OnIsButtonEnabledChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var splitButton = (RibbonSplitButton)sender;
+        if (splitButton.button is not null)
+        {
+            splitButton.button.IsEnabled = (bool)args.NewValue;
         }
     }
 
-    private static void OnIsCheckedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnDropDownToolTipChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
     {
-        if (d is RibbonSplitButton button)
+        var splitButton = (RibbonSplitButton)sender;
+        if (splitButton.dropDownButton is not null)
         {
-            var newValue = (bool?)e.NewValue;
-            if (newValue == true)
-            {
-                button.Checked?.Invoke(button, new RoutedEventArgs());
-            }
-            else
-            {
-                button.Unchecked?.Invoke(button, new RoutedEventArgs());
-            }
-
-            button.UpdateVisualState();
+            ToolTipService.SetToolTip(splitButton.dropDownButton, args.NewValue);
         }
     }
 
-    private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private void UpdateSplitButtonVisualState()
     {
-        if (d is RibbonSplitButton button)
-        {
-            button.UpdateVisualState();
-        }
+        VisualStateManager.GoToState(
+            this,
+            IsCheckable && IsChecked == true ? "Checked" : "Unchecked",
+            true);
     }
 
-    private static void OnIconChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    /// <inheritdoc />
+    public override FrameworkElement? CreateQuickAccessItem()
     {
-        if (d is RibbonSplitButton button)
+        var clone = new RibbonSplitButton
         {
-            button.UpdateCurrentIcon();
-        }
-    }
-
-    private void UpdateVisualState()
-    {
-        var stateName = Size switch
-        {
-            RibbonControlSize.Large => "Large",
-            RibbonControlSize.Medium => "Medium",
-            RibbonControlSize.Small => "Small",
-            _ => "Large"
+            Size = RibbonControlSize.Small,
+            CanAddToQuickAccessToolBar = false,
+            ItemsSource = CreateQuickAccessItems()
         };
 
-        VisualStateManager.GoToState(this, stateName, true);
+        BindQuickAccessItem(clone);
+        BindOneWay(DropDownToolTipProperty);
+        BindOneWay(IsCheckableProperty);
+        BindOneWay(IsButtonEnabledProperty);
+        BindOneWay(IsDefinitiveProperty);
+        BindTwoWay(IsCheckedProperty);
+        BindQuickAccessItemDropDownEvents(clone);
+        clone.Click += (_, args) => ForwardQuickAccessPrimaryAction(args);
+        return clone;
 
-        if (IsCheckable && IsChecked == true)
+        void BindOneWay(DependencyProperty property) =>
+            RibbonControl.Synchronize(this, property, clone, property);
+
+        void BindTwoWay(DependencyProperty property)
         {
-            VisualStateManager.GoToState(this, "Checked", true);
-        }
-        else
-        {
-            VisualStateManager.GoToState(this, "Unchecked", true);
-        }
-        
-        UpdateCurrentIcon();
-    }
-
-    private void UpdateCurrentIcon()
-    {
-        var smallIcon = Icon as ImageSource;
-        CurrentIcon = Size == RibbonControlSize.Large
-            ? LargeIcon ?? MediumIcon ?? smallIcon
-            : smallIcon ?? MediumIcon ?? LargeIcon;
-    }
-
-    #endregion
-
-    #region IKeyTipedControl
-
-    /// <inheritdoc />
-    public void OnKeyTipPressed()
-    {
-        if (Command is not null && Command.CanExecute(CommandParameter))
-        {
-            Command.Execute(CommandParameter);
-        }
-        else
-        {
-            ShowDropDown();
+            RibbonControl.Synchronize(this, property, clone, property);
+            RibbonControl.Synchronize(clone, property, this, property);
         }
     }
 
     /// <inheritdoc />
-    public void OnKeyTipBack()
+    public override KeyTipPressedResult OnKeyTipPressed()
     {
-        CloseDropDown();
+        return base.OnKeyTipPressed();
     }
-
-    #endregion
-
-    #region ISimplifiedStateControl
 
     /// <inheritdoc />
-    public void UpdateSimplifiedState(bool isSimplified)
-    {
-        IsSimplified = isSimplified;
-    }
-
-    #endregion
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+        new Fluent.Automation.Peers.RibbonSplitButtonAutomationPeer(this);
 }

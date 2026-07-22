@@ -58,43 +58,57 @@
                                 Margin="0,0,6,0" />
 
                             <!-- Spinner input area -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Border
+                                BorderBrush="{ThemeResource TextControlBorderBrush}"
+                                BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
+                                Background="{ThemeResource TextControlBackground}"
+                                CornerRadius="{ThemeResource ControlCornerRadius}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <TextBox
-                                    x:Name="PART_TextBox"
-                                    Width="{TemplateBinding InputWidth}"
-                                    VerticalAlignment="Center"
-                                    TextAlignment="Right"
-                                    Padding="4,2"
-                                    FontSize="12" />
+                                    <TextBox
+                                        x:Name="PART_TextBox"
+                                        Width="{TemplateBinding InputWidth}"
+                                        VerticalAlignment="Center"
+                                        TextAlignment="Right"
+                                        Padding="6,2"
+                                        MinHeight="24"
+                                        FontSize="12"
+                                        BorderThickness="0"
+                                        Background="Transparent" />
 
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <Button
-                                        x:Name="PART_UpButton"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Padding="2,0"
-                                        MinWidth="16"
-                                        MinHeight="12"
-                                        VerticalAlignment="Top">
-                                        <FontIcon Glyph="&#xE70E;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
-                                    </Button>
-                                    <Button
-                                        x:Name="PART_DownButton"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Padding="2,0"
-                                        MinWidth="16"
-                                        MinHeight="12"
-                                        VerticalAlignment="Bottom">
-                                        <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
-                                    </Button>
-                                </StackPanel>
-                            </Grid>
+                                    <Grid Grid.Column="1">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+                                        <Button
+                                            x:Name="PART_UpButton"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="2,0"
+                                            MinWidth="18"
+                                            CornerRadius="0,3,0,0"
+                                            VerticalAlignment="Stretch">
+                                            <FontIcon Glyph="&#xE70E;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
+                                        </Button>
+                                        <Button
+                                            x:Name="PART_DownButton"
+                                            Grid.Row="1"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="2,0"
+                                            MinWidth="18"
+                                            CornerRadius="0,0,3,0"
+                                            VerticalAlignment="Stretch">
+                                            <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </ControlTemplate>

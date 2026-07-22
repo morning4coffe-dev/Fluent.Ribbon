@@ -1,13 +1,15 @@
 namespace Fluent;
 
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents a group of controls within a RibbonTab.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
 [TemplatePart(Name = PART_ItemsPanel, Type = typeof(StackPanel))]
-[TemplatePart(Name = PART_HeaderPresenter, Type = typeof(ContentPresenter))]
-[TemplatePart(Name = PART_CollapsedButton, Type = typeof(Button))]
-public partial class RibbonGroupBox : Control, IHeaderedControl
+[TemplatePart(Name = PART_HeaderPresenter, Type = typeof(ContentControl))]
+[TemplatePart(Name = PART_CollapsedButton, Type = typeof(WinUIButton))]
+public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 {
     private const string PART_ItemsPanel = "PART_ItemsPanel";
     private const string PART_HeaderPresenter = "PART_HeaderPresenter";
@@ -16,16 +18,52 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     private const string PART_PopupItemsPanel = "PART_PopupItemsPanel";
     private const string PART_PopupHeaderText = "PART_PopupHeaderText";
 
-    private StackPanel? _itemsPanel;
-    private Button? _collapsedButton;
+    private Panel? _itemsPanel;
+    private WinUIButton? _collapsedButton;
     private Popup? _collapsedPopup;
     private StackPanel? _popupItemsPanel;
     private TextBlock? _popupHeaderText;
 
+    /// <summary>
+    /// Stores the authored (preferred) size of each scalable item, captured before any
+    /// group-driven scaling occurs. This lets a group honor per-control sizes
+    /// (e.g. a large Paste next to small Cut/Copy) instead of forcing every item
+    /// to the group's uniform size.
+    /// </summary>
+    private readonly Dictionary<UIElement, RibbonControlSize> _preferredSizes = new();
+
     #region Dependency Properties
 
+    /// <summary>
+    /// Identifies whether a header presenter belongs to the collapsed group surface.
+    /// </summary>
+    public static readonly DependencyProperty IsCollapsedHeaderContentPresenterProperty =
+        DependencyProperty.RegisterAttached(
+            "IsCollapsedHeaderContentPresenter",
+            typeof(bool),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(false));
+
+    /// <summary>
+    /// Sets whether a header presenter belongs to the collapsed group surface.
+    /// </summary>
+    public static void SetIsCollapsedHeaderContentPresenter(
+        DependencyObject element,
+        bool value)
+    {
+        element.SetValue(IsCollapsedHeaderContentPresenterProperty, value);
+    }
+
+    /// <summary>
+    /// Gets whether a header presenter belongs to the collapsed group surface.
+    /// </summary>
+    public static bool GetIsCollapsedHeaderContentPresenter(DependencyObject element)
+    {
+        return (bool)element.GetValue(IsCollapsedHeaderContentPresenterProperty);
+    }
+
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
+    public new static readonly DependencyProperty HeaderProperty =
         DependencyProperty.Register(
             nameof(Header),
             typeof(object),
@@ -35,7 +73,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     /// <summary>
     /// Gets or sets the header content of the group.
     /// </summary>
-    public object? Header
+    public new object? Header
     {
         get => GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -52,7 +90,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     /// <summary>
     /// Gets the collection of items in this group.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
@@ -79,17 +117,75 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     public static readonly DependencyProperty IconProperty =
         DependencyProperty.Register(
             nameof(Icon),
-            typeof(ImageSource),
+            typeof(object),
             typeof(RibbonGroupBox),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnAnyIconChanged));
 
     /// <summary>
     /// Gets or sets the icon displayed when the group is collapsed.
     /// </summary>
-    public ImageSource? Icon
+    public object? Icon
     {
-        get => (ImageSource?)GetValue(IconProperty);
+        get => GetValue(IconProperty);
         set => SetValue(IconProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="MediumIcon"/> dependency property.</summary>
+    public static readonly DependencyProperty MediumIconProperty =
+        DependencyProperty.Register(
+            nameof(MediumIcon),
+            typeof(object),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(null, OnAnyIconChanged));
+
+    /// <summary>
+    /// Gets or sets the medium-sized icon for the group.
+    /// </summary>
+    public object? MediumIcon
+    {
+        get => GetValue(MediumIconProperty);
+        set => SetValue(MediumIconProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="LargeIcon"/> dependency property.</summary>
+    public static readonly DependencyProperty LargeIconProperty =
+        DependencyProperty.Register(
+            nameof(LargeIcon),
+            typeof(object),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(null, OnAnyIconChanged));
+
+    /// <summary>
+    /// Gets or sets the large-sized icon for the group.
+    /// </summary>
+    public object? LargeIcon
+    {
+        get => GetValue(LargeIconProperty);
+        set => SetValue(LargeIconProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="CollapsedIcon"/> dependency property.</summary>
+    public static readonly DependencyProperty CollapsedIconProperty =
+        DependencyProperty.Register(
+            nameof(CollapsedIcon),
+            typeof(object),
+            typeof(RibbonGroupBox),
+            new PropertyMetadata(null));
+
+    /// <summary>
+    /// Gets the icon shown in the collapsed group button, preferring
+    /// <see cref="LargeIcon"/>, then <see cref="MediumIcon"/>, then <see cref="Icon"/>.
+    /// </summary>
+    public object? CollapsedIcon
+    {
+        get => GetValue(CollapsedIconProperty);
+        private set => SetValue(CollapsedIconProperty, value);
+    }
+
+    private static void OnAnyIconChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var groupBox = (RibbonGroupBox)d;
+        groupBox.CollapsedIcon = groupBox.LargeIcon ?? groupBox.MediumIcon ?? groupBox.Icon;
     }
 
     /// <summary>Identifies the <see cref="IsCollapsed"/> dependency property.</summary>
@@ -271,6 +367,8 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         DefaultStyleKey = typeof(RibbonGroupBox);
         Items = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
+        InitializeCompatibility();
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -282,14 +380,14 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     {
         base.OnApplyTemplate();
 
-        _itemsPanel = GetTemplateChild(PART_ItemsPanel) as StackPanel;
+        _itemsPanel = GetTemplateChild(PART_ItemsPanel) as Panel;
 
         if (_collapsedButton is not null)
         {
             _collapsedButton.Click -= OnCollapsedButtonClick;
         }
 
-        _collapsedButton = GetTemplateChild(PART_CollapsedButton) as Button;
+        _collapsedButton = GetTemplateChild(PART_CollapsedButton) as WinUIButton;
 
         if (_collapsedButton is not null)
         {
@@ -312,6 +410,7 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         }
         
         var launcherBtn = GetTemplateChild("LauncherButton") as Button;
+        ApplyCompatibilityTemplateParts(launcherBtn);
         if (launcherBtn is not null)
         {
             launcherBtn.Click -= OnLauncherButtonClick;
@@ -333,7 +432,67 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        OnItemsChanged(e);
+    }
+
+    /// <summary>Handles item collection changes.</summary>
+    protected virtual void OnItemsChanged(NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            _preferredSizes.Clear();
+        }
+        else if (e.OldItems is not null)
+        {
+            foreach (var old in e.OldItems)
+            {
+                if (old is UIElement element)
+                {
+                    _preferredSizes.Remove(element);
+                }
+            }
+        }
+
+        // Capture authored sizes for any newly added scalable items *before* the group
+        // applies its own state-based sizing, so per-control sizes are preserved.
+        CapturePreferredSizes();
         SyncItems();
+        UpdateItemSizes();
+    }
+
+    /// <summary>Handles the WPF-compatible primary-pointer hook.</summary>
+    protected virtual void OnMouseLeftButtonDown(PointerRoutedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, this) && IsInButtonState)
+        {
+            IsDropDownOpen = true;
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerPressed(PointerRoutedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        if (!e.Handled)
+        {
+            OnMouseLeftButtonDown(e);
+        }
+    }
+
+    /// <summary>
+    /// Records the authored size of each scalable item the first time it is seen.
+    /// Once captured, an item's preferred size is never overwritten by group scaling.
+    /// </summary>
+    private void CapturePreferredSizes()
+    {
+        foreach (var item in Items)
+        {
+            if (item is IScalableRibbonControl scalable && !_preferredSizes.ContainsKey(item))
+            {
+                _preferredSizes[item] = scalable.Size;
+            }
+        }
     }
 
     private void SyncItems()
@@ -366,6 +525,11 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
     }
 
     private void OnCollapsedButtonClick(object sender, RoutedEventArgs e)
+        => ExpandForAutomation();
+
+    internal bool IsDropDownOpenForAutomation => _collapsedPopup?.IsOpen == true;
+
+    internal void ExpandForAutomation()
     {
         if (_collapsedPopup is null || _popupItemsPanel is null) return;
         if (_collapsedPopup.IsOpen) return; // Prevent double-click
@@ -407,10 +571,27 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         }
 
         _collapsedPopup.IsOpen = true;
+        if (!IsDropDownOpen)
+        {
+            IsDropDownOpen = true;
+        }
+    }
+
+    internal void CollapseForAutomation()
+    {
+        if (_collapsedPopup is not null)
+        {
+            _collapsedPopup.IsOpen = false;
+        }
     }
 
     private void OnCollapsedPopupClosed(object? sender, object e)
     {
+        if (IsDropDownOpen)
+        {
+            IsDropDownOpen = false;
+        }
+
         if (_popupItemsPanel is null) return;
 
         // Move items back from popup panel to main panel
@@ -437,7 +618,9 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
 
     private void UpdateItemSizes()
     {
-        var targetSize = State switch
+        // The group state acts as a cap: controls may be their authored size or smaller,
+        // but never larger than what the current group state allows.
+        var cap = State switch
         {
             RibbonGroupBoxState.Large => RibbonControlSize.Large,
             RibbonGroupBoxState.Medium => RibbonControlSize.Medium,
@@ -449,10 +632,20 @@ public partial class RibbonGroupBox : Control, IHeaderedControl
         {
             if (item is IScalableRibbonControl scalable)
             {
-                scalable.ScaleTo(targetSize);
+                var preferred = _preferredSizes.TryGetValue(item, out var p) ? p : scalable.Size;
+
+                // RibbonControlSize orders Large(0) < Medium(1) < Small(2), so a larger
+                // enum value means a smaller control. Clamp to the group cap by taking
+                // whichever is the smaller control (the higher enum value).
+                var effective = (RibbonControlSize)System.Math.Max((int)preferred, (int)cap);
+                scalable.ScaleTo(effective);
             }
         }
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonGroupBoxAutomationPeer(this);
 }

@@ -5,6 +5,24 @@
       xmlns:fluent="using:Fluent"
       Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
+    <Page.Resources>
+        <!-- Elevated "card" surface for the showcase sections -->
+        <Style x:Key="ShowcaseCard" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource RibbonCardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="20" />
+        </Style>
+        <!-- Section heading -->
+        <Style x:Key="SectionHeading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
+            <Setter Property="Margin" Value="4,8,0,0" />
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -30,11 +48,11 @@
                         <fluent:RibbonMenuItem Header="Export" IconGlyph="&#xEDE1;" Description="Export to another format" />
                     </fluent:ApplicationMenu.Items>
                     <fluent:ApplicationMenu.RightPaneContent>
-                        <StackPanel Spacing="8" Padding="12">
-                            <TextBlock Text="Recent Documents" FontWeight="SemiBold" FontSize="14" />
-                            <TextBlock Text="Document1.docx" FontSize="12" Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
-                            <TextBlock Text="Report_Q4.docx" FontSize="12" Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
-                            <TextBlock Text="Proposal.docx" FontSize="12" Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                        <StackPanel Spacing="4" Padding="8">
+                            <TextBlock Text="Recent Documents" FontWeight="SemiBold" FontSize="14" Margin="4,4,4,6" />
+                            <fluent:RibbonMenuItem Header="Document1.docx" IconGlyph="&#xE8A5;" />
+                            <fluent:RibbonMenuItem Header="Report_Q4.docx" IconGlyph="&#xE8A5;" />
+                            <fluent:RibbonMenuItem Header="Proposal.docx" IconGlyph="&#xE8A5;" />
                         </StackPanel>
                     </fluent:ApplicationMenu.RightPaneContent>
                     <fluent:ApplicationMenu.FooterPaneContent>
@@ -48,227 +66,142 @@
 
             <!-- Contextual Tab Groups -->
             <fluent:Ribbon.ContextualGroups>
-                <fluent:RibbonContextualTabGroup x:Name="TableToolsGroup" Header="Table Tools" Visibility="Collapsed" />
+                <fluent:RibbonContextualTabGroup x:Name="TableToolsGroup" Header="Table Tools"
+                                                 Background="#0F6CBD" Foreground="White"
+                                                 Visibility="Collapsed" />
             </fluent:Ribbon.ContextualGroups>
 
+            <!-- Quick Access Toolbar items (mirrored above/below the ribbon) -->
+            <fluent:Ribbon.QuickAccessToolBarItems>
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE74E;" ToolTipService.ToolTip="Save" />
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A7;" ToolTipService.ToolTip="Undo" />
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A6;" ToolTipService.ToolTip="Redo" />
+            </fluent:Ribbon.QuickAccessToolBarItems>
+
+            <!-- Toolbar items shown on the right of the title bar -->
+            <fluent:Ribbon.ToolBarItems>
+                <fluent:RibbonButton Size="Small" IconGlyph="&#xE946;" ToolTipService.ToolTip="Help" />
+                <fluent:RibbonToggleButton Size="Small" IconGlyph="&#xE706;" ToolTipService.ToolTip="Toggle theme" />
+            </fluent:Ribbon.ToolBarItems>
+
             <fluent:Ribbon.Tabs>
-                <fluent:RibbonTab Header="Home"
-                                  ReduceOrder="Options,Editing,Editing,Paragraph,Paragraph,Font,Font,Clipboard,Clipboard,Clipboard,Options,Editing,Paragraph,Font,Styles">
+                <!-- Toolbars Tab (mirrors the WPF Showcase "Toolbars" landing tab) -->
+                <fluent:RibbonTab Header="Toolbars" fluent:KeyTip.Keys="TO"
+                                  ReduceOrder="Spinners,Group,Group,WrapPanel,Font,Font,Clipboard,Clipboard,Spinners,Group,WrapPanel,Font,Clipboard">
                     <fluent:RibbonTab.Groups>
+
                         <!-- Clipboard Group -->
-                        <fluent:RibbonGroupBox Header="Clipboard" IconGlyph="&#xE77F;">
+                        <fluent:RibbonGroupBox Header="Clipboard" IconGlyph="&#xE77F;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="C">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Paste" Size="Large" IconGlyph="&#xE77F;">
+                                <fluent:RibbonSplitButton Header="Paste" Size="Large" IconGlyph="&#xE77F;" fluent:KeyTip.Keys="V">
+                                    <fluent:RibbonSplitButton.Items>
+                                        <fluent:RibbonMenuItem Header="Keep Source Formatting" IconGlyph="&#xE77F;" />
+                                        <fluent:RibbonMenuItem Header="Merge Formatting" IconGlyph="&#xE8D2;" />
+                                        <fluent:RibbonMenuItem Header="Keep Text Only" IconGlyph="&#xE8E9;" />
+                                        <fluent:RibbonSeparator Orientation="Horizontal" />
+                                        <fluent:RibbonMenuItem Header="Paste Special..." />
+                                        <fluent:RibbonMenuItem Header="Set Default Paste..." />
+                                    </fluent:RibbonSplitButton.Items>
                                     <ToolTipService.ToolTip>
                                         <fluent:ScreenTip Title="Paste (Ctrl+V)" Text="Paste the contents of the clipboard." DisableReason="Copy something first to use Paste." />
                                     </ToolTipService.ToolTip>
-                                </fluent:RibbonButton>
-                                <fluent:RibbonButton Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" />
-                                <fluent:RibbonButton Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <!-- Font Group -->
-                        <fluent:RibbonGroupBox Header="Font" IconGlyph="&#xE8D2;" LauncherClick="OnLauncherClick" IsLauncherVisible="True">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonToggleButton Header="Bold" Size="Small" IconGlyph="&#xE8DD;" />
-                                <fluent:RibbonToggleButton Header="Italic" Size="Small" IconGlyph="&#xE8DB;" />
-                                <fluent:RibbonToggleButton Header="Underline" Size="Small" IconGlyph="&#xE8DC;" />
-                                <fluent:RibbonSeparator />
-                                <fluent:RibbonButton Header="Font Color" Size="Small" IconGlyph="&#xE790;" />
-                                <fluent:RibbonSeparator />
-                                <fluent:RibbonSpinner Header="Size" IconGlyph="&#xE8E9;" Value="12" Minimum="1" Maximum="999" Increment="1" InputWidth="50" SelectAllTextOnFocus="True" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <!-- Paragraph Group -->
-                        <fluent:RibbonGroupBox Header="Paragraph" IconGlyph="&#xE8FD;" LauncherClick="OnLauncherClick" IsLauncherVisible="True">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Bullets" Size="Small" IconGlyph="&#xE8FD;" />
-                                <fluent:RibbonButton Header="Numbering" Size="Small" IconGlyph="&#xE9D9;" />
-                                <fluent:RibbonSeparator />
-                                <fluent:RibbonRadioButton Header="Left" GroupName="Align" />
-                                <fluent:RibbonRadioButton Header="Center" GroupName="Align" />
-                                <fluent:RibbonRadioButton Header="Right" GroupName="Align" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <!-- Styles Group -->
-                        <fluent:RibbonGroupBox Header="Styles" IconGlyph="&#xE71B;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:InRibbonGallery MinWidth="200" MaxWidth="400" MaxHeight="94" ItemHeight="32" ItemWidth="72">
-                                    <fluent:RibbonGalleryItem Content="Normal" />
-                                    <fluent:RibbonGalleryItem Content="No Spacing" />
-                                    <fluent:RibbonGalleryItem Content="Heading 1" />
-                                    <fluent:RibbonGalleryItem Content="Heading 2" />
-                                    <fluent:RibbonGalleryItem Content="Title" />
-                                    <fluent:RibbonGalleryItem Content="Subtitle" />
-                                </fluent:InRibbonGallery>
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <!-- Editing Group -->
-                        <fluent:RibbonGroupBox Header="Editing" IconGlyph="&#xE721;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Find" Size="Large" IconGlyph="&#xE721;">
-                                    <ToolTipService.ToolTip>
-                                        <fluent:ScreenTip Title="Find (Ctrl+F)" Text="Search for text in the document." />
-                                    </ToolTipService.ToolTip>
-                                </fluent:RibbonButton>
-                                <fluent:RibbonButton Header="Replace" Size="Medium" IconGlyph="&#xE8EE;" />
-                                <fluent:RibbonButton Header="Select All" Size="Medium" IconGlyph="&#xE8B3;" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <!-- Options Group -->
-                        <fluent:RibbonGroupBox Header="Options" IconGlyph="&#xE713;">
-                            <fluent:RibbonGroupBox.Items>
-                                <StackPanel Orientation="Vertical">
-                                    <fluent:RibbonCheckBox Header="Show Ruler" />
-                                    <fluent:RibbonCheckBox Header="Show Grid" />
-                                    <fluent:RibbonCheckBox Header="Snap to Grid" />
-                                </StackPanel>
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-                    </fluent:RibbonTab.Groups>
-                </fluent:RibbonTab>
-
-                <!-- Insert Tab -->
-                <fluent:RibbonTab Header="Insert">
-                    <fluent:RibbonTab.Groups>
-                        <fluent:RibbonGroupBox Header="Pages" IconGlyph="&#xE7C3;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Cover Page" Size="Large" IconGlyph="&#xE7C3;" />
-                                <fluent:RibbonButton Header="Blank Page" Size="Large" IconGlyph="&#xE729;" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <fluent:RibbonGroupBox Header="Tables" IconGlyph="&#xE80A;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonSplitButton Header="Table" Size="Large" IconGlyph="&#xE80A;">
-                                    <fluent:RibbonSplitButton.Items>
-                                        <fluent:RibbonMenuItem Header="Insert Table..." IconGlyph="&#xE80A;" />
-                                        <fluent:RibbonMenuItem Header="Draw Table" IconGlyph="&#xED63;" />
-                                        <fluent:RibbonMenuItem Header="Convert Text to Table" IconGlyph="&#xE8EE;" />
-                                        <fluent:RibbonSeparator Orientation="Horizontal" />
-                                        <fluent:RibbonMenuItem Header="Quick Tables" IconGlyph="&#xE8B9;" Description="Insert a pre-formatted table" />
-                                    </fluent:RibbonSplitButton.Items>
                                 </fluent:RibbonSplitButton>
+                                <fluent:RibbonButton Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" fluent:KeyTip.Keys="X" />
+                                                                <fluent:RibbonButton Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" fluent:KeyTip.Keys="C" />
+                                                                <fluent:RibbonButton Header="Format Painter" Size="Medium" IconGlyph="&#xE790;" fluent:KeyTip.Keys="FP" />
+                                <fluent:RibbonDropDownButton Header="DropDown&#x0A;Button" Size="Large" IconGlyph="&#xE7C1;" HasTriangle="True" fluent:KeyTip.Keys="W">
+                                    <fluent:RibbonDropDownButton.Items>
+                                        <fluent:RibbonMenuItem Header="Confidential" IconGlyph="&#xE72E;" />
+                                        <fluent:RibbonMenuItem Header="Do Not Copy" IconGlyph="&#xE72E;" />
+                                        <fluent:RibbonMenuItem Header="Draft" IconGlyph="&#xE70F;" />
+                                        <fluent:RibbonMenuItem Header="Sample" IconGlyph="&#xE70F;" />
+                                        <fluent:RibbonMenuItem Header="Urgent" IconGlyph="&#xE7BA;" />
+                                        <fluent:RibbonSeparator Orientation="Horizontal" />
+                                        <fluent:RibbonMenuItem Header="Remove Watermark" IconGlyph="&#xE74D;" />
+                                    </fluent:RibbonDropDownButton.Items>
+                                </fluent:RibbonDropDownButton>
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <fluent:RibbonGroupBox Header="Illustrations" IconGlyph="&#xEB9F;">
+                        <!-- Font Group (RibbonToolBar with a two-row layout, like the WPF Font group) -->
+                        <fluent:RibbonGroupBox Header="Font" IconGlyph="&#xE8D2;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="F">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Pictures" Size="Large" IconGlyph="&#xEB9F;" />
-                                <fluent:RibbonButton Header="Shapes" Size="Large" IconGlyph="&#xF156;" />
-                                <fluent:RibbonButton Header="Icons" Size="Large" IconGlyph="&#xED58;" />
-                                <fluent:RibbonButton Header="Chart" Size="Large" IconGlyph="&#xE9D9;" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <fluent:RibbonGroupBox Header="Text" IconGlyph="&#xE8D2;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonTextBox Header="Find:" IconGlyph="&#xE721;" InputWidth="120" SelectAllTextOnFocus="True" />
-                                <fluent:RibbonComboBox Header="Styles:" IconGlyph="&#xE8D2;" InputWidth="100" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <fluent:RibbonGroupBox Header="Styles" IconGlyph="&#xE71B;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:InRibbonGallery Header="Quick Styles"
-                                                         ItemWidth="72" ItemHeight="48"
-                                                         MaxItemsInRow="4" MinItemsInRow="2"
-                                                         IconGlyph="&#xE8D2;">
-                                    <fluent:InRibbonGallery.Items>
-                                        <Border Background="#0078D4" Width="64" Height="40" CornerRadius="2" Margin="2">
-                                            <TextBlock Text="Normal" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border Background="#107C10" Width="64" Height="40" CornerRadius="2" Margin="2">
-                                            <TextBlock Text="Heading 1" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border Background="#E81123" Width="64" Height="40" CornerRadius="2" Margin="2">
-                                            <TextBlock Text="Heading 2" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border Background="#FF8C00" Width="64" Height="40" CornerRadius="2" Margin="2">
-                                            <TextBlock Text="Title" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border Background="#5C2D91" Width="64" Height="40" CornerRadius="2" Margin="2">
-                                            <TextBlock Text="Subtitle" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border Background="#008575" Width="64" Height="40" CornerRadius="2" Margin="2">
-                                            <TextBlock Text="Quote" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </fluent:InRibbonGallery.Items>
-                                </fluent:InRibbonGallery>
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-                    </fluent:RibbonTab.Groups>
-                </fluent:RibbonTab>
-
-                <!-- View Tab -->
-                <fluent:RibbonTab Header="View">
-                    <fluent:RibbonTab.Groups>
-                        <fluent:RibbonGroupBox Header="Views" IconGlyph="&#xE736;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Read Mode" Size="Large" IconGlyph="&#xE736;" />
-                                <fluent:RibbonButton Header="Print Layout" Size="Large" IconGlyph="&#xE7C3;" />
-                                <fluent:RibbonButton Header="Web Layout" Size="Large" IconGlyph="&#xE774;" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <fluent:RibbonGroupBox Header="Show" IconGlyph="&#xE7B3;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonCheckBox Header="Ruler" />
-                                <fluent:RibbonCheckBox Header="Gridlines" />
-                                <fluent:RibbonCheckBox Header="Navigation Pane" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-
-                        <fluent:RibbonGroupBox Header="Zoom" IconGlyph="&#xE71E;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Zoom" Size="Large" IconGlyph="&#xE71E;">
-                                    <ToolTipService.ToolTip>
-                                        <fluent:ScreenTip Title="Zoom" Text="Change the zoom level to make the document appear larger or smaller on screen." />
-                                    </ToolTipService.ToolTip>
-                                </fluent:RibbonButton>
-                                <fluent:RibbonSpinner Header="Zoom %" Value="100" Minimum="10" Maximum="500" Increment="10" Format="F0" InputWidth="55" />
-                                <fluent:RibbonButton Header="One Page" Size="Medium" IconGlyph="&#xE160;" />
-                                <fluent:RibbonButton Header="Two Pages" Size="Medium" IconGlyph="&#xE89A;" />
-                            </fluent:RibbonGroupBox.Items>
-                        </fluent:RibbonGroupBox>
-                    </fluent:RibbonTab.Groups>
-                </fluent:RibbonTab>
-
-                <!-- NEW: Ported Controls Tab -->
-                <fluent:RibbonTab Header="Ported Controls">
-                    <fluent:RibbonTab.Groups>
-                        <!-- ToolBar Group showcasing RibbonToolBar -->
-                        <fluent:RibbonGroupBox Header="Toolbar" IconGlyph="&#xE81E;">
-                            <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonToolBar x:Name="SampleToolBar">
+                                <fluent:RibbonToolBar x:Name="FontToolBar">
                                     <fluent:RibbonToolBar.Items>
-                                        <fluent:RibbonButton x:Name="ToolBtnAlignLeft" Header="Left" Size="Small" IconGlyph="&#xE8B8;" />
-                                        <fluent:RibbonButton x:Name="ToolBtnAlignCenter" Header="Center" Size="Small" IconGlyph="&#xE8BA;" />
-                                        <fluent:RibbonButton x:Name="ToolBtnAlignRight" Header="Right" Size="Small" IconGlyph="&#xE8B9;" />
-                                        <fluent:RibbonButton x:Name="ToolBtnIndentDec" Header="Decrease" Size="Small" IconGlyph="&#xE8B2;" />
-                                        <fluent:RibbonButton x:Name="ToolBtnIndentInc" Header="Increase" Size="Small" IconGlyph="&#xE8B3;" />
-                                        <fluent:RibbonButton x:Name="ToolBtnSort" Header="Sort" Size="Small" IconGlyph="&#xE8CB;" />
+                                        <fluent:RibbonComboBox x:Name="fontNameCombo" InputWidth="110" />
+                                        <fluent:RibbonComboBox x:Name="fontSizeCombo" InputWidth="64" />
+                                        <fluent:RibbonButton x:Name="btnGrowFont" Size="Small" IconGlyph="&#xE8E8;" ToolTipService.ToolTip="Grow Font" />
+                                        <fluent:RibbonButton x:Name="btnShrinkFont" Size="Small" IconGlyph="&#xE8E7;" ToolTipService.ToolTip="Shrink Font" />
+                                        <fluent:RibbonDropDownButton x:Name="btnChangeCase" Size="Small" IconGlyph="&#xE97F;" HasTriangle="True" ToolTipService.ToolTip="Change Case">
+                                            <fluent:RibbonDropDownButton.Items>
+                                                <fluent:RibbonMenuItem Header="UPPERCASE" />
+                                                <fluent:RibbonMenuItem Header="lowercase" />
+                                                <fluent:RibbonMenuItem Header="Capitalize Each Word" />
+                                            </fluent:RibbonDropDownButton.Items>
+                                        </fluent:RibbonDropDownButton>
+                                        <fluent:RibbonButton x:Name="btnClearFormatting" Size="Small" IconGlyph="&#xE894;" ToolTipService.ToolTip="Clear Formatting" />
+                                        <fluent:RibbonToggleButton x:Name="btnBold" Size="Small" IconGlyph="&#xE8DD;" ToolTipService.ToolTip="Bold" />
+                                        <fluent:RibbonToggleButton x:Name="btnItalic" Size="Small" IconGlyph="&#xE8DB;" ToolTipService.ToolTip="Italic" />
+                                        <fluent:RibbonToggleButton x:Name="btnUnderline" Size="Small" IconGlyph="&#xE8DC;" ToolTipService.ToolTip="Underline" />
+                                        <fluent:RibbonButton x:Name="btnStrikethrough" Size="Small" IconGlyph="&#xEDE0;" ToolTipService.ToolTip="Strikethrough" />
+                                        <fluent:RibbonButton x:Name="btnSubscript" Size="Small" IconGlyph="&#xE8E6;" ToolTipService.ToolTip="Subscript" />
+                                                                                <fluent:RibbonButton x:Name="btnSuperscript" Size="Small" IconGlyph="&#xE8E9;" ToolTipService.ToolTip="Superscript" />
+                                        <fluent:RibbonDropDownButton x:Name="btnTextEffects" Size="Small" IconGlyph="&#xE8D2;" HasTriangle="True" ToolTipService.ToolTip="Text Effects">
+                                            <fluent:RibbonDropDownButton.Items>
+                                                <fluent:ColorGallery Columns="10" IsAutomaticColorButtonVisible="True" />
+                                            </fluent:RibbonDropDownButton.Items>
+                                        </fluent:RibbonDropDownButton>
+                                        <fluent:RibbonDropDownButton x:Name="btnHighlight" Size="Small" IconGlyph="&#xE7E6;" HasTriangle="True" ToolTipService.ToolTip="Text Highlight Color">
+                                            <fluent:RibbonDropDownButton.Items>
+                                                <fluent:ColorGallery Columns="10" IsNoColorButtonVisible="True" />
+                                            </fluent:RibbonDropDownButton.Items>
+                                        </fluent:RibbonDropDownButton>
+                                        <fluent:RibbonDropDownButton x:Name="btnFontColor" Size="Small" IconGlyph="&#xE790;" HasTriangle="True" ToolTipService.ToolTip="Font Color">
+                                            <fluent:RibbonDropDownButton.Items>
+                                                <fluent:ColorGallery Columns="10" IsAutomaticColorButtonVisible="True" IsNoColorButtonVisible="True" />
+                                            </fluent:RibbonDropDownButton.Items>
+                                        </fluent:RibbonDropDownButton>
                                     </fluent:RibbonToolBar.Items>
                                     <fluent:RibbonToolBar.LayoutDefinitions>
-                                        <fluent:RibbonToolBarLayoutDefinition RowCount="3">
+                                        <fluent:RibbonToolBarLayoutDefinition RowCount="2">
                                             <fluent:RibbonToolBarLayoutDefinition.Rows>
                                                 <fluent:RibbonToolBarRow>
                                                     <fluent:RibbonToolBarRow.Children>
-                                                        <fluent:RibbonToolBarControlDefinition Target="ToolBtnAlignLeft" Size="Small" />
-                                                        <fluent:RibbonToolBarControlDefinition Target="ToolBtnAlignCenter" Size="Small" />
-                                                        <fluent:RibbonToolBarControlDefinition Target="ToolBtnAlignRight" Size="Small" />
+                                                        <fluent:RibbonToolBarControlGroupDefinition>
+                                                            <fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                                <fluent:RibbonToolBarControlDefinition Target="fontNameCombo" Width="110" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="fontSizeCombo" Width="64" Size="Small" />
+                                                            </fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                        </fluent:RibbonToolBarControlGroupDefinition>
+                                                        <fluent:RibbonToolBarControlGroupDefinition>
+                                                            <fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnGrowFont" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnShrinkFont" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnChangeCase" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnClearFormatting" Size="Small" />
+                                                            </fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                        </fluent:RibbonToolBarControlGroupDefinition>
                                                     </fluent:RibbonToolBarRow.Children>
                                                 </fluent:RibbonToolBarRow>
                                                 <fluent:RibbonToolBarRow>
                                                     <fluent:RibbonToolBarRow.Children>
-                                                        <fluent:RibbonToolBarControlDefinition Target="ToolBtnIndentDec" Size="Small" />
-                                                        <fluent:RibbonToolBarControlDefinition Target="ToolBtnIndentInc" Size="Small" />
-                                                        <fluent:RibbonToolBarControlDefinition Target="ToolBtnSort" Size="Small" />
+                                                        <fluent:RibbonToolBarControlGroupDefinition>
+                                                            <fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnBold" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnItalic" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnUnderline" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnStrikethrough" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnSubscript" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnSuperscript" Size="Small" />
+                                                            </fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                        </fluent:RibbonToolBarControlGroupDefinition>
+                                                        <fluent:RibbonToolBarControlGroupDefinition>
+                                                            <fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnTextEffects" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnHighlight" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnFontColor" Size="Small" />
+                                                            </fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                        </fluent:RibbonToolBarControlGroupDefinition>
                                                     </fluent:RibbonToolBarRow.Children>
                                                 </fluent:RibbonToolBarRow>
                                             </fluent:RibbonToolBarLayoutDefinition.Rows>
@@ -278,81 +211,427 @@
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <!-- Color Gallery Group -->
-                        <fluent:RibbonGroupBox Header="Colors" IconGlyph="&#xE790;">
+                        <!-- WrapPanel Group -->
+                        <fluent:RibbonGroupBox Header="WrapPanel" IconGlyph="&#xE8A9;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonDropDownButton Header="Font Color" Size="Large" IconGlyph="&#xE790;" HasTriangle="True">
+                                <fluent:RibbonButton Header="Green" Size="Medium" IconGlyph="&#xE91F;" Foreground="#13A10E" />
+                                <fluent:RibbonButton Header="Gray" Size="Medium" IconGlyph="&#xE91F;" Foreground="#9E9E9E" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <!-- Group (RibbonToolBar with a spinner row over stacked color buttons) -->
+                        <fluent:RibbonGroupBox Header="Group" IconGlyph="&#xE8A9;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonToolBar x:Name="ColorToolBar">
+                                    <fluent:RibbonToolBar.Items>
+                                        <fluent:RibbonSpinner x:Name="groupSpinner" Value="0" Minimum="0" Maximum="100" Increment="1" InputWidth="90" />
+                                        <fluent:RibbonButton x:Name="btnGreen" Header="Green" Size="Small" IconGlyph="&#xE91F;" Foreground="#13A10E" />
+                                        <fluent:RibbonButton x:Name="btnGray" Header="Gray" Size="Small" IconGlyph="&#xE91F;" Foreground="#9E9E9E" />
+                                        <fluent:RibbonButton x:Name="btnYellow" Header="Yellow" Size="Small" IconGlyph="&#xE91F;" Foreground="#FFB900" />
+                                        <fluent:RibbonButton x:Name="btnBrown" Header="Brown" Size="Small" IconGlyph="&#xE91F;" Foreground="#A0522D" />
+                                    </fluent:RibbonToolBar.Items>
+                                    <fluent:RibbonToolBar.LayoutDefinitions>
+                                        <fluent:RibbonToolBarLayoutDefinition RowCount="3">
+                                            <fluent:RibbonToolBarLayoutDefinition.Rows>
+                                                <fluent:RibbonToolBarRow>
+                                                    <fluent:RibbonToolBarRow.Children>
+                                                        <fluent:RibbonToolBarControlDefinition Target="groupSpinner" Width="120" />
+                                                    </fluent:RibbonToolBarRow.Children>
+                                                </fluent:RibbonToolBarRow>
+                                                <fluent:RibbonToolBarRow>
+                                                    <fluent:RibbonToolBarRow.Children>
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnGreen" Size="Small" />
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnGray" Size="Small" />
+                                                    </fluent:RibbonToolBarRow.Children>
+                                                </fluent:RibbonToolBarRow>
+                                                <fluent:RibbonToolBarRow>
+                                                    <fluent:RibbonToolBarRow.Children>
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnYellow" Size="Small" />
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnBrown" Size="Small" />
+                                                    </fluent:RibbonToolBarRow.Children>
+                                                </fluent:RibbonToolBarRow>
+                                            </fluent:RibbonToolBarLayoutDefinition.Rows>
+                                        </fluent:RibbonToolBarLayoutDefinition>
+                                    </fluent:RibbonToolBar.LayoutDefinitions>
+                                </fluent:RibbonToolBar>
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <!-- Spinners Group -->
+                        <fluent:RibbonGroupBox Header="Spinners" IconGlyph="&#xE8EF;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="ZXB">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonSpinner Header="Left:" IconGlyph="&#xE8EF;" Value="0" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" />
+                                <fluent:RibbonSpinner Header="Right:" IconGlyph="&#xE8EF;" Value="0" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" SelectAllTextOnFocus="True" />
+                                <fluent:RibbonSpinner Header="Top:" IconGlyph="&#xE8EF;" Value="0" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- Insert Tab (faithful clone of WPF Showcase "Insert") -->
+                <fluent:RibbonTab Header="Insert" fluent:KeyTip.Keys="I"
+                                  ReduceOrder="groupLL, groupLL, groupLL">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox x:Name="groupLL" Header="Fonts" IconGlyph="&#xE8D2;"
+                                               IsLauncherVisible="False" fluent:KeyTip.Keys="FG">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonComboBox x:Name="insertFontsCombo1" Header="Fonts"
+                                                       IconGlyph="&#xE8D2;" InputWidth="120" fluent:KeyTip.Keys="FD" />
+                                <fluent:RibbonComboBox x:Name="insertFontsCombo2" Header="Fonts" InputWidth="120" />
+                                <fluent:RibbonButton Header="Add item to fonts" Size="Medium"
+                                                     IconGlyph="&#xE710;" Click="HandleAddItemToFontsClick" />
+                                <fluent:RibbonComboBox x:Name="insertKbNav1" Header="KeyboardNavigation" fluent:KeyTip.Keys="KET" />
+                                <fluent:RibbonComboBox x:Name="insertKbNav2" Header="KeyboardNavigation" fluent:KeyTip.Keys="KEF" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Gallery" IconGlyph="&#xE7BA;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:InRibbonGallery x:Name="InsertSplitGallery" Header="Split"
+                                                        Width="100" IconGlyph="&#xE7BA;" ItemHeight="55" ItemWidth="40"
+                                                        fluent:KeyTip.Keys="S" MaxItemsInRow="2" MinItemsInRow="2" />
+                                <fluent:InRibbonGallery x:Name="InsertManyItemsGallery" Header="Many items"
+                                                        IsCollapsed="True" ItemHeight="100" ItemWidth="100"
+                                                        MaxDropDownItemsInRow="5" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Buttons" IconGlyph="&#xE8D2;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonButton Header="Enlarge" Size="Medium" IconGlyph="&#xE710;" Click="OnEnlargeClick" />
+                                <fluent:RibbonButton Header="Reduce" Size="Medium" IconGlyph="&#xE738;" Click="OnReduceClick" />
+                                <fluent:RibbonButton Header="Button with rectangle as icon" Size="Medium"
+                                                     IconGlyph="&#xE71A;" Foreground="#107C10" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Test" IconGlyph="&#xE7A7;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonSplitButton x:Name="UndoButton" Header="Undo" Size="Medium"
+                                                          IconGlyph="&#xE7A7;" fluent:KeyTip.Keys="Z">
+                                    <fluent:RibbonSplitButton.Items>
+                                        <fluent:RibbonMenuItem Header="My header" Description="Test" IconGlyph="&#xE73B;" />
+                                        <fluent:RibbonMenuItem Header="Undo something" IconGlyph="&#xE7A7;" />
+                                        <fluent:RibbonMenuItem Header="Undo another thing" />
+                                    </fluent:RibbonSplitButton.Items>
+                                </fluent:RibbonSplitButton>
+                                <fluent:RibbonButton Header="Redo" Size="Medium" IconGlyph="&#xE7A6;" fluent:KeyTip.Keys="Y" />
+                                <fluent:RibbonButton Header="Repeat" Size="Medium" IconGlyph="&#xE72C;" fluent:KeyTip.Keys="R" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- Tests Tab (faithful clone of WPF Showcase "Tests") -->
+                <fluent:RibbonTab Header="Tests" fluent:KeyTip.Keys="TE">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox Header="LongLongGroup" IsLauncherVisible="False">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonCheckBox Header="Text 1" IsThreeState="True" />
+                                <fluent:RibbonCheckBox Header="Text 2" IsChecked="True" IsEnabled="False" />
+                                <fluent:RibbonCheckBox Header="Text 3" IsEnabled="False" />
+                                <fluent:RibbonCheckBox Header="Text 4" IsThreeState="True" IsEnabled="False" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="DropDownButtons" IconGlyph="&#xE787;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonDropDownButton Header="Calendar" Size="Large" IconGlyph="&#xE787;">
                                     <fluent:RibbonDropDownButton.Items>
-                                        <fluent:RibbonMenuItem Header="Automatic" IconGlyph="&#xE790;" />
-                                        <fluent:RibbonSeparator Orientation="Horizontal" />
-                                        <fluent:RibbonMenuItem Header="Red" IconGlyph="&#xEA3A;" />
-                                        <fluent:RibbonMenuItem Header="Blue" IconGlyph="&#xEA3A;" />
+                                        <fluent:RibbonMenuItem Header="Today" IconGlyph="&#xE8BF;" />
+                                        <fluent:RibbonMenuItem Header="Tomorrow" />
+                                        <fluent:RibbonMenuItem Header="Pick a date..." />
+                                    </fluent:RibbonDropDownButton.Items>
+                                </fluent:RibbonDropDownButton>
+                                <fluent:RibbonDropDownButton Header="Bound items" Size="Large" IconGlyph="&#xE762;">
+                                    <fluent:RibbonDropDownButton.Items>
+                                        <fluent:RibbonMenuItem Header="Item 1" />
+                                        <fluent:RibbonMenuItem Header="Item 2" />
+                                        <fluent:RibbonMenuItem Header="Item 3" />
+                                    </fluent:RibbonDropDownButton.Items>
+                                </fluent:RibbonDropDownButton>
+                                <fluent:RibbonDropDownButton Header="Dropdown (auto close on click)" Size="Large" IconGlyph="&#xE762;">
+                                    <fluent:RibbonDropDownButton.Items>
+                                        <fluent:RibbonMenuItem Header="Item 1">
+                                            <fluent:RibbonMenuItem.Items>
+                                                <fluent:RibbonMenuItem Header="Item 1" />
+                                                <fluent:RibbonMenuItem Header="Item 2" />
+                                                <fluent:RibbonMenuItem Header="Item 3" />
+                                            </fluent:RibbonMenuItem.Items>
+                                        </fluent:RibbonMenuItem>
+                                        <fluent:RibbonMenuItem Header="Item 2" />
+                                        <fluent:RibbonMenuItem Header="Item 3" />
+                                        <fluent:RibbonMenuItem Header="Item 4" />
+                                        <fluent:RibbonMenuItem Header="Item 5" />
+                                    </fluent:RibbonDropDownButton.Items>
+                                </fluent:RibbonDropDownButton>
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Vector images" IconGlyph="&#xF156;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonSplitButton Header="Large" Size="Large" IconGlyph="&#xF156;" fluent:KeyTip.Keys="L" />
+                                <fluent:RibbonSplitButton Header="Medium" Size="Medium" IconGlyph="&#xF156;" fluent:KeyTip.Keys="M" />
+                                <fluent:RibbonSplitButton Header="Small" Size="Small" IconGlyph="&#xF156;" fluent:KeyTip.Keys="S" />
+                                <fluent:RibbonSplitButton Header="Large" Size="Large" IconGlyph="&#xF156;" IsEnabled="False" />
+                                <fluent:RibbonSplitButton Header="Medium" Size="Medium" IconGlyph="&#xF156;" IsEnabled="False" />
+                                <fluent:RibbonSplitButton Header="Small" Size="Small" IconGlyph="&#xF156;" IsEnabled="False" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Grouped SplitButton" IconGlyph="&#xE713;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonSplitButton Header="Split 1" Size="Large" IconGlyph="&#xE713;" IsCheckable="True">
+                                    <fluent:RibbonSplitButton.Items>
+                                        <fluent:RibbonMenuItem Header="First" IconGlyph="&#xEA3A;" />
+                                        <fluent:RibbonMenuItem Header="Second" />
+                                        <fluent:RibbonMenuItem Header="Third" />
+                                    </fluent:RibbonSplitButton.Items>
+                                </fluent:RibbonSplitButton>
+                                <fluent:RibbonSplitButton Header="Split 2" Size="Medium" IconGlyph="&#xE713;" IsCheckable="True" />
+                                <fluent:RibbonSplitButton Header="Split 3" Size="Medium" IconGlyph="&#xE713;" IsCheckable="True" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Grouped ToggleButton" IconGlyph="&#xE713;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonToggleButton Header="Toggle 1" Size="Large" IconGlyph="&#xE713;" GroupName="GroupedToggle" IsChecked="True" fluent:KeyTip.Keys="T1" />
+                                <fluent:RibbonToggleButton Header="Toggle 2" Size="Medium" IconGlyph="&#xE713;" GroupName="GroupedToggle" fluent:KeyTip.Keys="T2" />
+                                <fluent:RibbonToggleButton Header="Toggle 3" Size="Medium" IconGlyph="&#xE713;" GroupName="GroupedToggle" fluent:KeyTip.Keys="T3" />
+                                <fluent:RibbonDropDownButton Header="Months" Size="Medium" IconGlyph="&#xE787;">
+                                    <fluent:RibbonDropDownButton.Items>
+                                        <fluent:RibbonMenuItem Header="January" />
+                                        <fluent:RibbonMenuItem Header="February" />
+                                        <fluent:RibbonMenuItem Header="March" />
+                                        <fluent:RibbonMenuItem Header="April" />
+                                        <fluent:RibbonMenuItem Header="May" />
+                                        <fluent:RibbonMenuItem Header="June" />
+                                        <fluent:RibbonMenuItem Header="July" />
+                                        <fluent:RibbonMenuItem Header="August" />
+                                        <fluent:RibbonMenuItem Header="September" />
+                                        <fluent:RibbonMenuItem Header="October" />
+                                        <fluent:RibbonMenuItem Header="November" />
+                                        <fluent:RibbonMenuItem Header="December" />
+                                    </fluent:RibbonDropDownButton.Items>
+                                </fluent:RibbonDropDownButton>
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="SharedSizeScope">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonComboBox x:Name="sharedSizeCombo" Header="Many items" InputWidth="120" />
+                                <fluent:RibbonTextBox Header="My short header" InputWidth="120" />
+                                <fluent:RibbonSpinner Header="My long long header" Value="0" InputWidth="60" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- Galleries Tab (faithful clone of WPF Showcase "Galleries") -->
+                <fluent:RibbonTab Header="Galleries" fluent:KeyTip.Keys="GA">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox Header="Without Grouping" IconGlyph="&#xE8FD;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonDropDownButton Header="DropDownButton" Size="Large" IconGlyph="&#xE8FD;">
+                                    <fluent:RibbonDropDownButton.Items>
+                                        <fluent:RibbonMenuItem Header="Pink" IconGlyph="&#xEA3A;" />
                                         <fluent:RibbonMenuItem Header="Green" IconGlyph="&#xEA3A;" />
+                                        <fluent:RibbonMenuItem Header="Blue" IconGlyph="&#xEA3A;" />
                                     </fluent:RibbonDropDownButton.Items>
                                 </fluent:RibbonDropDownButton>
-                                <fluent:RibbonDropDownButton Header="No Arrow" Size="Medium" IconGlyph="&#xE891;" HasTriangle="False">
+                                <fluent:RibbonButton Header="Refresh (Galleries)" Size="Medium" IconGlyph="&#xE72C;" />
+                                <fluent:RibbonToggleButton x:Name="ShowHideGalleries" Header="Show/Hide (Galleries)"
+                                                           Size="Medium" IconGlyph="&#xE7B3;" IsChecked="True" />
+                                <fluent:InRibbonGallery x:Name="GalWithoutGrouping" Header="InRibbonGallery"
+                                                        IconGlyph="&#xE80A;" ItemHeight="56" ItemWidth="40"
+                                                        MaxItemsInRow="5" MinItemsInRow="3" Selectable="False" fluent:KeyTip.Keys="G" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="With Grouping" IconGlyph="&#xE80A;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:InRibbonGallery x:Name="GalGrouped" Header="Grouped" IconGlyph="&#xE80A;"
+                                                        ItemHeight="18" ItemWidth="52" MaxItemsInRow="5" MinItemsInRow="1"
+                                                        fluent:KeyTip.Keys="GG" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox x:Name="GalleriesLauncherGroup" Header="Galleries" IconGlyph="&#xE80A;"
+                                               IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="A">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:InRibbonGallery x:Name="GalInRibbon" Header="In-Ribbon Gallery" IconGlyph="&#xE80A;"
+                                                        CanCollapseToButton="True" ItemHeight="56" ItemWidth="56"
+                                                        MaxItemsInRow="10" MinItemsInRow="2" fluent:KeyTip.Keys="JS" />
+                                <fluent:RibbonSplitButton Header="Split" Size="Large" IconGlyph="&#xE80A;" fluent:KeyTip.Keys="S">
+                                    <fluent:RibbonSplitButton.Items>
+                                        <fluent:RibbonMenuItem Header="Item 1" />
+                                        <fluent:RibbonMenuItem Header="Item 2" />
+                                        <fluent:RibbonMenuItem Header="Item 3" />
+                                    </fluent:RibbonSplitButton.Items>
+                                </fluent:RibbonSplitButton>
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox Header="Vertical" IconGlyph="&#xE80A;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:InRibbonGallery x:Name="GalVertical" Header="InRibbonGallery" IconGlyph="&#xE80A;"
+                                                        ItemHeight="56" ItemWidth="40" MaxItemsInRow="3" MinItemsInRow="1"
+                                                        Selectable="False" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- Resizing & Screentips Tab (faithful clone of WPF Showcase) -->
+                <fluent:RibbonTab Header="Resizing &amp; Screentips" fluent:KeyTip.Keys="RS"
+                                  ReduceOrder="ResOther, ResOther, ResLarge, ResLarge, ResDefault, ResDefault">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox x:Name="ResDefault" Header="Default Behaviour" IconGlyph="&#xE790;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonButton Header="Green" Size="Large" IconGlyph="&#xE790;" Foreground="#107C10">
+                                    <ToolTipService.ToolTip>
+                                        <fluent:ScreenTip Title="Green" HelpTopic="Help for Green ScreenTip"
+                                                          Text="This ScreenTip is ribbon aligned. It has the image and handles F1." />
+                                    </ToolTipService.ToolTip>
+                                </fluent:RibbonButton>
+                                <fluent:RibbonButton Header="Grey" Size="Large" IconGlyph="&#xE790;" Foreground="#9E9E9E" IsEnabled="False">
+                                    <ToolTipService.ToolTip>
+                                        <fluent:ScreenTip Title="Brown" Width="250"
+                                                          DisableReason="This control is disabled to show 'disable reason' section"
+                                                          HelpTopic="Help for Brown ScreenTip"
+                                                          Text="This control is disabled and has fixed width 250px" />
+                                    </ToolTipService.ToolTip>
+                                </fluent:RibbonButton>
+                                <fluent:RibbonButton Header="Yellow" Size="Large" IconGlyph="&#xE790;" Foreground="#FFB900">
+                                    <ToolTipService.ToolTip>
+                                        <fluent:ScreenTip Title="Gray" IsRibbonAligned="False"
+                                                          Text="This ScreenTip is NOT aligned to ribbon bottom" />
+                                    </ToolTipService.ToolTip>
+                                </fluent:RibbonButton>
+                                <fluent:RibbonButton Header="Brown" Size="Large" IconGlyph="&#xE790;" Foreground="#A0522D"
+                                                     ToolTipService.ToolTip="Regular Tooltip" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox x:Name="ResLarge" Header="Large Only" IconGlyph="&#xE790;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonButton Header="Green" Size="Large" IconGlyph="&#xE790;" Foreground="#107C10" />
+                                <fluent:RibbonButton Header="Grey" Size="Large" IconGlyph="&#xE790;" Foreground="#9E9E9E" />
+                                <fluent:RibbonButton Header="Yellow" Size="Large" IconGlyph="&#xE790;" Foreground="#FFB900" />
+                                <fluent:RibbonButton Header="Brown" Size="Large" IconGlyph="&#xE790;" Foreground="#A0522D" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox x:Name="ResOther" Header="Other" IconGlyph="&#xE790;">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonButton Header="Green" Size="Large" IconGlyph="&#xE790;" Foreground="#107C10" />
+                                <fluent:RibbonButton Header="Grey" Size="Large" IconGlyph="&#xE790;" Foreground="#9E9E9E" />
+                                <fluent:RibbonButton Header="Yellow" Size="Medium" IconGlyph="&#xE790;" Foreground="#FFB900" />
+                                <fluent:RibbonButton Header="Brown" Size="Medium" IconGlyph="&#xE790;" Foreground="#A0522D" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- KeyTips Tab (faithful clone of WPF Showcase "KeyTips") -->
+                <fluent:RibbonTab Header="KeyTips" fluent:KeyTip.Keys="K">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox Header="LongLongGroup" IsLauncherVisible="False">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonDropDownButton Header="Test3" Size="Medium" IconGlyph="&#xE712;" fluent:KeyTip.Keys="C">
                                     <fluent:RibbonDropDownButton.Items>
-                                        <fluent:RibbonMenuItem Header="Yellow" />
-                                        <fluent:RibbonMenuItem Header="Pink" />
+                                        <fluent:RibbonMenuItem Header="Test4" fluent:KeyTip.Keys="A" />
+                                        <fluent:RibbonMenuItem Header="Test5" fluent:KeyTip.Keys="B" />
                                     </fluent:RibbonDropDownButton.Items>
                                 </fluent:RibbonDropDownButton>
+                                <fluent:RibbonRadioButton Header="Test-Radio 1" GroupName="TestRadio" IsChecked="True" />
+                                <fluent:RibbonRadioButton Header="Test-Radio 2" GroupName="TestRadio" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <!-- Checkable SplitButton Group -->
-                        <fluent:RibbonGroupBox Header="Toggle Split" IconGlyph="&#xE8AB;">
+                        <fluent:RibbonGroupBox Header="KeyTips on templated items">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonSplitButton Header="Track Changes" Size="Large" IconGlyph="&#xE8AB;" IsCheckable="True">
+                                <fluent:RibbonButton Header="Template test" Size="Medium" IconGlyph="&#xE7C3;" fluent:KeyTip.Keys="B" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+
+                        <fluent:RibbonGroupBox x:Name="ZC" Header="Normal KeyTips" fluent:KeyTip.Keys="ZC">
+                            <fluent:RibbonGroupBox.Items>
+                                <fluent:RibbonSplitButton Header="Red" Size="Large" IconGlyph="&#xE790;" Foreground="#E81123" fluent:KeyTip.Keys="R">
                                     <fluent:RibbonSplitButton.Items>
-                                        <fluent:RibbonMenuItem Header="Track All Changes" />
-                                        <fluent:RibbonMenuItem Header="Track Only My Changes" />
+                                        <fluent:RibbonMenuItem Header="Pink" IconGlyph="&#xEA3A;" fluent:KeyTip.Keys="P" />
+                                        <fluent:RibbonMenuItem Header="Red" IconGlyph="&#xEA3A;" fluent:KeyTip.Keys="R" />
                                     </fluent:RibbonSplitButton.Items>
                                 </fluent:RibbonSplitButton>
-                                <fluent:RibbonSplitButton Header="Options" Size="Medium" IconGlyph="&#xE713;" IsCheckable="False">
-                                    <fluent:RibbonSplitButton.Items>
-                                        <fluent:RibbonMenuItem Header="Option A" />
-                                        <fluent:RibbonMenuItem Header="Option B" />
-                                    </fluent:RibbonSplitButton.Items>
-                                </fluent:RibbonSplitButton>
+                                <fluent:RibbonButton Header="Grey" Size="Large" IconGlyph="&#xE790;" Foreground="#9E9E9E" fluent:KeyTip.Keys="G" />
+                                <fluent:RibbonButton Header="Orange" Size="Large" IconGlyph="&#xE790;" Foreground="#FF8C00" fluent:KeyTip.Keys="O" />
+                                <fluent:RibbonButton Header="Pink" Size="Large" IconGlyph="&#xE790;" Foreground="#E3008C" fluent:KeyTip.Keys="P" />
+                                <fluent:RibbonButton Header="Gray 1" Size="Medium" IconGlyph="&#xE790;" Foreground="#9E9E9E" fluent:KeyTip.Keys="X1" />
+                                <fluent:RibbonButton Header="Gray 2" Size="Medium" IconGlyph="&#xE790;" Foreground="#9E9E9E" fluent:KeyTip.Keys="X2" />
+                                <fluent:RibbonButton Header="Gray 3" Size="Medium" IconGlyph="&#xE790;" Foreground="#9E9E9E" fluent:KeyTip.Keys="X3" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <!-- Labels and Icons -->
-                        <fluent:RibbonGroupBox Header="Labels &amp; Icons" IconGlyph="&#xE82D;">
+                        <fluent:RibbonGroupBox Header="Custom KeyTip placement">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:TwoLineLabel Text="Two Line Label Demo" HasTwoLines="True" HasGlyph="True" />
-                                <fluent:TwoLineLabel Text="Single Line" HasTwoLines="False" />
-                                <fluent:IconPresenter IconSize="Large" />
+                                <fluent:RibbonButton Header="Center" Size="Large" IconGlyph="&#xE790;" Foreground="#107C10"
+                                                     fluent:KeyTip.Keys="C" fluent:KeyTip.AutoPlacement="False"
+                                                     fluent:KeyTip.HorizontalAlignment="Center" fluent:KeyTip.VerticalAlignment="Center" />
+                                <fluent:RibbonButton Header="Left" Size="Large" IconGlyph="&#xE790;" Foreground="#9E9E9E"
+                                                     fluent:KeyTip.Keys="L" fluent:KeyTip.AutoPlacement="False"
+                                                     fluent:KeyTip.HorizontalAlignment="Left" fluent:KeyTip.VerticalAlignment="Center" />
+                                <fluent:RibbonButton Header="Top" Size="Large" IconGlyph="&#xE790;" Foreground="#FFB900"
+                                                     fluent:KeyTip.Keys="T" fluent:KeyTip.AutoPlacement="False"
+                                                     fluent:KeyTip.HorizontalAlignment="Center" fluent:KeyTip.VerticalAlignment="Top" />
+                                <fluent:RibbonButton Header="Left, Top, Margin" Size="Large" IconGlyph="&#xE790;" Foreground="#FFB900"
+                                                     fluent:KeyTip.Keys="LTM" fluent:KeyTip.AutoPlacement="False"
+                                                     fluent:KeyTip.HorizontalAlignment="Left" fluent:KeyTip.VerticalAlignment="Top"
+                                                     fluent:KeyTip.Margin="40,0,0,0" />
+                            </fluent:RibbonGroupBox.Items>
+                        </fluent:RibbonGroupBox>
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- Binding Tab (faithful clone of WPF Showcase "Binding") -->
+                <fluent:RibbonTab Header="Binding" fluent:KeyTip.Keys="B">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox x:Name="BoundItemsGroup" Header="Bound ItemsSource" IconGlyph="&#xE71D;" />
+                    </fluent:RibbonTab.Groups>
+                </fluent:RibbonTab>
+
+                <!-- Layout Tab (faithful clone of WPF Showcase "Layout") -->
+                <fluent:RibbonTab Header="Layout" fluent:KeyTip.Keys="L">
+                    <fluent:RibbonTab.Groups>
+                        <fluent:RibbonGroupBox Header="LongLongGroup" IsLauncherVisible="False">
+                            <fluent:RibbonGroupBox.Items>
+                                <DatePicker />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <!-- Backstage Components -->
-                        <fluent:RibbonGroupBox Header="Backstage" IconGlyph="&#xE8A7;">
+                        <fluent:RibbonGroupBox x:Name="LayoutPasteGroup" Header="LongLongGroup"
+                                               IsLauncherVisible="True" LauncherClick="OnLauncherClick">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonButton Header="Open Backstage" Size="Large" IconGlyph="&#xE8A7;" Click="OnOpenBackstage" />
-                                <fluent:RibbonButton Header="Start Screen" Size="Large" IconGlyph="&#xE80F;" Click="OnShowStartScreen" />
+                                <fluent:RibbonButton Header="Button" Size="Large" IconGlyph="&#xE77F;" />
+                                <fluent:RibbonButton Header="Button" Size="Large" IconGlyph="&#xE77F;" />
+                                <fluent:RibbonButton Header="Button" Size="Large" IconGlyph="&#xE77F;" />
+                                <fluent:RibbonButton Header="Button" Size="Large" IconGlyph="&#xE77F;" />
+                                <fluent:RibbonButton Header="Button" Size="Large" IconGlyph="&#xE77F;" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <!-- Gallery Group -->
-                        <fluent:RibbonGroupBox Header="Gallery" IconGlyph="&#xEA3A;">
+                        <fluent:RibbonGroupBox Header="Toggles" IconGlyph="&#xE769;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:GalleryGroupContainer Header="Shape Styles" IsHeadered="True" Orientation="Horizontal"
-                                                                ItemWidth="48" ItemHeight="48" MaxItemsInRow="4">
-                                    <fluent:GalleryGroupContainer.Items>
-                                        <Border Background="#0078D4" Width="40" Height="40" CornerRadius="4" />
-                                        <Border Background="#107C10" Width="40" Height="40" CornerRadius="20" />
-                                        <Border Background="#E81123" Width="40" Height="40" CornerRadius="4" />
-                                        <Border Background="#FF8C00" Width="40" Height="40" CornerRadius="8" />
-                                    </fluent:GalleryGroupContainer.Items>
-                                </fluent:GalleryGroupContainer>
+                                <fluent:RibbonToggleButton Header="Pause" Size="Medium" IconGlyph="&#xE769;" />
+                                <fluent:RibbonToggleButton Header="Button long text ggggggg gggg" Size="Medium" IconGlyph="&#xE8E8;" />
+                                <fluent:RibbonToggleButton Header="Button long text ggggggg gggg" Size="Large" IconGlyph="&#xE8E8;" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
                     </fluent:RibbonTab.Groups>
                 </fluent:RibbonTab>
 
                 <!-- Contextual Tab: Table Design -->
-                <fluent:RibbonTab Header="Design" ContextualTabGroupName="Table Tools">
+                <fluent:RibbonTab Header="Design" ContextualTabGroupName="Table Tools" fluent:KeyTip.Keys="JT">
                     <fluent:RibbonTab.Groups>
                         <fluent:RibbonGroupBox Header="Table Styles" IconGlyph="&#xE80A;">
                             <fluent:RibbonGroupBox.Items>
@@ -376,44 +655,57 @@
             <ScrollViewer>
                 <StackPanel Padding="20" Spacing="24">
                     <!-- Hero Section -->
-                    <StackPanel HorizontalAlignment="Center" Spacing="16">
-                        <TextBlock 
-                            Text="&#x1F389; Fluent.Ribbon.Uno - Cross-Platform Ribbon UI"
-                            FontSize="24" 
-                            FontWeight="Bold"
-                            HorizontalAlignment="Center" />
-                        <TextBlock 
-                            Text="This is a demonstration of the Ribbon control library ported to Uno Platform." 
-                            FontSize="14"
-                            HorizontalAlignment="Center"
-                            TextAlignment="Center"
-                            MaxWidth="500"
-                            TextWrapping="Wrap" />
-                        <TextBlock 
-                            Text="Runs on Windows, WebAssembly, iOS, Android, macOS, and Linux!" 
-                            FontSize="12"
-                            Foreground="{ThemeResource RibbonSecondaryTextBrush}"
-                            HorizontalAlignment="Center" />
-                        <TextBlock 
-                            Text="Features: App Menu, QAT, Contextual Tabs, InRibbonGallery, ToolBar, ColorGallery, Backstage, Start Screen, DropDownButton, SplitButton, Spinner, ComboBox, TextBox, 20 Languages" 
-                            FontSize="12"
-                            Foreground="{ThemeResource RibbonAccentBrush}"
-                            HorizontalAlignment="Center"
-                            FontWeight="SemiBold" />
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <Button Content="Toggle Table Tools" Click="OnToggleTableTools" Padding="12,6" />
-                            <Button Content="Open Backstage" Click="OnOpenBackstage" Padding="12,6" />
-                            <Button Content="Toggle Minimize" Click="OnToggleMinimize" Padding="12,6" />
-                            <Button Content="Toggle Simplified" Click="OnToggleSimplified" Padding="12,6" />
-                            <ToggleButton Content="Dark Mode" Click="OnToggleTheme" Padding="12,6" />
+                    <Border CornerRadius="12" Padding="32,26" HorizontalAlignment="Stretch">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#0A66C2" Offset="0" />
+                                <GradientStop Color="#0091D5" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="860">
+                            <TextBlock
+                                Text="Fluent.Ribbon.Uno"
+                                FontSize="30"
+                                FontWeight="Bold"
+                                Foreground="White"
+                                HorizontalAlignment="Center" />
+                            <TextBlock
+                                Text="A cross-platform, Office-style Ribbon for Uno Platform &amp; WinUI 3"
+                                FontSize="15"
+                                Foreground="#EAF4FC"
+                                HorizontalAlignment="Center"
+                                TextAlignment="Center"
+                                MaxWidth="560"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Text="Windows  ·  WebAssembly  ·  iOS  ·  Android  ·  macOS  ·  Linux"
+                                FontSize="12"
+                                Foreground="#CFE6F7"
+                                HorizontalAlignment="Center" />
+                            <TextBlock
+                                Text="App Menu · Quick Access Toolbar · Contextual Tabs · Galleries · Backstage · Spinner · 20 Languages"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="#DCEBF8"
+                                HorizontalAlignment="Center"
+                                TextAlignment="Center"
+                                MaxWidth="640"
+                                TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,6,0,0">
+                                <Button Content="Toggle Table Tools" Click="OnToggleTableTools" Padding="12,6" />
+                                <Button Content="Open Backstage" Click="OnOpenBackstage" Padding="12,6" />
+                                <Button Content="Toggle Minimize" Click="OnToggleMinimize" Padding="12,6" />
+                                <Button Content="Toggle Simplified" Click="OnToggleSimplified" Padding="12,6" />
+                                <ToggleButton Content="Dark Mode" Click="OnToggleTheme" Padding="12,6" />
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
+                    </Border>
 
                     <!-- Ported Controls Showcase Section -->
-                    <TextBlock Text="Ported Controls Showcase" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,0" />
+                    <TextBlock Text="Ported Controls Showcase" Style="{StaticResource SectionHeading}" />
 
                     <!-- ColorGallery -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ColorGallery" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A gallery control for color selection with standard colors." FontSize="12"
@@ -426,7 +718,7 @@
                     </Border>
 
                     <!-- TwoLineLabel -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="TwoLineLabel" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A label that can split text across two lines, with an optional glyph indicator." FontSize="12"
@@ -440,7 +732,7 @@
                     </Border>
 
                     <!-- IconPresenter -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="IconPresenter" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Multi-size icon presenter that adapts to Small, Medium, and Large sizes." FontSize="12"
@@ -463,7 +755,7 @@
                     </Border>
 
                     <!-- TransitioningControl -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="TransitioningControl" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Animated content transitions when content changes." FontSize="12"
@@ -478,7 +770,7 @@
                     </Border>
 
                     <!-- GalleryGroupContainer -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="GalleryGroupContainer" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A container that groups gallery items with an optional header." FontSize="12"
@@ -509,7 +801,7 @@
                     </Border>
 
                     <!-- RibbonToolBar -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="RibbonToolBar" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A toolbar that arranges items according to declarative layout definitions (rows x columns)." FontSize="12"
@@ -520,7 +812,7 @@
                     </Border>
 
                     <!-- BackstageTabControl + BackstageButton -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="BackstageTabControl &amp; BackstageButton" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Standalone backstage tab control with navigation buttons." FontSize="12"
@@ -535,7 +827,7 @@
                     </Border>
 
                     <!-- StartScreen -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="StartScreen" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A two-pane start screen with left navigation and right content." FontSize="12"
@@ -562,7 +854,7 @@
                     </Border>
 
                     <!-- ResizeableContentControl -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ResizeableContentControl" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="A content container that the user can resize by dragging." FontSize="12"
@@ -577,8 +869,87 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- RibbonScrollViewer -->
+                    <Border Style="{StaticResource ShowcaseCard}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RibbonScrollViewer" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Horizontal scroller with left/right chevrons for overflowing ribbon content." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <fluent:RibbonScrollViewer Width="320" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="One" />
+                                    <Button Content="Two" />
+                                    <Button Content="Three" />
+                                    <Button Content="Four" />
+                                    <Button Content="Five" />
+                                    <Button Content="Six" />
+                                    <Button Content="Seven" />
+                                    <Button Content="Eight" />
+                                </StackPanel>
+                            </fluent:RibbonScrollViewer>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RibbonTitleBar -->
+                    <Border Style="{StaticResource ShowcaseCard}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RibbonTitleBar" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Title bar hosting a quick access toolbar, contextual group area, and centered title." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <fluent:RibbonTitleBar Header="Document1 - Fluent.Ribbon.Uno" Height="36">
+                                <fluent:RibbonTitleBar.QuickAccessToolBar>
+                                    <fluent:QuickAccessToolBar>
+                                        <fluent:QuickAccessToolBar.Items>
+                                            <fluent:RibbonButton Size="Small" IconGlyph="&#xE74E;" ToolTipService.ToolTip="Save" />
+                                            <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A7;" ToolTipService.ToolTip="Undo" />
+                                        </fluent:QuickAccessToolBar.Items>
+                                    </fluent:QuickAccessToolBar>
+                                </fluent:RibbonTitleBar.QuickAccessToolBar>
+                            </fluent:RibbonTitleBar>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RibbonToolBarControlGroup -->
+                    <Border Style="{StaticResource ShowcaseCard}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="RibbonToolBarControlGroup" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Groups related toolbar controls so they render as a single segmented cluster." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <fluent:RibbonToolBarControlGroup HorizontalAlignment="Left">
+                                <fluent:RibbonButton Size="Small" Header="Left" IconGlyph="&#xE8B8;" />
+                                <fluent:RibbonButton Size="Small" Header="Center" IconGlyph="&#xE8BA;" />
+                                <fluent:RibbonButton Size="Small" Header="Right" IconGlyph="&#xE8B9;" />
+                            </fluent:RibbonToolBarControlGroup>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Checkable Menu Items -->
+                    <Border Style="{StaticResource ShowcaseCard}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="StatusBarMenuItem &amp; QuickAccessMenuItem" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Checkable menu entries used to toggle status-bar fields and quick-access commands. Click to toggle the check mark." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" />
+                            <StackPanel Spacing="2" Width="240" HorizontalAlignment="Left">
+                                <fluent:StatusBarMenuItem Header="Word Count" IsChecked="True" />
+                                <fluent:StatusBarMenuItem Header="Zoom Slider" IsChecked="True" />
+                                <fluent:StatusBarMenuItem Header="Caps Lock" IsChecked="False" />
+                                <fluent:QuickAccessMenuItem Header="Save" IsChecked="True" />
+                                <fluent:QuickAccessMenuItem Header="Print Preview" IsChecked="False" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- KeyTips -->
+                    <Border Style="{StaticResource ShowcaseCard}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="KeyTips (Alt navigation)" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="Press Alt (or F10) while the ribbon is focused to show access keys, then type them to activate. Try Alt, then H (Home), V (Paste); Esc goes back." FontSize="12"
+                                       Foreground="{ThemeResource RibbonSecondaryTextBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
                     <!-- Localization Demo -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="Localization" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="The ribbon supports 20 languages: English, German, French, Spanish, Chinese, Japanese, Portuguese, Russian, Italian, Dutch, Polish, Korean, Turkish, Arabic, Czech, Swedish, Danish, Norwegian, Finnish, Hungarian." FontSize="12"
@@ -599,7 +970,7 @@
                     <Border Height="20" />
 
                     <!-- ScreenTip Showcase -->
-                    <Border BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Border Style="{StaticResource ShowcaseCard}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="ScreenTip (Enhanced Tooltip)" FontSize="16" FontWeight="SemiBold" />
                             <TextBlock Text="Hover over the Paste, Find, and Zoom buttons in the ribbon to see enhanced tooltips with Title, Description text, and DisableReason." FontSize="12"
@@ -634,9 +1005,13 @@
         </fluent:RibbonStatusBar>
 
         <!-- Backstage Overlay (spans all rows to cover the full page) -->
-        <fluent:Backstage x:Name="BackstageView" Title="File"
-                          Grid.RowSpan="3">
-            <fluent:Backstage.Items>
+        <fluent:Backstage
+            x:Name="BackstageView"
+            Grid.RowSpan="3"
+            Header="File">
+            <fluent:Backstage.Content>
+                <fluent:BackstageTabControl BackButtonUid="BackstageView.Back">
+                    <fluent:BackstageTabControl.Items>
                 <fluent:BackstageTabItem Header="Info" IconGlyph="&#xE946;">
                     <fluent:BackstageTabItem.Content>
                         <StackPanel Spacing="16" MaxWidth="600">
@@ -696,7 +1071,9 @@
                         </StackPanel>
                     </fluent:BackstageTabItem.Content>
                 </fluent:BackstageTabItem>
-            </fluent:Backstage.Items>
+                    </fluent:BackstageTabControl.Items>
+                </fluent:BackstageTabControl>
+            </fluent:Backstage.Content>
         </fluent:Backstage>
     </Grid>
 </Page>

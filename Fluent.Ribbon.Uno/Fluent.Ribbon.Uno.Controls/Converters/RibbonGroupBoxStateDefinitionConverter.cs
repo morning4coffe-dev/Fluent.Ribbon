@@ -1,6 +1,7 @@
 namespace Fluent.Converters;
 
-using Fluent.Data;
+using System.ComponentModel;
+using System.Globalization;
 
 /// <summary>
 /// Converts a string representation to a <see cref="RibbonGroupBoxStateDefinition"/>.
@@ -8,12 +9,53 @@ using Fluent.Data;
 /// <remarks>
 /// Ported from WPF Fluent.Ribbon.
 /// </remarks>
-public class RibbonGroupBoxStateDefinitionConverter : IValueConverter
+public class RibbonGroupBoxStateDefinitionConverter : TypeConverter, IValueConverter
 {
     /// <summary>
     /// Default instance.
     /// </summary>
     public static readonly RibbonGroupBoxStateDefinitionConverter Default = new();
+
+    /// <inheritdoc />
+    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType)
+    {
+        return sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+    }
+
+    /// <inheritdoc />
+    public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType)
+    {
+        return destinationType == typeof(string) || base.CanConvertTo(context, destinationType);
+    }
+
+    /// <inheritdoc />
+    public override object ConvertFrom(
+        ITypeDescriptorContext? context,
+        CultureInfo? culture,
+        object value)
+    {
+        return value is string text
+            ? RibbonGroupBoxStateDefinition.FromString(text)
+            : base.ConvertFrom(context, culture, value)
+              ?? throw new NotSupportedException(
+                  $"Cannot convert {value.GetType().FullName} to {nameof(RibbonGroupBoxStateDefinition)}.");
+    }
+
+    /// <inheritdoc />
+    public override object? ConvertTo(
+        ITypeDescriptorContext? context,
+        CultureInfo? culture,
+        object? value,
+        Type destinationType)
+    {
+        if (destinationType == typeof(string)
+            && value is RibbonGroupBoxStateDefinition definition)
+        {
+            return (string)definition;
+        }
+
+        return base.ConvertTo(context, culture, value, destinationType);
+    }
 
     /// <inheritdoc/>
     public object? Convert(object? value, Type targetType, object? parameter, string language)

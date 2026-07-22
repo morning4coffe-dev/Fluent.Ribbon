@@ -144,7 +144,7 @@ public partial class TwoLineLabel : Control
         if (hyphenIndex >= 0)
         {
             _textRun.Text = text.Substring(0, hyphenIndex) + "-";
-            _textRun2.Text = text.Substring(hyphenIndex) + " ";
+            _textRun2.Text = text.Substring(hyphenIndex + 1) + " ";
         }
         else
         {
@@ -187,4 +187,8 @@ public partial class TwoLineLabel : Control
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.TwoLineLabelAutomationPeer(this);
 }

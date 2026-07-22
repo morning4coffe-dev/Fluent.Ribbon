@@ -1,14 +1,15 @@
 namespace Fluent;
 
 /// <summary>
-/// Represents a single tab within a Ribbon control.
+/// Represents a single tab item within a Ribbon control.
 /// </summary>
 [ContentProperty(Name = nameof(Groups))]
-public partial class RibbonTab : TabViewItem, IHeaderedControl
+public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedControl, ILogicalChildSupport, ISimplifiedStateControl
 {
     private readonly StackPanel _groupsPanel;
     private readonly ScrollViewer _scrollViewer;
     private bool _isUpdatingLayout;
+    private bool _updateQueued;
 
     #region Dependency Properties
 
@@ -17,7 +18,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(Groups),
             typeof(ObservableCollection<RibbonGroupBox>),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -34,7 +35,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(KeyTip),
             typeof(string),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -51,7 +52,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(ContextualTabGroupName),
             typeof(string),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -68,7 +69,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(IsContextual),
             typeof(bool),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(false));
 
     /// <summary>
@@ -85,7 +86,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(Group),
             typeof(RibbonContextualTabGroup),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(null, OnGroupChanged));
 
     /// <summary>
@@ -102,7 +103,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(HasSeparator),
             typeof(bool),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(false));
 
     /// <summary>
@@ -120,7 +121,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(ReduceOrder),
             typeof(string),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(string.Empty));
 
     /// <summary>
@@ -138,7 +139,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(ActiveTabBackground),
             typeof(Brush),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -155,7 +156,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(ActiveTabBorderBrush),
             typeof(Brush),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(null));
 
     /// <summary>
@@ -176,7 +177,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(HeaderPadding),
             typeof(Thickness),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(new Thickness(9, 0, 9, 0)));
 
     /// <summary>
@@ -194,7 +195,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         DependencyProperty.Register(
             nameof(SeparatorOpacity),
             typeof(double),
-            typeof(RibbonTab),
+            typeof(RibbonTabItem),
             new PropertyMetadata(0.0));
 
     /// <summary>
@@ -212,13 +213,19 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
     #region Constructor
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RibbonTab"/> class.
+    /// Initializes a new instance of the <see cref="RibbonTabItem"/> class.
     /// </summary>
-    public RibbonTab()
+    public RibbonTabItem()
     {
         // Use TabViewItem's default style — no custom template needed
         // TabView shows TabViewItem.Content in the content area
         IsClosable = false;
+
+        // Stretch the hosted ScrollViewer to fill the tab's content area so the
+        // available width used for group reduction reflects the real space (some
+        // content-presenter/platform combinations otherwise shrink-wrap the content).
+        HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        VerticalContentAlignment = VerticalAlignment.Stretch;
 
         Groups = new ObservableCollection<RibbonGroupBox>();
         Groups.CollectionChanged += OnGroupsCollectionChanged;
@@ -234,12 +241,18 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = _groupsPanel,
         };
 
         _scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
 
         Content = _scrollViewer;
+        InitializeCompatibility();
+
+        // Ensure an initial layout pass runs once the tab is realized, even if
+        // no further size change fires afterwards.
+        Loaded += (_, _) => ScheduleUpdateGroupSizes();
     }
 
     #endregion
@@ -248,7 +261,38 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
 
     private void OnScrollViewerSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        UpdateGroupSizes();
+        ScheduleUpdateGroupSizes();
+    }
+
+    /// <summary>
+    /// Coalesces group-size recalculations onto the dispatcher so they run once,
+    /// after the current layout pass has settled. This matters because rescaling
+    /// group children can raise further size changes; running inline would either
+    /// re-enter (and be suppressed by the guard) or act on a stale available width,
+    /// which previously left groups collapsed even when space was available.
+    /// </summary>
+    private void ScheduleUpdateGroupSizes()
+    {
+        if (_updateQueued)
+        {
+            return;
+        }
+
+        _updateQueued = true;
+
+        var dispatcher = DispatcherQueue;
+        if (dispatcher is null)
+        {
+            _updateQueued = false;
+            UpdateGroupSizes();
+            return;
+        }
+
+        dispatcher.TryEnqueue(() =>
+        {
+            _updateQueued = false;
+            UpdateGroupSizes();
+        });
     }
 
     /// <summary>
@@ -259,15 +303,25 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
     /// </summary>
     private void UpdateGroupSizes()
     {
-        if (_isUpdatingLayout || Groups.Count == 0) return;
+        if (_isUpdatingLayout || Groups.Count == 0)
+        {
+            return;
+        }
+
+        // Read the width at execution time (after layout has settled) so we never
+        // act on a transient/too-small width captured when the event fired.
+        var availableWidth = _scrollViewer.ActualWidth;
+        if (availableWidth <= 0)
+        {
+            return;
+        }
+
         _isUpdatingLayout = true;
 
         try
         {
-            var availableWidth = _scrollViewer.ActualWidth;
-            if (availableWidth <= 0) return;
-
-            // Reset all groups to Large state first
+            // Reset all groups to Large first so we always re-evaluate from the
+            // unreduced layout; this lets groups expand again when space grows.
             foreach (var group in Groups)
             {
                 group.State = RibbonGroupBoxState.Large;
@@ -276,18 +330,26 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
             // Build the reduce order
             var reduceOrderList = BuildReduceOrder();
 
-            // Progressively reduce groups using the reduce order
+            // Force a synchronous layout pass so DesiredSize reflects the current
+            // (all-Large) states before we start measuring.
+            _groupsPanel.UpdateLayout();
+
+            // Progressively reduce groups using the reduce order until the content
+            // fits. A synchronous layout pass is required after every state change,
+            // otherwise DesiredSize keeps returning the stale (larger) measurement
+            // and the loop over-reduces, collapsing groups even when space is free.
             foreach (var (groupIndex, targetState) in reduceOrderList)
             {
-                _groupsPanel.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-                var desiredWidth = _groupsPanel.DesiredSize.Width;
-
-                if (desiredWidth <= availableWidth) break;
+                if (_groupsPanel.DesiredSize.Width <= availableWidth)
+                {
+                    break;
+                }
 
                 var group = Groups[groupIndex];
                 if (group.State < targetState)
                 {
                     group.State = targetState;
+                    _groupsPanel.UpdateLayout();
                 }
             }
         }
@@ -318,7 +380,13 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
                 var groupIndex = -1;
                 for (int i = 0; i < Groups.Count; i++)
                 {
-                    if (Groups[i].Header?.ToString() == name)
+                    var group = Groups[i];
+
+                    // Match by x:Name first (unambiguous), then by header text.
+                    // Using the name lets developers disambiguate groups that share
+                    // the same header, or that use a non-string header.
+                    if (string.Equals(group.Name, name, StringComparison.Ordinal)
+                        || string.Equals(group.Header?.ToString(), name, StringComparison.Ordinal))
                     {
                         groupIndex = i;
                         break;
@@ -362,7 +430,7 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
 
     private static void OnGroupChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is RibbonTab tab)
+        if (d is RibbonTabItem tab)
         {
             if (e.OldValue is RibbonContextualTabGroup oldGroup)
             {
@@ -403,7 +471,21 @@ public partial class RibbonTab : TabViewItem, IHeaderedControl
         {
             _groupsPanel.Children.Add(group);
         }
+
+        // Groups changed — re-evaluate sizing on the next layout pass.
+        ScheduleUpdateGroupSizes();
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonTabItemAutomationPeer(this);
+}
+
+/// <summary>
+/// Unpublished convenience name retained for existing Uno samples.
+/// </summary>
+public partial class RibbonTab : RibbonTabItem
+{
 }

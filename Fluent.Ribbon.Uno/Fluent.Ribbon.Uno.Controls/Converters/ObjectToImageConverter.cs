@@ -8,7 +8,7 @@ namespace Fluent.Converters;
 /// WPF version handles System.Drawing.Icon, BitmapFrame selection, DPI scaling, and P/Invoke.
 /// Uno version handles string paths, Uri, and ImageSource.
 /// </remarks>
-public class ObjectToImageConverter : IValueConverter
+public partial class ObjectToImageConverter : MarkupExtension, IValueConverter, global::Fluent.IMultiValueConverter
 {
     /// <summary>
     /// Default instance.
@@ -98,6 +98,11 @@ public class ObjectToImageConverter : IValueConverter
 
     private static Windows.Foundation.Size ParseDesiredSize(object? parameter)
     {
+        if (parameter is Windows.Foundation.Size size)
+        {
+            return size;
+        }
+
         if (parameter is double d)
         {
             return new Windows.Foundation.Size(d, d);

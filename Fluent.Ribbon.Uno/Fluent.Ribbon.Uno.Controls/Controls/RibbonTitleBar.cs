@@ -7,7 +7,7 @@ namespace Fluent;
 [TemplatePart(Name = PART_HeaderHolder, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = PART_QuickAccessToolBarHolder, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = PART_ContextualGroupsContainer, Type = typeof(RibbonContextualGroupsContainer))]
-public partial class RibbonTitleBar : Control
+public partial class RibbonTitleBar : HeaderedItemsControl
 {
     private const string PART_HeaderHolder = "PART_HeaderHolder";
     private const string PART_QuickAccessToolBarHolder = "PART_QuickAccessToolBarHolder";
@@ -20,7 +20,7 @@ public partial class RibbonTitleBar : Control
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
+    public new static readonly DependencyProperty HeaderProperty =
         DependencyProperty.Register(
             nameof(Header),
             typeof(string),
@@ -30,7 +30,7 @@ public partial class RibbonTitleBar : Control
     /// <summary>
     /// Gets or sets the header / window title text.
     /// </summary>
-    public string? Header
+    public new string? Header
     {
         get => (string?)GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -40,16 +40,16 @@ public partial class RibbonTitleBar : Control
     public static readonly DependencyProperty QuickAccessToolBarProperty =
         DependencyProperty.Register(
             nameof(QuickAccessToolBar),
-            typeof(UIElement),
+            typeof(FrameworkElement),
             typeof(RibbonTitleBar),
             new PropertyMetadata(null));
 
     /// <summary>
     /// Gets or sets the quick access toolbar.
     /// </summary>
-    public UIElement? QuickAccessToolBar
+    public FrameworkElement? QuickAccessToolBar
     {
-        get => (UIElement?)GetValue(QuickAccessToolBarProperty);
+        get => (FrameworkElement?)GetValue(QuickAccessToolBarProperty);
         set => SetValue(QuickAccessToolBarProperty, value);
     }
 
@@ -200,6 +200,63 @@ public partial class RibbonTitleBar : Control
         _contextualGroupsContainer?.InvalidateMeasure();
         _contextualGroupsContainer?.InvalidateArrange();
     }
+
+    /// <summary>
+    /// Schedules a layout pass for the title bar.
+    /// </summary>
+    public void ScheduleForceMeasureAndArrange()
+    {
+        if (DispatcherQueue?.TryEnqueue(ForceMeasure) != true)
+        {
+            ForceMeasure();
+        }
+    }
+
+    /// <summary>Creates the default contextual-group container.</summary>
+    protected override DependencyObject GetContainerForItemOverride()
+    {
+        return new RibbonContextualTabGroup();
+    }
+
+    /// <summary>Gets whether an item is already its own contextual-group container.</summary>
+    protected override bool IsItemItsOwnContainerOverride(object item)
+    {
+        return item is RibbonContextualTabGroup;
+    }
+
+    /// <summary>Performs a portable title-bar hit test.</summary>
+    protected virtual HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
+    {
+        return new HitTestResult(this);
+    }
+
+    /// <summary>Handles the WPF-compatible primary-pointer hook.</summary>
+    protected virtual void OnMouseLeftButtonDown(PointerRoutedEventArgs e)
+    {
+    }
+
+    /// <summary>Handles the WPF-compatible secondary-pointer hook.</summary>
+    protected virtual void OnMouseRightButtonUp(PointerRoutedEventArgs e)
+    {
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerPressed(PointerRoutedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        OnMouseLeftButtonDown(e);
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerReleased(PointerRoutedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        OnMouseRightButtonUp(e);
+    }
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonTitleBarAutomationPeer(this);
 
     #endregion
 }

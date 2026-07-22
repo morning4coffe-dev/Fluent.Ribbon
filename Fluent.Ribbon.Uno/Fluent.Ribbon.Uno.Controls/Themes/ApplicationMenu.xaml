@@ -16,7 +16,7 @@
                         MinWidth="56"
                         Height="26"
                         VerticalAlignment="Center"
-                        CornerRadius="2">
+                        CornerRadius="4">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <!-- Optional icon glyph -->
                             <FontIcon

@@ -124,4 +124,8 @@ public partial class RibbonCheckBox : CheckBox, IScalableRibbonControl, IHeadere
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonCheckBoxAutomationPeer(this);
 }

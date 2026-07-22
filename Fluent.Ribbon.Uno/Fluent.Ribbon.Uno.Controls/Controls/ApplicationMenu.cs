@@ -1,54 +1,30 @@
 namespace Fluent;
 
+using System.Collections;
+using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
+
 /// <summary>
 /// Represents the application menu (File menu) with a two-pane layout.
 /// The left pane contains menu items and the right pane shows additional content.
 /// This is the classic "big button" file menu that appeared in Office 2007/2010.
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
-[TemplatePart(Name = PART_Button, Type = typeof(Button))]
-public partial class ApplicationMenu : Control
+[TemplatePart(Name = PART_Button, Type = typeof(WinUIButton))]
+public partial class ApplicationMenu : DropDownButton
 {
     private const string PART_Button = "PART_Button";
 
-    private Button? _button;
+    private WinUIButton? _button;
     private Flyout? _flyout;
+    private Grid? _rootPanel;
+    private ItemsControl? _leftPane;
+    private Rectangle? _verticalSeparator;
+    private Rectangle? _footerSeparator;
+    private FrameworkElement? _keyboardRoot;
+    private WeakReference<UIElement>? _focusBackup;
+    private bool _focusLastItemOnOpen;
 
     #region Dependency Properties
-
-    /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(ApplicationMenu),
-            new PropertyMetadata("File"));
-
-    /// <summary>
-    /// Gets or sets the header text displayed on the application menu button.
-    /// </summary>
-    public object? Header
-    {
-        get => GetValue(HeaderProperty);
-        set => SetValue(HeaderProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
-    public static readonly DependencyProperty ItemsProperty =
-        DependencyProperty.Register(
-            nameof(Items),
-            typeof(ObservableCollection<UIElement>),
-            typeof(ApplicationMenu),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Gets the collection of menu items in the left pane.
-    /// </summary>
-    public ObservableCollection<UIElement> Items
-    {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
-        private set => SetValue(ItemsProperty, value);
-    }
 
     /// <summary>Identifies the <see cref="RightPaneContent"/> dependency property.</summary>
     public static readonly DependencyProperty RightPaneContentProperty =
@@ -101,40 +77,6 @@ public partial class ApplicationMenu : Control
         set => SetValue(FooterPaneContentProperty, value);
     }
 
-    /// <summary>Identifies the <see cref="IsDropDownOpen"/> dependency property.</summary>
-    public static readonly DependencyProperty IsDropDownOpenProperty =
-        DependencyProperty.Register(
-            nameof(IsDropDownOpen),
-            typeof(bool),
-            typeof(ApplicationMenu),
-            new PropertyMetadata(false));
-
-    /// <summary>
-    /// Gets or sets whether the dropdown is open.
-    /// </summary>
-    public bool IsDropDownOpen
-    {
-        get => (bool)GetValue(IsDropDownOpenProperty);
-        set => SetValue(IsDropDownOpenProperty, value);
-    }
-
-    /// <summary>Identifies the <see cref="IconGlyph"/> dependency property.</summary>
-    public static readonly DependencyProperty IconGlyphProperty =
-        DependencyProperty.Register(
-            nameof(IconGlyph),
-            typeof(string),
-            typeof(ApplicationMenu),
-            new PropertyMetadata(string.Empty));
-
-    /// <summary>
-    /// Gets or sets the icon glyph for the menu button.
-    /// </summary>
-    public string IconGlyph
-    {
-        get => (string)GetValue(IconGlyphProperty);
-        set => SetValue(IconGlyphProperty, value);
-    }
-
     #endregion
 
     #region Constructor
@@ -145,8 +87,16 @@ public partial class ApplicationMenu : Control
     public ApplicationMenu()
     {
         DefaultStyleKey = typeof(ApplicationMenu);
-        Items = new ObservableCollection<UIElement>();
+        Header = "File";
+        CanAddToQuickAccessToolBar = false;
+        RegisterPropertyChangedCallback(
+            ItemsControl.ItemsSourceProperty,
+            static (sender, _) => ((ApplicationMenu)sender).RefreshItemsSource());
+        Unloaded += OnApplicationMenuUnloaded;
     }
+
+    /// <inheritdoc />
+    protected override bool UsesDefaultDropDownButtonTemplateBehavior => false;
 
     #endregion
 
@@ -162,11 +112,23 @@ public partial class ApplicationMenu : Control
             _button.Click -= OnButtonClick;
         }
 
-        _button = GetTemplateChild(PART_Button) as Button;
+        _button = GetTemplateChild(PART_Button) as WinUIButton;
 
         if (_button is not null)
         {
             _button.Click += OnButtonClick;
+            var ownerId = Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(this);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(
+                _button,
+                $"{(string.IsNullOrWhiteSpace(ownerId) ? nameof(ApplicationMenu) : ownerId)}.Button");
+
+            if (string.IsNullOrWhiteSpace(
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(_button)))
+            {
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    _button,
+                    Header?.ToString() ?? "Application menu");
+            }
         }
     }
 
@@ -176,10 +138,63 @@ public partial class ApplicationMenu : Control
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
     {
+        if (IsDropDownOpen)
+        {
+            Close();
+        }
+        else
+        {
+            ShowDropDown();
+        }
+    }
+
+    /// <summary>
+    /// Opens the application menu.
+    /// </summary>
+    public void Open()
+    {
         ShowDropDown();
     }
 
+    /// <summary>
+    /// Closes the application menu.
+    /// </summary>
+    public void Close()
+    {
+        _flyout?.Hide();
+        IsDropDownOpen = false;
+    }
+
+    /// <inheritdoc />
+    public override void CloseDropDown() => Close();
+
     private void ShowDropDown()
+    {
+        if (IsDropDownOpen)
+        {
+            return;
+        }
+
+        // Build the flyout + its content ONCE and reuse it. Rebuilding the panes on
+        // every open — which reparents the menu Items out of the previous (now torn
+        // down) flyout panel and into a fresh one — corrupts the items' native peers
+        // on WinUI3, so the left pane came up empty on the second open. Building once
+        // keeps every item in a single, stable visual parent for the control's life.
+        if (_flyout is null)
+        {
+            BuildFlyout();
+        }
+
+        // The menu surface is theme-aware, so refresh the theme brushes (and the
+        // opaque presenter style) each time — cheap, and it reparents nothing.
+        ApplyThemeBrushes();
+
+        _focusBackup = FocusRoutingHelper.CaptureFocusedElement(this);
+        IsDropDownOpen = true;
+        _flyout!.ShowAt((FrameworkElement?)_button ?? this);
+    }
+
+    private void BuildFlyout()
     {
         // Build the two-pane dropdown content
         var rootPanel = new Grid { MinWidth = 400 };
@@ -190,17 +205,16 @@ public partial class ApplicationMenu : Control
         mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         // Left pane — menu items
-        var leftPane = new StackPanel { MinWidth = 200 };
-        foreach (var item in Items)
+        var leftPane = new ItemsControl
         {
-            // Reparent items into the flyout
-            if (item is FrameworkElement fe && fe.Parent is Panel panel)
-            {
-                panel.Children.Remove(item);
-            }
-
-            leftPane.Children.Add(item);
-        }
+            MinWidth = 200,
+            ItemsSource = ItemsSource ?? Items,
+            ItemTemplate = ItemTemplate,
+            ItemTemplateSelector = ItemTemplateSelector,
+            ItemContainerStyle = ItemContainerStyle,
+            ItemsPanel = ItemsPanel
+        };
+        _leftPane = leftPane;
 
         Grid.SetColumn(leftPane, 0);
         mainPanel.Children.Add(leftPane);
@@ -211,13 +225,14 @@ public partial class ApplicationMenu : Control
             mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) }); // separator
             mainPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(RightPaneWidth) });
 
-            var separator = new Rectangle
+            _verticalSeparator = new Rectangle
             {
                 Width = 1,
+                Fill = MenuSeparatorBrush,
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
-            Grid.SetColumn(separator, 1);
-            mainPanel.Children.Add(separator);
+            Grid.SetColumn(_verticalSeparator, 1);
+            mainPanel.Children.Add(_verticalSeparator);
 
             var rightPane = new ContentPresenter
             {
@@ -234,44 +249,296 @@ public partial class ApplicationMenu : Control
         // Footer pane
         if (FooterPaneContent is not null)
         {
-            var footerSep = new Rectangle
+            _footerSeparator = new Rectangle
             {
                 Height = 1,
+                Fill = MenuSeparatorBrush,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(0, 4, 0, 0),
             };
-            Grid.SetRow(footerSep, 0);
-            rootPanel.Children.Add(footerSep);
+            Grid.SetRow(_footerSeparator, 0);
+            rootPanel.Children.Add(_footerSeparator);
 
             var footer = new ContentPresenter
             {
                 Content = FooterPaneContent,
-                Padding = new Thickness(12, 8),
+                Padding = new Thickness(12, 8, 12, 8),
             };
             Grid.SetRow(footer, 1);
             rootPanel.Children.Add(footer);
         }
 
-        if (_flyout is null)
+        _rootPanel = rootPanel;
+
+        _flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom, Content = rootPanel };
+        _flyout.Opened += OnFlyoutOpened;
+        _flyout.Closed += OnFlyoutClosed;
+    }
+
+    private void RefreshItemsSource()
+    {
+        if (_leftPane is not null)
         {
-            _flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom };
-            _flyout.Closed += (s, e) =>
-            {
-                IsDropDownOpen = false;
-                // Reparent items back
-                RestoreItems();
-            };
+            _leftPane.ItemsSource = ItemsSource ?? Items;
+        }
+    }
+
+    private void OnFlyoutOpened(object? sender, object args)
+    {
+        RaiseDropDownOpened();
+        AttachKeyboardRoot();
+
+        if (_leftPane is null)
+        {
+            return;
         }
 
-        _flyout.Content = rootPanel;
-        IsDropDownOpen = true;
-        _flyout.ShowAt((FrameworkElement?)_button ?? this);
+        if (_focusLastItemOnOpen)
+        {
+            FocusLast(_leftPane);
+        }
+        else
+        {
+            FocusRoutingHelper.FocusFirst(_leftPane);
+        }
+
+        _focusLastItemOnOpen = false;
     }
 
-    private void RestoreItems()
+    private void OnFlyoutClosed(object? sender, object args)
     {
-        // Items will be re-added to the flyout next time it opens
+        IsDropDownOpen = false;
+        RaiseDropDownClosed();
+        DetachKeyboardRoot();
+
+        var focused = XamlRoot is { } xamlRoot
+            ? FocusManager.GetFocusedElement(xamlRoot) as DependencyObject
+            : null;
+        var shouldRestore = _rootPanel is not null
+                            && (focused is null
+                                || FocusRoutingHelper.IsDescendantOf(focused, _rootPanel));
+        if (shouldRestore)
+        {
+            if (_button?.Focus(FocusState.Programmatic) == true)
+            {
+                _focusBackup = null;
+            }
+            else
+            {
+                FocusRoutingHelper.RestoreFocus(ref _focusBackup);
+            }
+        }
+        else
+        {
+            _focusBackup = null;
+        }
     }
+
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyRoutedEventArgs args)
+    {
+        if (args.Handled)
+        {
+            base.OnKeyDown(args);
+            return;
+        }
+
+        switch (args.Key)
+        {
+            case Windows.System.VirtualKey.Down when !IsDropDownOpen:
+                _focusLastItemOnOpen = false;
+                Open();
+                args.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Up when !IsDropDownOpen:
+                _focusLastItemOnOpen = true;
+                Open();
+                args.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Enter:
+            case Windows.System.VirtualKey.Space:
+                if (IsDropDownOpen)
+                {
+                    Close();
+                }
+                else
+                {
+                    Open();
+                }
+
+                args.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Escape when IsDropDownOpen:
+                Close();
+                args.Handled = true;
+                break;
+        }
+
+        base.OnKeyDown(args);
+    }
+
+    private void AttachKeyboardRoot()
+    {
+        if (_keyboardRoot is not null
+            || XamlRoot?.Content is not FrameworkElement root)
+        {
+            return;
+        }
+
+        _keyboardRoot = root;
+        root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnKeyboardRootKeyDown), true);
+    }
+
+    private void DetachKeyboardRoot()
+    {
+        if (_keyboardRoot is null)
+        {
+            return;
+        }
+
+        _keyboardRoot.RemoveHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnKeyboardRootKeyDown));
+        _keyboardRoot = null;
+    }
+
+    private void OnKeyboardRootKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var ribbon = FocusRoutingHelper.FindAncestor<Ribbon>(this);
+        if (ribbon is null && XamlRoot?.Content is DependencyObject root)
+        {
+            ribbon = FocusRoutingHelper.FindDescendant<Ribbon>(root);
+        }
+
+        if (ribbon?.AreAnyKeyTipsVisible == true)
+        {
+            return;
+        }
+
+        if (!args.Handled
+            && IsDropDownOpen
+            && args.Key == Windows.System.VirtualKey.Escape)
+        {
+            Close();
+            args.Handled = true;
+        }
+    }
+
+    private void OnApplicationMenuUnloaded(object sender, RoutedEventArgs args)
+    {
+        DetachKeyboardRoot();
+        _focusBackup = null;
+        if (IsDropDownOpen)
+        {
+            Close();
+        }
+    }
+
+    private static bool FocusLast(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = count - 1; index >= 0; index--)
+        {
+            if (FocusLast(VisualTreeHelper.GetChild(root, index)))
+            {
+                return true;
+            }
+        }
+
+        return root is Control
+        {
+            IsTabStop: true,
+            IsEnabled: true,
+            Visibility: Visibility.Visible,
+        } control && control.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>Application menus cannot be added to quick access.</summary>
+    public override FrameworkElement? CreateQuickAccessItem()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>Handles context-menu opening.</summary>
+    protected virtual void OnContextMenuOpening(ContextMenuEventArgs e)
+    {
+    }
+
+    /// <summary>Gets logical children retained for WPF source compatibility.</summary>
+    protected override IEnumerator LogicalChildren
+    {
+        get
+        {
+            var baseEnumerator = base.LogicalChildren;
+            while (baseEnumerator.MoveNext())
+            {
+                yield return baseEnumerator.Current;
+            }
+
+            if (RightPaneContent is not null)
+            {
+                yield return RightPaneContent;
+            }
+
+            if (FooterPaneContent is not null)
+            {
+                yield return FooterPaneContent;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public override KeyTipPressedResult OnKeyTipPressed()
+    {
+        Open();
+        return new KeyTipPressedResult(
+            pressedElementAquiredFocus: false,
+            pressedElementOpenedPopup: true);
+    }
+
+    private void ApplyThemeBrushes()
+    {
+        if (_rootPanel is not null)
+        {
+            _rootPanel.Background = MenuBackgroundBrush;
+        }
+
+        if (_verticalSeparator is not null)
+        {
+            _verticalSeparator.Fill = MenuSeparatorBrush;
+        }
+
+        if (_footerSeparator is not null)
+        {
+            _footerSeparator.Fill = MenuSeparatorBrush;
+        }
+
+        // Force an opaque presenter (also picks up the current theme). Without this the
+        // default acrylic FlyoutPresenter renders the colorful ribbon behind it as a smeared blur.
+        var presenterStyle = new Style(typeof(FlyoutPresenter));
+        presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, MenuBackgroundBrush));
+        presenterStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
+        presenterStyle.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(8)));
+        presenterStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
+        presenterStyle.Setters.Add(new Setter(Control.BorderBrushProperty, MenuSeparatorBrush));
+        presenterStyle.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 900.0));
+        presenterStyle.Setters.Add(new Setter(ScrollViewer.HorizontalScrollModeProperty, ScrollMode.Disabled));
+        presenterStyle.Setters.Add(new Setter(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled));
+
+        if (_flyout is not null)
+        {
+            _flyout.FlyoutPresenterStyle = presenterStyle;
+        }
+    }
+
+    // Opaque, theme-aware brushes for the menu surface (mirrors RibbonContentBrush / RibbonBorderBrush).
+    private Brush MenuBackgroundBrush =>
+        new SolidColorBrush(ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E)
+            : Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+
+    private Brush MenuSeparatorBrush =>
+        new SolidColorBrush(ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(0xFF, 0x40, 0x40, 0x40)
+            : Windows.UI.Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4));
 
     #endregion
 }

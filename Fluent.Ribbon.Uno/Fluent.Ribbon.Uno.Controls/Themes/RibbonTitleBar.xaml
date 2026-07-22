@@ -1,0 +1,60 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+
+    <Style TargetType="fluent:RibbonTitleBar">
+        <Setter Property="Background" Value="{ThemeResource RibbonBackgroundBrush}" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:RibbonTitleBar">
+                    <Grid
+                        Background="{TemplateBinding Background}"
+                        MinHeight="{TemplateBinding MinHeight}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="DisplayStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="Collapsed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_ContextualGroupsContainer.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Quick Access Toolbar -->
+                        <ContentPresenter
+                            x:Name="PART_QuickAccessToolBarHolder"
+                            Grid.Column="0"
+                            Content="{TemplateBinding QuickAccessToolBar}"
+                            VerticalAlignment="Center"
+                            Margin="4,0" />
+
+                        <!-- Title + contextual tab group headers -->
+                        <Grid Grid.Column="1">
+                            <ContentPresenter
+                                x:Name="PART_HeaderHolder"
+                                Content="{TemplateBinding Header}"
+                                Foreground="{ThemeResource RibbonTextBrush}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                IsHitTestVisible="False" />
+
+                            <fluent:RibbonContextualGroupsContainer
+                                x:Name="PART_ContextualGroupsContainer"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Stretch" />
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

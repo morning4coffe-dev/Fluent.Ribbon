@@ -3,6 +3,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:fluent="using:Fluent">
 
+    <fluent:IconConverter x:Key="InRibbonGalleryIconConverter" />
+
     <Style TargetType="fluent:InRibbonGallery">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
@@ -30,6 +32,7 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="2"
+                            Height="{TemplateBinding GalleryPanelContainerHeight}"
                             MinWidth="80">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -44,7 +47,7 @@
                                     VerticalScrollBarVisibility="Hidden"
                                     HorizontalScrollMode="Disabled"
                                     VerticalScrollMode="Enabled">
-                                    <ItemsRepeater
+                                    <fluent:UniformItemsPanel
                                         x:Name="PART_GalleryPanel" />
                                 </ScrollViewer>
 
@@ -62,6 +65,7 @@
                                         Height="28"
                                         Width="16"
                                         HorizontalAlignment="Center"
+                                        AutomationProperties.AutomationId="InRibbonGalleryUpButton"
                                         ToolTipService.ToolTip="Scroll up">
                                         <FontIcon Glyph="&#xE70E;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
                                     </Button>
@@ -74,6 +78,7 @@
                                         Height="28"
                                         Width="16"
                                         HorizontalAlignment="Center"
+                                        AutomationProperties.AutomationId="InRibbonGalleryDownButton"
                                         ToolTipService.ToolTip="Scroll down">
                                         <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
                                     </Button>
@@ -91,9 +96,10 @@
                                         Height="28"
                                         Width="16"
                                         HorizontalAlignment="Center"
-                                        ToolTipService.ToolTip="More options">
-                                        <FontIcon Glyph="&#xE72A;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
-                                    </Button>
+                                        AutomationProperties.AutomationId="InRibbonGalleryExpandButton"
+                                        Content="{Binding ExpandButtonContent, RelativeSource={RelativeSource TemplatedParent}}"
+                                        ContentTemplate="{Binding ExpandButtonContentTemplate, RelativeSource={RelativeSource TemplatedParent}}"
+                                        ToolTipService.ToolTip="More options" />
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -106,6 +112,7 @@
                             BorderThickness="0"
                             Padding="8,4"
                             MinWidth="56"
+                            AutomationProperties.AutomationId="InRibbonGalleryCollapsedButton"
                             VerticalAlignment="Stretch">
                             <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                 <!-- Icon glyph or image -->
@@ -116,7 +123,7 @@
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
 
                                 <Image
-                                    Source="{Binding LargeIcon, RelativeSource={RelativeSource TemplatedParent}}"
+                                    Source="{Binding LargeIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource InRibbonGalleryIconConverter}}"
                                     Width="32"
                                     Height="32"
                                     Stretch="Uniform"
@@ -124,18 +131,10 @@
 
                                 <ContentPresenter
                                     Content="{TemplateBinding Header}"
+                                    ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                    ContentTemplateSelector="{TemplateBinding HeaderTemplateSelector}"
                                     HorizontalAlignment="Center"
-                                    Margin="0,2,0,0">
-                                    <ContentPresenter.ContentTemplate>
-                                        <DataTemplate>
-                                            <TextBlock
-                                                Text="{Binding}"
-                                                FontSize="11"
-                                                Foreground="{ThemeResource RibbonTextBrush}"
-                                                TextAlignment="Center" />
-                                        </DataTemplate>
-                                    </ContentPresenter.ContentTemplate>
-                                </ContentPresenter>
+                                    Margin="0,2,0,0" />
 
                                 <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" Margin="0,2,0,0" />
                             </StackPanel>

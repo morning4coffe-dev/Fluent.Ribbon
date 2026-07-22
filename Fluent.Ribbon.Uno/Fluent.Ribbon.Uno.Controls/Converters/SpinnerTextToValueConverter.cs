@@ -18,7 +18,11 @@ public class SpinnerTextToValueConverter : IValueConverter
     {
         if (value is string text && parameter is Tuple<string, double> converterParam)
         {
-            return TextToDouble(text, converterParam.Item1, converterParam.Item2, CultureInfo.CurrentCulture);
+            return TextToDouble(
+                text,
+                converterParam.Item1,
+                converterParam.Item2,
+                GetCulture(language));
         }
 
         return 0.0;
@@ -29,10 +33,41 @@ public class SpinnerTextToValueConverter : IValueConverter
     {
         if (value is double d && parameter is string format)
         {
-            return DoubleToText(d, format, CultureInfo.CurrentCulture);
+            return DoubleToText(d, format, GetCulture(language));
         }
 
         return string.Empty;
+    }
+
+    /// <summary>WPF-compatible culture-based conversion overload.</summary>
+    public virtual object Convert(
+        object value,
+        Type targetType,
+        object parameter,
+        CultureInfo culture)
+    {
+        if (value is string text && parameter is Tuple<string, double> converterParam)
+        {
+            return TextToDouble(
+                text,
+                converterParam.Item1,
+                converterParam.Item2,
+                culture);
+        }
+
+        return 0.0;
+    }
+
+    /// <summary>WPF-compatible culture-based reverse conversion overload.</summary>
+    public virtual object ConvertBack(
+        object value,
+        Type targetType,
+        object parameter,
+        CultureInfo culture)
+    {
+        return value is double number && parameter is string format
+            ? DoubleToText(number, format, culture)
+            : string.Empty;
     }
 
     /// <summary>
@@ -70,5 +105,12 @@ public class SpinnerTextToValueConverter : IValueConverter
     public virtual string DoubleToText(double value, string format, CultureInfo culture)
     {
         return value.ToString(format, culture);
+    }
+
+    private static CultureInfo GetCulture(string language)
+    {
+        return string.IsNullOrWhiteSpace(language)
+            ? CultureInfo.CurrentCulture
+            : CultureInfo.GetCultureInfo(language);
     }
 }
