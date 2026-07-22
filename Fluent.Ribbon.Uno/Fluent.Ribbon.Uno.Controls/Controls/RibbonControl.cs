@@ -230,6 +230,17 @@ public abstract class RibbonControl :
                 Control.IsEnabledProperty);
         }
 
+        Synchronize(
+            source,
+            RibbonProperties.CustomIconSizeProperty,
+            element,
+            RibbonProperties.CustomIconSizeProperty);
+        Synchronize(
+            source,
+            RibbonProperties.QATIconSizeProperty,
+            element,
+            RibbonProperties.IconSizeProperty);
+
         if (source is RibbonControl sourceRibbonControl
             && element is RibbonControl targetRibbonControl)
         {

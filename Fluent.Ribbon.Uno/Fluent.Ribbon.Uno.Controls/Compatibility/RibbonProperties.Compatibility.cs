@@ -84,6 +84,14 @@ public partial class RibbonProperties
             typeof(RibbonProperties),
             new PropertyMetadata(default(Size)));
 
+    /// <summary>Identifies the QATIconSize attached property.</summary>
+    public static readonly DependencyProperty QATIconSizeProperty =
+        DependencyProperty.RegisterAttached(
+            "QATIconSize",
+            typeof(IconSize),
+            typeof(RibbonProperties),
+            new PropertyMetadata(IconSize.Small));
+
     /// <summary>Identifies the CornerRadius attached property.</summary>
     public static readonly DependencyProperty CornerRadiusProperty =
         DependencyProperty.RegisterAttached(
@@ -165,6 +173,14 @@ public partial class RibbonProperties
     /// <summary>Sets the custom icon size.</summary>
     public static void SetCustomIconSize(DependencyObject element, Size value) =>
         element.SetValue(CustomIconSizeProperty, value);
+
+    /// <summary>Gets the desired icon size in the Quick Access Toolbar.</summary>
+    public static IconSize GetQATIconSize(DependencyObject element) =>
+        (IconSize)element.GetValue(QATIconSizeProperty);
+
+    /// <summary>Sets the desired icon size in the Quick Access Toolbar.</summary>
+    public static void SetQATIconSize(DependencyObject element, IconSize value) =>
+        element.SetValue(QATIconSizeProperty, value);
 
     /// <summary>Gets the template corner radius.</summary>
     public static CornerRadius GetCornerRadius(DependencyObject element) =>

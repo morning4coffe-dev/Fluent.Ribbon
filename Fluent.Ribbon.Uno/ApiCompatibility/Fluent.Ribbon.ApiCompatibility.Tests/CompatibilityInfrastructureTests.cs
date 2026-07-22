@@ -107,6 +107,31 @@ public sealed class CompatibilityInfrastructureTests
     }
 
     [Test]
+    public void RibbonProperties_ExposesQuickAccessIconSizeContract()
+    {
+        var type = typeof(global::Fluent.RibbonProperties);
+        var field = type.GetField("QATIconSizeProperty", DeclaredPublicStatic);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(field, Is.Not.Null);
+            Assert.That(field!.FieldType, Is.EqualTo(typeof(DependencyProperty)));
+            Assert.That(field.GetValue(null), Is.Not.Null);
+            Assert.That(
+                type.GetMethod("GetQATIconSize", DeclaredPublicStatic)!.ReturnType,
+                Is.EqualTo(typeof(global::Fluent.IconSize)));
+            Assert.That(
+                type.GetMethod(
+                    "SetQATIconSize",
+                    DeclaredPublicStatic,
+                    null,
+                    [typeof(DependencyObject), typeof(global::Fluent.IconSize)],
+                    null),
+                Is.Not.Null);
+        });
+    }
+
+    [Test]
     public void ContextMenu_IsMenuFlyoutWithInformationalResizeMode()
     {
         var type = typeof(global::Fluent.ContextMenu);
