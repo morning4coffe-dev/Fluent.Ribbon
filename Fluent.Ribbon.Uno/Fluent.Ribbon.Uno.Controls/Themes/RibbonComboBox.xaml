@@ -5,9 +5,26 @@
 
     <Style TargetType="fluent:RibbonComboBox">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource TextControlBorderBrush}" />
+        <Setter Property="BorderThickness" Value="{ThemeResource TextControlBorderThemeThickness}" />
         <Setter Property="Padding" Value="4,2" />
         <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="MinHeight" Value="24" />
+        <Setter Property="MaxDropDownHeight" Value="300" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollMode" Value="Auto" />
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <CarouselPanel />
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonComboBox">
@@ -15,77 +32,214 @@
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
                         Padding="{TemplateBinding Padding}">
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="SizeStates">
-                                <VisualState x:Name="Large">
-                                    <VisualState.Setters>
-                                        <Setter Target="GlyphIcon.FontSize" Value="16" />
-                                        <Setter Target="HeaderText.Visibility" Value="Visible" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Medium">
-                                    <VisualState.Setters>
-                                        <Setter Target="GlyphIcon.FontSize" Value="16" />
-                                        <Setter Target="HeaderText.Visibility" Value="Visible" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Small">
-                                    <VisualState.Setters>
-                                        <Setter Target="GlyphIcon.FontSize" Value="14" />
-                                        <Setter Target="HeaderText.Visibility" Value="Collapsed" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
+                        <Grid x:Name="LayoutRoot">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Background.Background" Value="{ThemeResource TextControlBackgroundPointerOver}" />
+                                            <Setter Target="Background.BorderBrush" Value="{ThemeResource TextControlBorderBrushPointerOver}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Background.Background" Value="{ThemeResource TextControlBackgroundPressed}" />
+                                            <Setter Target="Background.BorderBrush" Value="{ThemeResource TextControlBorderBrushPressed}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="HeaderAndIconPanel.Opacity" Value="0.5" />
+                                            <Setter Target="InputRoot.Opacity" Value="0.5" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
 
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <!-- Glyph Icon -->
-                            <FontIcon
-                                x:Name="GlyphIcon"
-                                Glyph="{TemplateBinding IconGlyph}"
-                                FontSize="16"
-                                Foreground="{ThemeResource RibbonIconBrush}"
-                                Margin="0,0,4,0"
-                                VerticalAlignment="Center"
-                                Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused" />
+                                    <VisualState x:Name="FocusedPressed" />
+                                    <VisualState x:Name="Unfocused" />
+                                    <VisualState x:Name="PointerFocused" />
+                                    <VisualState x:Name="FocusedDropDown" />
+                                </VisualStateGroup>
 
-                            <!-- Image Icon -->
-                            <Image
-                                Source="{TemplateBinding MediumIcon}"
-                                Width="16"
-                                Height="16"
-                                Stretch="Uniform"
-                                Margin="0,0,4,0"
-                                VerticalAlignment="Center"
-                                Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+                                <VisualStateGroup x:Name="DropDownStates">
+                                    <VisualState x:Name="Opened" />
+                                    <VisualState x:Name="Closed" />
+                                </VisualStateGroup>
 
-                            <!-- Header -->
-                            <TextBlock
-                                x:Name="HeaderText"
-                                Text="{TemplateBinding Header}"
-                                Foreground="{ThemeResource RibbonTextBrush}"
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Margin="0,0,6,0"
-                                Visibility="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+                                <VisualStateGroup x:Name="EditableModeStates">
+                                    <VisualState x:Name="TextBoxFocused" />
+                                    <VisualState x:Name="TextBoxFocusedOverlayPointerOver" />
+                                    <VisualState x:Name="TextBoxFocusedOverlayPressed" />
+                                    <VisualState x:Name="TextBoxOverlayPointerOver" />
+                                    <VisualState x:Name="TextBoxOverlayPressed" />
+                                    <VisualState x:Name="TextBoxUnfocused" />
+                                </VisualStateGroup>
 
-                            <!-- ComboBox input area -->
-                            <ComboBox
-                                x:Name="PART_ComboBox"
+                                <VisualStateGroup x:Name="SizeStates">
+                                    <VisualState x:Name="Large">
+                                        <VisualState.Setters>
+                                            <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                            <Setter Target="HeaderText.Visibility" Value="Visible" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Medium">
+                                        <VisualState.Setters>
+                                            <Setter Target="GlyphIcon.FontSize" Value="16" />
+                                            <Setter Target="HeaderText.Visibility" Value="Visible" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Small">
+                                        <VisualState.Setters>
+                                            <Setter Target="GlyphIcon.FontSize" Value="14" />
+                                            <Setter Target="HeaderText.Visibility" Value="Collapsed" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel
+                                x:Name="HeaderAndIconPanel"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                                <FontIcon
+                                    x:Name="GlyphIcon"
+                                    Glyph="{TemplateBinding IconGlyph}"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource RibbonIconBrush}"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
+
+                                <Image
+                                    Source="{TemplateBinding MediumIcon}"
+                                    Width="16"
+                                    Height="16"
+                                    Stretch="Uniform"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+
+                                <TextBlock
+                                    x:Name="HeaderText"
+                                    Text="{TemplateBinding Header}"
+                                    Foreground="{ThemeResource RibbonTextBrush}"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Margin="0,0,6,0"
+                                    Visibility="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+                            </StackPanel>
+
+                            <Grid
+                                x:Name="InputRoot"
+                                Grid.Column="1"
                                 Width="{TemplateBinding InputWidth}"
-                                VerticalAlignment="Center"
-                                FontSize="12"
                                 MinHeight="24"
-                                Padding="4,2"
-                                Background="{ThemeResource TextControlBackground}"
-                                BorderBrush="{ThemeResource TextControlBorderBrush}"
-                                BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
-                                CornerRadius="{ThemeResource ControlCornerRadius}"
-                                ItemsSource="{TemplateBinding ItemsSource}"
-                                SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                SelectedIndex="{Binding SelectedIndex, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                MaxDropDownHeight="{Binding DropDownHeight, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NaNFallbackConverter}, ConverterParameter=300}" />
-                        </StackPanel>
+                                VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="28" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border
+                                    x:Name="Background"
+                                    Grid.ColumnSpan="2"
+                                    Background="{ThemeResource TextControlBackground}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                                    Control.IsTemplateFocusTarget="True" />
+
+                                <ContentPresenter
+                                    x:Name="ContentPresenter"
+                                    Grid.Column="0"
+                                    Margin="{TemplateBinding Padding}"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                                    <TextBlock
+                                        x:Name="PlaceholderTextBlock"
+                                        Text="{TemplateBinding PlaceholderText}"
+                                        Foreground="{ThemeResource TextControlPlaceholderForeground}" />
+                                </ContentPresenter>
+
+                                <TextBox
+                                    x:Name="EditableText"
+                                    Grid.ColumnSpan="2"
+                                    Style="{TemplateBinding TextBoxStyle}"
+                                    Padding="4,0,28,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    PlaceholderText="{TemplateBinding PlaceholderText}"
+                                    Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="Collapsed" />
+
+                                <FontIcon
+                                    x:Name="DropDownGlyph"
+                                    Grid.Column="1"
+                                    Glyph="&#xE70D;"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource RibbonIconBrush}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    IsHitTestVisible="False"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                            </Grid>
+
+                            <Popup
+                                x:Name="Popup">
+                                <Border
+                                    x:Name="PopupBorder"
+                                    MinWidth="{TemplateBinding InputWidth}"
+                                    Background="{ThemeResource ComboBoxDropDownBackground}"
+                                    BorderBrush="{ThemeResource ComboBoxDropDownBorderBrush}"
+                                    BorderThickness="{ThemeResource ComboBoxDropdownBorderThickness}"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}"
+                                    Margin="0,-0.5,0,-1"
+                                    Padding="{ThemeResource ComboBoxDropdownBorderPadding}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <ContentPresenter
+                                            Content="{TemplateBinding TopPopupContent}"
+                                            ContentTemplate="{TemplateBinding TopPopupContentTemplate}" />
+
+                                        <ScrollViewer
+                                            x:Name="ScrollViewer"
+                                            Grid.Row="1"
+                                            MaxHeight="{Binding DropDownHeight, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NaNFallbackConverter}, ConverterParameter=300}"
+                                            Foreground="{ThemeResource ComboBoxDropDownForeground}"
+                                            MinWidth="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TemplateSettings.DropDownContentMinWidth}"
+                                            HorizontalScrollMode="{TemplateBinding ScrollViewer.HorizontalScrollMode}"
+                                            HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                            VerticalScrollMode="{TemplateBinding ScrollViewer.VerticalScrollMode}"
+                                            VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                            ZoomMode="Disabled"
+                                            AutomationProperties.AccessibilityView="Raw">
+                                            <ItemsPresenter Margin="{ThemeResource ComboBoxDropdownContentMargin}" />
+                                        </ScrollViewer>
+
+                                        <ContentPresenter
+                                            Grid.Row="2"
+                                            Content="{TemplateBinding Menu}" />
+                                    </Grid>
+                                </Border>
+                            </Popup>
+                        </Grid>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>

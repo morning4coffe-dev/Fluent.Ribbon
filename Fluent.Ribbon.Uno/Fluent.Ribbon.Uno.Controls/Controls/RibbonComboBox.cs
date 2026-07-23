@@ -172,19 +172,15 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
 
     /// <summary>Identifies the <see cref="IsDropDownOpen"/> dependency property.</summary>
     public static new readonly DependencyProperty IsDropDownOpenProperty =
-        DependencyProperty.Register(
-            nameof(IsDropDownOpen),
-            typeof(bool),
-            typeof(RibbonComboBox),
-            new PropertyMetadata(false));
+        Microsoft.UI.Xaml.Controls.ComboBox.IsDropDownOpenProperty;
 
     /// <summary>
     /// Gets or sets a value indicating whether the drop down is currently open.
     /// </summary>
     public new bool IsDropDownOpen
     {
-        get => (bool)GetValue(IsDropDownOpenProperty);
-        set => SetValue(IsDropDownOpenProperty, value);
+        get => base.IsDropDownOpen;
+        set => base.IsDropDownOpen = value;
     }
 
     /// <summary>Identifies the <see cref="TopPopupContent"/> dependency property.</summary>
@@ -265,8 +261,21 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
     public RibbonComboBox()
     {
         DefaultStyleKey = typeof(RibbonComboBox);
+        base.DropDownOpened += OnNativeDropDownOpened;
+        base.DropDownClosed += OnNativeDropDownClosed;
         DropDownOpened += (_, _) => { };
         DropDownClosed += (_, _) => { };
+    }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc />
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        UpdateVisualState();
     }
 
     #endregion
@@ -304,19 +313,13 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         VisualStateManager.GoToState(this, stateName, true);
     }
 
-    /// <inheritdoc />
-    protected override void OnDropDownOpened(object e)
+    private void OnNativeDropDownOpened(object? sender, object e)
     {
-        base.OnDropDownOpened(e);
-        IsDropDownOpen = true;
         DropDownOpened?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <inheritdoc />
-    protected override void OnDropDownClosed(object e)
+    private void OnNativeDropDownClosed(object? sender, object e)
     {
-        base.OnDropDownClosed(e);
-        IsDropDownOpen = false;
         DropDownClosed?.Invoke(this, EventArgs.Empty);
     }
 

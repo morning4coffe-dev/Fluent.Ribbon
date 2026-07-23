@@ -12,6 +12,7 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 [TemplatePart(Name = PART_ExpandButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_UpButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_DownButton, Type = typeof(WinUIButton))]
+[TemplatePart(Name = PART_ScrollViewer, Type = typeof(ScrollViewer))]
 #if WINDOWS
 public partial class InRibbonGallery : ListBox, IScalableRibbonControl, IHeaderedControl
 #else
@@ -35,6 +36,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private const string PART_ExpandButton = "PART_ExpandButton";
     private const string PART_UpButton = "PART_UpButton";
     private const string PART_DownButton = "PART_DownButton";
+    private const string PART_ScrollViewer = "PART_ScrollViewer";
 
     #region Dependency Properties
 
@@ -395,8 +397,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             _downButton.Click += OnDownButtonClick;
         }
 
-        // Find the ScrollViewer in the visual tree if present
-        _scrollViewer = FindScrollViewer(_galleryPanel);
+        _scrollViewer = GetTemplateChild(PART_ScrollViewer) as ScrollViewer;
 
         SetupGalleryPanel();
         UpdateVisualState();
@@ -697,22 +698,6 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         {
             gallery.UpdateVisualState();
         }
-    }
-
-    private static ScrollViewer? FindScrollViewer(DependencyObject? parent)
-    {
-        if (parent is null) return null;
-        if (parent is ScrollViewer sv) return sv;
-
-        var count = VisualTreeHelper.GetChildrenCount(parent);
-        for (int i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            var result = FindScrollViewer(child);
-            if (result is not null) return result;
-        }
-
-        return null;
     }
 
     /// <inheritdoc/>

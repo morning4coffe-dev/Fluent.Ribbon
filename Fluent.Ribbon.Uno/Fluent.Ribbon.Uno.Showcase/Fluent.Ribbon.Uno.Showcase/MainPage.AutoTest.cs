@@ -337,8 +337,13 @@ public sealed partial class MainPage
                     // same way a click would, then hide it.
                     InvokePrivate(gallery, "ShowPopup");
                     await SettleAsync(3);
+                    Require(gallery.IsDropDownOpen, "gallery popup did not open");
+                    Require(
+                        GetPrivateFieldValue<Popup>(gallery, "_popup")?.IsOpen == true,
+                        "gallery popup was not visible");
                     HidePrivateFlyout(gallery, "_popup");
                     await SettleAsync(1);
+                    Require(!gallery.IsDropDownOpen, "gallery popup did not close");
                     AutoLog($"  ENLARGE/REDUCE {kind} '{name}'");
                     gallery.Enlarge();
                     await SettleAsync(1);
@@ -353,11 +358,27 @@ public sealed partial class MainPage
                 case RibbonDropDownButton dropDown:
                     dropDown.OnKeyTipPressed();
                     await SettleAsync(3);
+#if WINDOWS
+                    Require(dropDown.IsDropDownOpen, "drop-down flyout did not open");
+#endif
                     dropDown.CloseDropDown();
+#if WINDOWS
+                    await SettleAsync(3);
+                    Require(!dropDown.IsDropDownOpen, "drop-down flyout did not close");
+#else
                     await SettleAsync(1);
+#endif
                     break;
 
                 case RibbonComboBox combo:
+#if WINDOWS
+                    combo.IsDropDownOpen = true;
+                    await SettleAsync(2);
+                    Require(combo.IsDropDownOpen, "combo box popup did not open");
+                    combo.IsDropDownOpen = false;
+                    await SettleAsync(1);
+                    Require(!combo.IsDropDownOpen, "combo box popup did not close");
+#else
                     if (FindDescendant<ComboBox>(combo) is ComboBox inner)
                     {
                         inner.IsDropDownOpen = true;
@@ -365,7 +386,7 @@ public sealed partial class MainPage
                         inner.IsDropDownOpen = false;
                         await SettleAsync(1);
                     }
-
+#endif
                     break;
 
                 case ColorGallery:
@@ -397,12 +418,17 @@ public sealed partial class MainPage
         method?.Invoke(target, arguments);
     }
 
+    private static T? GetPrivateFieldValue<T>(object target, string fieldName)
+        where T : class
+    {
+        return target.GetType()
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(target) as T;
+    }
+
     private static void HidePrivateFlyout(object target, string fieldName)
     {
-        var field = target.GetType().GetField(
-            fieldName,
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        var value = field?.GetValue(target);
+        var value = GetPrivateFieldValue<object>(target, fieldName);
         if (value is FlyoutBase flyout)
         {
             flyout.Hide();

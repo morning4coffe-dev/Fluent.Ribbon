@@ -5,6 +5,7 @@ namespace Fluent;
 /// Defines what size a ribbon control should be at each group box state.
 /// </summary>
 [System.ComponentModel.TypeConverter(typeof(Converters.SizeDefinitionConverter))]
+[Windows.Foundation.Metadata.CreateFromString(MethodName = "Fluent.RibbonControlSizeDefinition.FromString")]
 public struct RibbonControlSizeDefinition : IEquatable<RibbonControlSizeDefinition>
 {
     private const int MaxSizeDefinitionParts = 3;

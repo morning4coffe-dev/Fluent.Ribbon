@@ -51,7 +51,9 @@ public partial class ComboBox
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        DropDownPopup = GetTemplateChild("PART_Popup") as Microsoft.UI.Xaml.Controls.Primitives.Popup;
+        DropDownPopup =
+            GetTemplateChild("Popup") as Microsoft.UI.Xaml.Controls.Primitives.Popup
+            ?? GetTemplateChild("PART_Popup") as Microsoft.UI.Xaml.Controls.Primitives.Popup;
         ApplyFinalHeaderTemplateSelector();
         ApplyFinalTopPopupPresentation();
     }

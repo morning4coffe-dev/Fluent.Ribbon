@@ -26,7 +26,7 @@ public sealed record CompatibilityRuntimeSmokeResult(
 /// Provides a consumer-callable runtime check for facade construction, templates, commands, and QAT clones.
 /// </summary>
 /// <remarks>
-/// Call <see cref="Run"/> from the application's UI thread after WinUI resources have initialized.
+/// Call <see cref="Run()"/> from the application's UI thread after WinUI resources have initialized.
 /// The helper does not attach controls to the visual tree and does not retain created controls.
 /// </remarks>
 public static class CompatibilityRuntimeSmoke
