@@ -127,8 +127,7 @@
                             BorderThickness="{TemplateBinding BorderThickness}">
                             <fluent:RibbonTabControl
                                 x:Name="PART_RibbonTabControl"
-                                IsMinimized="{TemplateBinding IsMinimized}"
-                                TabStripHeader="{TemplateBinding Menu}" />
+                                IsMinimized="{TemplateBinding IsMinimized}" />
                         </Border>
 
                         <!-- Quick Access Toolbar (below ribbon) -->

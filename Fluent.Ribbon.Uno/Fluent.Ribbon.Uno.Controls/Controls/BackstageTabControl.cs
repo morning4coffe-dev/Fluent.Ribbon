@@ -272,7 +272,34 @@ public partial class BackstageTabControl : Selector, ILogicalChildSupport
         DependencyObject element,
         object item)
     {
+#if WINDOWS
+        // WinUI's ListBox implementation assumes every container is a ListBoxItem and
+        // casts inside its base implementation. Backstage uses its own container types.
+        if (!ReferenceEquals(element, item)
+            && element is BackstageTabItem tabItem)
+        {
+            tabItem.Content = item;
+        }
+#else
         base.PrepareContainerForItemOverride(element, item);
+#endif
+    }
+
+    /// <inheritdoc />
+    protected override void ClearContainerForItemOverride(
+        DependencyObject element,
+        object item)
+    {
+#if WINDOWS
+        if (!ReferenceEquals(element, item)
+            && element is BackstageTabItem tabItem
+            && ReferenceEquals(tabItem.Content, item))
+        {
+            tabItem.Content = null;
+        }
+#else
+        base.ClearContainerForItemOverride(element, item);
+#endif
     }
 
     /// <inheritdoc />

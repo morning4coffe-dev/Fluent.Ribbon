@@ -238,7 +238,7 @@ public partial class Ribbon : Control
             nameof(Menu),
             typeof(FrameworkElement),
             typeof(Ribbon),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnMenuChanged));
 
     /// <summary>
     /// Gets or sets the application menu (backstage).
@@ -414,6 +414,7 @@ public partial class Ribbon : Control
         _toolBarItemsHost = GetTemplateChild(PART_ToolBarItemsHost) as Panel;
         _titleText = GetTemplateChild(PART_Title) as FrameworkElement;
         UpdateCompatibilityTemplateParts();
+        UpdateMenu();
 
         HookQuickAccessToolBar(_quickAccessToolBar);
         HookQuickAccessToolBar(_belowRibbonQAT);
@@ -652,6 +653,14 @@ public partial class Ribbon : Control
         }
     }
 
+    private static void OnMenuChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is Ribbon ribbon)
+        {
+            ribbon.UpdateMenu();
+        }
+    }
+
     private static void OnSelectedTabIndexChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is Ribbon ribbon && e.NewValue is int index)
@@ -788,6 +797,14 @@ public partial class Ribbon : Control
     private void UpdateMinimizedState()
     {
         VisualStateManager.GoToState(this, IsMinimized ? "Minimized" : "Normal", true);
+    }
+
+    private void UpdateMenu()
+    {
+        if (_tabControl is not null)
+        {
+            _tabControl.TabStripHeader = Menu;
+        }
     }
 
     private void UpdateQATPosition()
