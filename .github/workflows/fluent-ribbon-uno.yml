@@ -75,11 +75,11 @@ jobs:
 
       - name: Test Uno contracts
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release
+        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release
 
       - name: Test API compatibility tool
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -c Release
+        run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release
 
       - name: Build WPF API reference
         run: dotnet build Fluent.Ribbon/Fluent.Ribbon.csproj -f net8.0-windows -c Release
@@ -165,11 +165,11 @@ jobs:
 
       - name: Test Uno contracts
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release
+        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release
 
       - name: Test API compatibility tool
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -c Release
+        run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release
 
   browserwasm:
     name: Build WebAssembly
