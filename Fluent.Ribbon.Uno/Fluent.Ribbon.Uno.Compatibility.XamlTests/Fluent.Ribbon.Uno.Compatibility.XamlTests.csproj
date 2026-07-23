@@ -8,7 +8,6 @@
     <Nullable>enable</Nullable>
     <RootNamespace>FluentUno.Compatibility.XamlTests</RootNamespace>
     <AssemblyName>Fluent.Ribbon.Uno.Compatibility.XamlTests</AssemblyName>
-    <UnoFeatures>SkiaRenderer;</UnoFeatures>
     <UseWpf>false</UseWpf>
     <UseWindowsForms>false</UseWindowsForms>
     <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>

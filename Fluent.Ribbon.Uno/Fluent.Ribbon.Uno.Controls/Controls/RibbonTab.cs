@@ -234,11 +234,12 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         _groupsPanel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            MinHeight = 94,
+            Height = RibbonTabControl.DefaultContentHeight,
         };
 
         _scrollViewer = new ScrollViewer
         {
+            Height = RibbonTabControl.DefaultContentHeight,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -253,6 +254,15 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         // Ensure an initial layout pass runs once the tab is realized, even if
         // no further size change fires afterwards.
         Loaded += (_, _) => ScheduleUpdateGroupSizes();
+    }
+
+    internal void SetContentHeight(double contentHeight)
+    {
+        var height = double.IsFinite(contentHeight)
+            ? Math.Max(0, contentHeight)
+            : RibbonTabControl.DefaultContentHeight;
+        _groupsPanel.Height = height;
+        _scrollViewer.Height = height;
     }
 
     #endregion

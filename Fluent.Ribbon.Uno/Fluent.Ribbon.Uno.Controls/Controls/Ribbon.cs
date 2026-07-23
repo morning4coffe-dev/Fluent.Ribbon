@@ -11,6 +11,8 @@ namespace Fluent;
 [TemplatePart(Name = PART_BelowRibbonQAT, Type = typeof(QuickAccessToolBar))]
 [TemplatePart(Name = PART_ToolBarItemsHost, Type = typeof(Panel))]
 [TemplatePart(Name = PART_Title, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = PART_TitleBarHost, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = PART_TitleBarDragRegion, Type = typeof(FrameworkElement))]
 public partial class Ribbon : Control
 {
     private const string PART_TabControl = "PART_RibbonTabControl";
@@ -19,6 +21,8 @@ public partial class Ribbon : Control
     private const string PART_BelowRibbonQAT = "PART_BelowRibbonQAT";
     private const string PART_ToolBarItemsHost = "PART_ToolBarItemsHost";
     private const string PART_Title = "PART_Title";
+    private const string PART_TitleBarHost = "PART_TitleBarHost";
+    private const string PART_TitleBarDragRegion = "PART_TitleBarDragRegion";
 
     private RibbonTabControl? _tabControl;
     private QuickAccessToolBar? _quickAccessToolBar;
@@ -42,6 +46,16 @@ public partial class Ribbon : Control
     public event SelectionChangedEventHandler? SelectedTabChanged;
 
     #endregion
+
+    /// <summary>
+    /// Gets the template host that can be registered as a native window title bar.
+    /// </summary>
+    public FrameworkElement? TitleBarHost { get; private set; }
+
+    /// <summary>
+    /// Gets the non-interactive region that can be registered for native title-bar dragging.
+    /// </summary>
+    public FrameworkElement? TitleBarDragRegion { get; private set; }
 
     #region Dependency Properties
 
@@ -332,7 +346,7 @@ public partial class Ribbon : Control
         // Adjust tab content height for simplified ribbon
         if (_tabControl is not null)
         {
-            _tabControl.ContentHeight = IsSimplified ? 44 : double.NaN;
+            _tabControl.ContentHeight = IsSimplified ? 44 : ContentHeight;
         }
 
         VisualStateManager.GoToState(this, IsSimplified ? "SimplifiedOn" : "SimplifiedOff", true);
@@ -413,6 +427,8 @@ public partial class Ribbon : Control
         _contextualGroupsPanel = GetTemplateChild(PART_ContextualGroupsPanel) as RibbonContextualGroupsContainer;
         _toolBarItemsHost = GetTemplateChild(PART_ToolBarItemsHost) as Panel;
         _titleText = GetTemplateChild(PART_Title) as FrameworkElement;
+        TitleBarHost = GetTemplateChild(PART_TitleBarHost) as FrameworkElement;
+        TitleBarDragRegion = GetTemplateChild(PART_TitleBarDragRegion) as FrameworkElement;
         UpdateCompatibilityTemplateParts();
         UpdateMenu();
 
@@ -479,6 +495,7 @@ public partial class Ribbon : Control
             _tabControl.TabItems.Clear();
             foreach (var tab in Tabs)
             {
+                tab.SetContentHeight(_tabControl.ContentHeight);
                 _tabControl.TabItems.Add(tab);
             }
         }
@@ -605,6 +622,7 @@ public partial class Ribbon : Control
                 {
                     foreach (RibbonTabItem tab in e.NewItems)
                     {
+                        tab.SetContentHeight(_tabControl.ContentHeight);
                         _tabControl.TabItems.Add(tab);
                     }
                 }

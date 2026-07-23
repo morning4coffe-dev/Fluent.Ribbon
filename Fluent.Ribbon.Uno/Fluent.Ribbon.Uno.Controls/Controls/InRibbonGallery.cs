@@ -13,6 +13,7 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 [TemplatePart(Name = PART_UpButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_DownButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_ScrollViewer, Type = typeof(ScrollViewer))]
+[TemplatePart(Name = PART_CollapsedButton, Type = typeof(WinUIButton))]
 #if WINDOWS
 public partial class InRibbonGallery : ListBox, IScalableRibbonControl, IHeaderedControl
 #else
@@ -23,11 +24,15 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private WinUIButton? _expandButton;
     private WinUIButton? _upButton;
     private WinUIButton? _downButton;
+    private WinUIButton? _collapsedButton;
     private ScrollViewer? _scrollViewer;
     private Popup? _popup;
     private ScrollViewer? _popupScroller;
     private StackPanel? _popupPanel;
     private bool _isPopupOpen;
+    private bool _isChangingIsCollapsedInternally;
+    private bool _isCollapsedExplicitlySet;
+    private int _currentItemsInRow = -1;
 #pragma warning disable CS0169
     private int _scrollOffset;
 #pragma warning restore CS0169
@@ -37,6 +42,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private const string PART_UpButton = "PART_UpButton";
     private const string PART_DownButton = "PART_DownButton";
     private const string PART_ScrollViewer = "PART_ScrollViewer";
+    private const string PART_CollapsedButton = "CollapsedContent";
 
     #region Dependency Properties
 
@@ -80,7 +86,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             nameof(ItemWidth),
             typeof(double),
             typeof(InRibbonGallery),
-            new PropertyMetadata(60.0, OnGalleryLayoutPropertyChanged));
+            new PropertyMetadata(double.NaN, OnGalleryLayoutPropertyChanged));
 
     /// <summary>
     /// Gets or sets the width of each gallery item.
@@ -97,7 +103,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             nameof(ItemHeight),
             typeof(double),
             typeof(InRibbonGallery),
-            new PropertyMetadata(24.0, OnGalleryLayoutPropertyChanged));
+            new PropertyMetadata(double.NaN, OnGalleryLayoutPropertyChanged));
 
     /// <summary>
     /// Gets or sets the height of each gallery item.
@@ -114,7 +120,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             nameof(MaxItemsInRow),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(9, OnGalleryLayoutPropertyChanged));
+            new PropertyMetadata(8, OnMaxItemsInRowChanged));
 
     /// <summary>
     /// Gets or sets the maximum number of items in a row for inline display.
@@ -131,7 +137,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             nameof(MinItemsInRow),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(1, OnGalleryLayoutPropertyChanged));
+            new PropertyMetadata(1, OnMinItemsInRowChanged));
 
     /// <summary>
     /// Gets or sets the minimum number of items in a row.
@@ -309,7 +315,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             nameof(CanCollapseToButton),
             typeof(bool),
             typeof(InRibbonGallery),
-            new PropertyMetadata(false));
+            new PropertyMetadata(true));
 
     /// <summary>
     /// Gets or sets whether this gallery can collapse to a button when scaled down.
@@ -334,7 +340,15 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     public bool IsCollapsed
     {
         get => (bool)GetValue(IsCollapsedProperty);
-        set => SetValue(IsCollapsedProperty, value);
+        set
+        {
+            if (!_isChangingIsCollapsedInternally)
+            {
+                _isCollapsedExplicitlySet = true;
+            }
+
+            SetValue(IsCollapsedProperty, value);
+        }
     }
 
     #endregion
@@ -397,11 +411,33 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             _downButton.Click += OnDownButtonClick;
         }
 
+        if (_collapsedButton is not null)
+        {
+            _collapsedButton.Click -= OnExpandButtonClick;
+        }
+
+        _collapsedButton = GetTemplateChild(PART_CollapsedButton) as WinUIButton;
+        if (_collapsedButton is not null)
+        {
+            _collapsedButton.Click += OnExpandButtonClick;
+        }
+
         _scrollViewer = GetTemplateChild(PART_ScrollViewer) as ScrollViewer;
 
         SetupGalleryPanel();
         UpdateVisualState();
         UpdateCompatibilityTemplate();
+
+        if (IsDropDownOpen)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (IsDropDownOpen)
+                {
+                    ShowPopup();
+                }
+            });
+        }
     }
 
     #endregion
@@ -411,15 +447,12 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     /// <inheritdoc/>
     public void ScaleTo(RibbonControlSize size)
     {
+        var sizeDefinition = IsSimplified ? SimplifiedSizeDefinition : SizeDefinition;
+        var resolvedSize = sizeDefinition.GetSize(size);
         var previous = Size;
-        Size = size;
+        Size = resolvedSize;
 
-        if (CanCollapseToButton)
-        {
-            IsCollapsed = size == RibbonControlSize.Small;
-        }
-
-        if (previous != size)
+        if (previous != resolvedSize)
         {
             Scaled?.Invoke(this, EventArgs.Empty);
         }
@@ -430,15 +463,19 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     /// </summary>
     public void Reduce()
     {
-        if (MaxItemsInRow > MinItemsInRow)
+        var currentItemsInRow = GetCurrentItemsInRow();
+        var reducedItemsInRow = GalleryLayoutMath.ReduceItemsInRow(
+            currentItemsInRow,
+            MinItemsInRow);
+        if (reducedItemsInRow != currentItemsInRow)
         {
-            MaxItemsInRow--;
+            _currentItemsInRow = reducedItemsInRow;
             UpdateGalleryLayout();
             Scaled?.Invoke(this, EventArgs.Empty);
         }
-        else if (CanCollapseToButton && !IsCollapsed)
+        else if (CanAutomaticallyChangeIsCollapsed() && !IsCollapsed)
         {
-            IsCollapsed = true;
+            SetIsCollapsedInternally(true);
             Scaled?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -448,16 +485,25 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     /// </summary>
     public void Enlarge()
     {
-        if (IsCollapsed)
+        if (CanAutomaticallyChangeIsCollapsed()
+            && IsCollapsed
+            && Size == RibbonControlSize.Large)
         {
-            IsCollapsed = false;
+            SetIsCollapsedInternally(false);
             Scaled?.Invoke(this, EventArgs.Empty);
         }
         else
         {
-            MaxItemsInRow++;
-            UpdateGalleryLayout();
-            Scaled?.Invoke(this, EventArgs.Empty);
+            var currentItemsInRow = GetCurrentItemsInRow();
+            var enlargedItemsInRow = GalleryLayoutMath.EnlargeItemsInRow(
+                currentItemsInRow,
+                MaxItemsInRow);
+            if (enlargedItemsInRow != currentItemsInRow)
+            {
+                _currentItemsInRow = enlargedItemsInRow;
+                UpdateGalleryLayout();
+                Scaled?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 
@@ -482,7 +528,10 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
         _galleryPanel.ItemWidth = ItemWidth;
         _galleryPanel.ItemHeight = ItemHeight;
-        _galleryPanel.MaxColumns = Orientation == Orientation.Vertical ? 1 : MaxItemsInRow;
+        ConfigurePanel(
+            _galleryPanel,
+            MinItemsInRow,
+            GetCurrentItemsInRow());
 
         if (_isPopupOpen)
         {
@@ -506,8 +555,85 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     {
         if (_galleryPanel is not null)
         {
-            _galleryPanel.MaxColumns = Orientation == Orientation.Vertical ? 1 : MaxItemsInRow;
+            ConfigurePanel(
+                _galleryPanel,
+                MinItemsInRow,
+                GetCurrentItemsInRow());
         }
+    }
+
+    private void ConfigurePanel(UniformItemsPanel panel, int minItemsInRow, int maxItemsInRow)
+    {
+        panel.ItemWidth = ItemWidth;
+        panel.ItemHeight = ItemHeight;
+        panel.MinColumns = GalleryLayoutMath.NormalizeCount(minItemsInRow);
+        panel.MaxColumns = GalleryLayoutMath.NormalizeCount(maxItemsInRow);
+        panel.Orientation = Orientation;
+    }
+
+    private int GetCurrentItemsInRow()
+    {
+        if (_currentItemsInRow < 0)
+        {
+            _currentItemsInRow = GalleryLayoutMath.NormalizeCount(MaxItemsInRow);
+        }
+
+        return _currentItemsInRow;
+    }
+
+    private void ResetCurrentItemsInRow()
+    {
+        _currentItemsInRow = GalleryLayoutMath.NormalizeCount(MaxItemsInRow);
+    }
+
+    private void ClampCurrentItemsInRow()
+    {
+        _currentItemsInRow = GalleryLayoutMath.ClampCurrentItemsInRow(
+            GetCurrentItemsInRow(),
+            MinItemsInRow,
+            MaxItemsInRow);
+    }
+
+    private bool CanAutomaticallyChangeIsCollapsed()
+    {
+        if (_isCollapsedExplicitlySet
+            && ReadLocalValue(IsCollapsedProperty) == DependencyProperty.UnsetValue)
+        {
+            _isCollapsedExplicitlySet = false;
+        }
+
+        return CanCollapseToButton && !_isCollapsedExplicitlySet;
+    }
+
+    private void SetIsCollapsedInternally(bool value)
+    {
+        _isChangingIsCollapsedInternally = true;
+        try
+        {
+            SetValue(IsCollapsedProperty, value);
+        }
+        finally
+        {
+            _isChangingIsCollapsedInternally = false;
+        }
+    }
+
+    private static void OnMaxItemsInRowChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var gallery = (InRibbonGallery)sender;
+        gallery.ResetCurrentItemsInRow();
+        OnGalleryLayoutPropertyChanged(sender, args);
+    }
+
+    private static void OnMinItemsInRowChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var gallery = (InRibbonGallery)sender;
+        gallery.ClampCurrentItemsInRow();
+        OnGalleryLayoutPropertyChanged(sender, args);
     }
 
     // A UIElement can only have a single parent; moving items between the inline and popup panels
@@ -529,7 +655,10 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     {
         if (_scrollViewer is not null)
         {
-            _scrollViewer.ChangeView(null, Math.Max(0, _scrollViewer.VerticalOffset - ItemHeight), null);
+            _scrollViewer.ChangeView(
+                null,
+                Math.Max(0, _scrollViewer.VerticalOffset - GetScrollStep()),
+                null);
         }
     }
 
@@ -537,19 +666,47 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     {
         if (_scrollViewer is not null)
         {
-            _scrollViewer.ChangeView(null, _scrollViewer.VerticalOffset + ItemHeight, null);
+            _scrollViewer.ChangeView(
+                null,
+                _scrollViewer.VerticalOffset + GetScrollStep(),
+                null);
         }
+    }
+
+    private double GetScrollStep()
+    {
+        if (!double.IsNaN(ItemHeight) && !double.IsInfinity(ItemHeight) && ItemHeight > 0)
+        {
+            return ItemHeight;
+        }
+
+        if (_galleryPanel is not null)
+        {
+            foreach (var child in _galleryPanel.Children)
+            {
+                if (child.Visibility == Visibility.Visible && child.DesiredSize.Height > 0)
+                {
+                    return child.DesiredSize.Height;
+                }
+            }
+        }
+
+        return 16D;
     }
 
     private void ShowPopup()
     {
         if (_galleryPanel is null || _scrollViewer is null)
         {
-            IsDropDownOpen = true;
             return;
         }
 
         EnsurePopup();
+
+        if (_isPopupOpen && _popup?.IsOpen == true)
+        {
+            return;
+        }
 
         _isPopupOpen = true;
 
@@ -668,7 +825,14 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     private void OnPopupClosed(object? sender, object e)
     {
-        IsDropDownOpen = false;
+        if (IsDropDownOpen)
+        {
+            IsDropDownOpen = false;
+        }
+        else
+        {
+            CloseDropDownCore();
+        }
     }
 
     private void UpdateVisualState()
@@ -696,6 +860,12 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     {
         if (d is InRibbonGallery gallery)
         {
+            if (!gallery._isChangingIsCollapsedInternally)
+            {
+                gallery._isCollapsedExplicitlySet =
+                    gallery.ReadLocalValue(IsCollapsedProperty) != DependencyProperty.UnsetValue;
+            }
+
             gallery.UpdateVisualState();
         }
     }

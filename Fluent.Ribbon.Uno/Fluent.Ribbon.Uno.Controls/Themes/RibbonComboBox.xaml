@@ -21,8 +21,16 @@
         <Setter Property="ItemsPanel">
             <Setter.Value>
                 <ItemsPanelTemplate>
-                    <CarouselPanel />
+                    <StackPanel />
                 </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="ComboBoxItem">
+                    <Setter Property="MinHeight" Value="24" />
+                    <Setter Property="Padding" Value="4,0" />
+                </Style>
             </Setter.Value>
         </Setter>
         <Setter Property="Template">

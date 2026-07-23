@@ -22,6 +22,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ShouldRunGenerator>false</ShouldRunGenerator>
+    <UnoFeatures>SkiaRenderer;</UnoFeatures>
     <UseWpf>false</UseWpf>
     <UseWindowsForms>false</UseWindowsForms>
     <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>

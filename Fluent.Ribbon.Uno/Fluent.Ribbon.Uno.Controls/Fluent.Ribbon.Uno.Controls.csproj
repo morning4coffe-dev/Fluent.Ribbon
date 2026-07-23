@@ -68,7 +68,7 @@
   <ItemGroup>
     <Compile Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
     <None Remove="$(MSBuildThisFileDirectory)..\..\Shared\GlobalAssemblyInfo.cs" />
-    <!-- Remove GitVersion.MsBuild inherited from Directory.build.props as it doesn't work with Uno SDK projects -->
+    <!-- Remove GitVersion.MsBuild inherited from Directory.Build.props as it doesn't work with Uno SDK projects -->
     <PackageReference Remove="GitVersion.MsBuild" />
   </ItemGroup>
 

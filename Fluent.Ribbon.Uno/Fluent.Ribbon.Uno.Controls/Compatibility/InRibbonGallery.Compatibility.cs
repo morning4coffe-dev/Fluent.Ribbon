@@ -111,7 +111,7 @@ public partial class InRibbonGallery :
             nameof(MaxItemsInDropDownRow),
             typeof(int),
             typeof(InRibbonGallery),
-            new PropertyMetadata(10, OnGalleryLayoutPropertyChanged));
+            new PropertyMetadata(0, OnGalleryLayoutPropertyChanged));
 
     /// <summary>Identifies the property-name grouping property.</summary>
     public static readonly DependencyProperty GroupByProperty =
@@ -529,8 +529,21 @@ public partial class InRibbonGallery :
     /// <summary>Resets the gallery to its configured maximum inline scale.</summary>
     public void ResetScale()
     {
-        var changed = IsCollapsed || (_galleryPanel is not null && _galleryPanel.MaxColumns != MaxItemsInRow);
-        IsCollapsed = false;
+        var changed = false;
+        if (CanAutomaticallyChangeIsCollapsed()
+            && Size == RibbonControlSize.Large
+            && IsCollapsed)
+        {
+            SetIsCollapsedInternally(false);
+            changed = true;
+        }
+
+        if (GetCurrentItemsInRow() != GalleryLayoutMath.NormalizeCount(MaxItemsInRow))
+        {
+            ResetCurrentItemsInRow();
+            changed = true;
+        }
+
         UpdateGalleryLayout();
         if (changed)
         {
@@ -562,9 +575,9 @@ public partial class InRibbonGallery :
     /// <inheritdoc />
     public void OnSizePropertyChanged(RibbonControlSize previous, RibbonControlSize current)
     {
-        if (CanCollapseToButton)
+        if (CanAutomaticallyChangeIsCollapsed())
         {
-            IsCollapsed = current == RibbonControlSize.Small;
+            SetIsCollapsedInternally(current != RibbonControlSize.Large);
         }
 
         UpdateGalleryLayout();
@@ -855,7 +868,6 @@ public partial class InRibbonGallery :
             if (!gallery._isPopupOpen)
             {
                 gallery.ShowPopup();
-                gallery._isPopupOpen = true;
             }
 
             gallery.IsSnapped = true;
@@ -954,8 +966,8 @@ public partial class InRibbonGallery :
                 {
                     ItemWidth = ItemWidth,
                     ItemHeight = ItemHeight,
-                    MaxColumns = Orientation == Orientation.Vertical ? 1 : MaxItemsInDropDownRow,
                 };
+                ConfigurePanel(panel, MinItemsInDropDownRow, MaxItemsInDropDownRow);
                 foreach (var item in pair.Value)
                 {
                     panel.Children.Add(item);
@@ -970,9 +982,10 @@ public partial class InRibbonGallery :
         }
         else
         {
-            _galleryPanel.ItemWidth = ItemWidth;
-            _galleryPanel.ItemHeight = ItemHeight;
-            _galleryPanel.MaxColumns = Orientation == Orientation.Vertical ? 1 : MaxItemsInDropDownRow;
+            ConfigurePanel(
+                _galleryPanel,
+                MinItemsInDropDownRow,
+                MaxItemsInDropDownRow);
             foreach (var item in Items)
             {
                 _galleryPanel.Children.Add(item);
@@ -1047,7 +1060,10 @@ public partial class InRibbonGallery :
 
         _popupResizeHost.Width = DropDownWidth;
         _popupResizeHost.Height = DropDownHeight;
-        _popupResizeHost.MinWidth = Math.Max(0D, MinItemsInDropDownRow * Math.Max(0D, ItemWidth));
+        var itemWidth = !double.IsNaN(ItemWidth) && !double.IsInfinity(ItemWidth) && ItemWidth > 0D
+            ? ItemWidth
+            : 0D;
+        _popupResizeHost.MinWidth = Math.Max(0D, MinItemsInDropDownRow) * itemWidth;
         _popupResizeHost.MaxWidth = NormalizeMaximum(MaxDropDownWidth);
         _popupResizeHost.MaxHeight = NormalizeMaximum(MaxDropDownHeight);
         _popupResizeHost.CanResizeBothDirections = ResizeMode == ContextMenuResizeMode.Both;

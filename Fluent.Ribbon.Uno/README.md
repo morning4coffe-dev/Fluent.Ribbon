@@ -183,6 +183,16 @@ Run the deterministic validation entry point from the Uno directory:
 .\ValidatePackages.ps1  # packs Core + facade and builds a package-only consumer
 ```
 
+For repeatable WPF/WinUI visual comparisons on Windows, run:
+
+```powershell
+.\CompareShowcases.ps1
+```
+
+The script builds both Showcases, resizes them to the same physical dimensions,
+and writes matching Toolbars, Insert, Galleries, Resizing, ComboBox popup, and
+Backstage screenshots under `artifacts\visual-parity`.
+
 The GitHub Actions matrix builds the controls, compatibility facade, WPF-style
 XAML fixture, and Showcase for WinUI, Desktop/Skia on Windows/Linux/macOS,
 WebAssembly, Android, and iOS. Desktop additionally runs the contract, API, and
@@ -200,6 +210,7 @@ are present, but several advanced behaviours are intentionally simplified:
 | Backstage / App Menu | Adorner overlay with open/close animations | Implemented, simplified (no adorner/animation) |
 | KeyTips | Full Alt-key navigation tree | Alt/F10 navigation and activation implemented; WPF focus restoration and all nested scopes are still being hardened |
 | Galleries | Grouping, filtering, live hover preview | Implemented for `RibbonGallery` and `InRibbonGallery`; Uno uses a custom control instead of WPF `Selector` inheritance |
+| ComboBox popup | WPF-sized long list with optional `TopPopupContent` | Selection/editing and compact list popup are implemented; native WinUI currently constrains the visible viewport, and `TopPopupContent` is not used by the Showcase until its native layout is stable |
 | ColorGallery | Standard/theme/recent colors + custom-color dialog | Standard/theme/recent colors with injectable cross-platform picker and WinUI `ContentDialog` fallback |
 | ScreenTip | Rich tooltip + F1 help hook | `Title`/`Text`/`DisableReason` with F1 help integration |
 | Spinner | `TextToValueConverter`, full validation | Simplified numeric spinner |

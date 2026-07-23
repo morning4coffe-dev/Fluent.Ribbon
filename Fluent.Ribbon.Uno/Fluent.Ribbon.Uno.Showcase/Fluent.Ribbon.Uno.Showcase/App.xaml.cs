@@ -8,6 +8,8 @@ namespace FluentRibbon.Uno.Showcase;
 
 public partial class App : Application
 {
+    internal static string LaunchArguments { get; private set; } = string.Empty;
+
     /// <summary>
     /// Initializes the singleton application object. This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().
@@ -89,6 +91,7 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         LogAutoTestStartup("APP LAUNCHED BEGIN");
+        LaunchArguments = args.Arguments ?? string.Empty;
         MainWindow = new Window();
 #if DEBUG
         // The Uno Studio / Hot Design dev-server injects extra layout passes and raises its own
@@ -121,6 +124,13 @@ public partial class App : Application
             var navigated = rootFrame.Navigate(typeof(MainPage), args.Arguments);
             LogAutoTestStartup($"MAIN PAGE NAVIGATED {navigated}");
         }
+
+#if WINDOWS
+        if (rootFrame.Content is MainPage titleBarPage)
+        {
+            titleBarPage.ConfigureWindowTitleBar(MainWindow);
+        }
+#endif
 
         MainWindow.SetWindowIcon();
         // Ensure the current window is active

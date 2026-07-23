@@ -36,7 +36,7 @@ public class ShowcaseAutoTestTests
             StartInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"run --project \"{projectPath}\" -f net10.0-desktop -c Release --no-restore -p:UseSharedCompilation=false",
+                Arguments = $"run --project \"{projectPath}\" -f net10.0-desktop -c Release -p:TargetFrameworks=net10.0-desktop -p:UseSharedCompilation=false",
                 WorkingDirectory = repositoryRoot,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

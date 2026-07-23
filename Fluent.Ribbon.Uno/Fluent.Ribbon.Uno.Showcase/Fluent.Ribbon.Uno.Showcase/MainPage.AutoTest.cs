@@ -8,6 +8,12 @@
 //                               Enlarge/Reduce + Simplified/Minimized toggles, logging each step.
 //   SHOWCASE_AUTOTEST_LOG=path  Append the [AUTOTEST] log lines to this file (also written to stdout).
 //   SHOWCASE_AUTOTEST_EXIT=1    Exit the process once the walk completes (so a runner can detect "done").
+//   SHOWCASE_OPEN_SURFACE=name  Leave fontNameCombo or fontSizeCombo open for visual capture.
+//   SHOWCASE_OPEN_DELAY_MS=ms   Delay surface expansion so a harness can resize the window first.
+//
+// SHOWCASE_TAB and SHOWCASE_OPEN_SURFACE also accept the command-line forms
+// --showcase-tab=<index>, --showcase-open-surface=<name>, and
+// --showcase-open-delay=<milliseconds> for packaged launches.
 //
 // The walker deliberately drives controls programmatically because synthetic
 // mouse/keyboard input does not reach the Uno Skia window. Any layout crash that
@@ -22,6 +28,8 @@ using System.Threading.Tasks;
 using Fluent;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
@@ -66,14 +74,17 @@ public sealed partial class MainPage
     // environment variables are present; otherwise returns immediately.
     private void InitializeDiagnostics()
     {
-        var tabVar = Environment.GetEnvironmentVariable("SHOWCASE_TAB");
+        var tabVar = GetDiagnosticOption("SHOWCASE_TAB", "showcase-tab");
+        var surfaceVar = GetDiagnosticOption("SHOWCASE_OPEN_SURFACE", "showcase-open-surface");
+        var surfaceDelayVar = GetDiagnosticOption("SHOWCASE_OPEN_DELAY_MS", "showcase-open-delay");
         var autotest = AutoTestEnabled;
-        if (string.IsNullOrEmpty(tabVar) && !autotest)
+        if (string.IsNullOrEmpty(tabVar) && string.IsNullOrEmpty(surfaceVar) && !autotest)
         {
             return;
         }
 
-        this.Loaded += async (_, _) => await RunConfiguredDiagnosticsAsync(tabVar, autotest);
+        this.Loaded += async (_, _) =>
+            await RunConfiguredDiagnosticsAsync(tabVar, surfaceVar, surfaceDelayVar, autotest);
     }
 
     internal void StartAutoTestFromHost()
@@ -85,12 +96,18 @@ public sealed partial class MainPage
 
         var queued = DispatcherQueue.TryEnqueue(
             async () => await RunConfiguredDiagnosticsAsync(
-                Environment.GetEnvironmentVariable("SHOWCASE_TAB"),
+                GetDiagnosticOption("SHOWCASE_TAB", "showcase-tab"),
+                GetDiagnosticOption("SHOWCASE_OPEN_SURFACE", "showcase-open-surface"),
+                GetDiagnosticOption("SHOWCASE_OPEN_DELAY_MS", "showcase-open-delay"),
                 autotest: true));
         App.LogAutoTestStartup($"AUTOTEST DISPATCH QUEUED {queued}");
     }
 
-    private async Task RunConfiguredDiagnosticsAsync(string? tabVar, bool autotest)
+    private async Task RunConfiguredDiagnosticsAsync(
+        string? tabVar,
+        string? surfaceVar,
+        string? surfaceDelayVar,
+        bool autotest)
     {
         if (autoTestStarted)
         {
@@ -101,6 +118,19 @@ public sealed partial class MainPage
         if (int.TryParse(tabVar, out var idx) && idx >= 0 && idx < MainRibbon.Tabs.Count)
         {
             MainRibbon.SelectedTabIndex = idx;
+        }
+
+        if (!string.IsNullOrEmpty(surfaceVar))
+        {
+            var surfaceDelay = 0;
+            if (!string.IsNullOrEmpty(surfaceDelayVar)
+                && (!int.TryParse(surfaceDelayVar, out surfaceDelay) || surfaceDelay < 0))
+            {
+                throw new InvalidOperationException(
+                    $"Invalid Showcase surface delay '{surfaceDelayVar}'.");
+            }
+
+            await OpenConfiguredSurfaceAsync(surfaceVar, surfaceDelay);
         }
 
         if (!autotest)
@@ -118,6 +148,61 @@ public sealed partial class MainPage
         else
         {
             await RunAutoTestAsync();
+        }
+    }
+
+    private static string? GetDiagnosticOption(string environmentVariable, string argumentName)
+    {
+        var value = Environment.GetEnvironmentVariable(environmentVariable);
+        if (!string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var prefix = $"--{argumentName}=";
+        foreach (var argument in Environment.GetCommandLineArgs())
+        {
+            if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return argument[prefix.Length..];
+            }
+        }
+
+        foreach (var argument in App.LaunchArguments.Split(
+                     ' ',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return argument[prefix.Length..];
+            }
+        }
+
+        return null;
+    }
+
+    private async Task OpenConfiguredSurfaceAsync(string surfaceName, int delayMilliseconds)
+    {
+        if (delayMilliseconds > 0)
+        {
+            await Task.Delay(delayMilliseconds);
+        }
+
+        MainRibbon.SelectedTabIndex = 0;
+        await SettleAsync();
+
+        var comboBox = surfaceName switch
+        {
+            nameof(fontNameCombo) => fontNameCombo,
+            nameof(fontSizeCombo) => fontSizeCombo,
+            _ => throw new InvalidOperationException($"Unknown Showcase surface '{surfaceName}'."),
+        };
+
+        comboBox.IsDropDownOpen = true;
+        await SettleAsync(2);
+        if (!comboBox.IsDropDownOpen)
+        {
+            throw new InvalidOperationException($"Showcase surface '{surfaceName}' did not open.");
         }
     }
 
@@ -333,9 +418,20 @@ public sealed partial class MainPage
             switch (control)
             {
                 case InRibbonGallery gallery:
-                    // The popup (expandedRepeater) is the real crash suspect; open it the
-                    // same way a click would, then hide it.
-                    InvokePrivate(gallery, "ShowPopup");
+                    if (gallery.IsCollapsed)
+                    {
+                        var collapsedButton = GetPrivateFieldValue<Button>(gallery, "_collapsedButton");
+                        Require(collapsedButton is not null, "collapsed gallery button was not connected");
+                        var peer = new ButtonAutomationPeer(collapsedButton!);
+                        var invokeProvider = peer.GetPattern(PatternInterface.Invoke) as IInvokeProvider;
+                        Require(invokeProvider is not null, "collapsed gallery button was not invokable");
+                        invokeProvider!.Invoke();
+                    }
+                    else
+                    {
+                        InvokePrivate(gallery, "ShowPopup");
+                    }
+
                     await SettleAsync(3);
                     Require(gallery.IsDropDownOpen, "gallery popup did not open");
                     Require(
@@ -446,13 +542,20 @@ public sealed partial class MainPage
         {
             MainRibbon.SelectedTabIndex = 0;
             await SettleAsync();
+            var tabControl = FindDescendant<RibbonTabControl>(MainRibbon);
+            Require(tabControl is not null, "RibbonTabControl was not available for toggle validation");
+            var regularContentHeight = MainRibbon.ContentHeight;
 
             AutoLog("  Simplified ON");
             MainRibbon.IsSimplified = true;
             await SettleAsync();
+            Require(Math.Abs(tabControl!.ContentHeight - 44) < 0.1, "simplified content height was not applied");
             AutoLog("  Simplified OFF");
             MainRibbon.IsSimplified = false;
             await SettleAsync();
+            Require(
+                Math.Abs(tabControl.ContentHeight - regularContentHeight) < 0.1,
+                "regular content height was not restored after simplified mode");
 
             AutoLog("  Minimized ON");
             MainRibbon.IsMinimized = true;
@@ -1006,7 +1109,26 @@ public sealed partial class MainPage
             gallery.IsCollapsed = true;
             gallery.ResetScale();
             Require(scaled >= 2, "scale events did not cover reduce/reset");
-            Require(!gallery.IsCollapsed, "ResetScale did not restore the inline state");
+            Require(gallery.IsCollapsed, "ResetScale overrode an explicit collapsed state");
+
+            gallery.ClearValue(InRibbonGallery.IsCollapsedProperty);
+            gallery.Reduce();
+            gallery.Reduce();
+            gallery.Reduce();
+            Require(gallery.IsCollapsed, "clearing the explicit state did not restore automatic collapse");
+            gallery.ResetScale();
+            Require(!gallery.IsCollapsed, "ResetScale did not expand an automatically collapsed large gallery");
+
+            gallery.IsCollapsed = false;
+            gallery.Reduce();
+            gallery.Reduce();
+            gallery.Reduce();
+            Require(!gallery.IsCollapsed, "automatic scaling overrode an explicit expanded state");
+
+            gallery.ClearValue(InRibbonGallery.IsCollapsedProperty);
+            gallery.Reduce();
+            Require(gallery.IsCollapsed, "clearing an explicit expanded state did not restore automatic collapse");
+            gallery.ResetScale();
 
             await SettleAsync(2, 75);
             AutoLog("  IRGTEST OK");

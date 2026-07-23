@@ -14,17 +14,17 @@ on:
     paths:
       - 'Fluent.Ribbon.Uno/**'
       - 'Fluent.Ribbon/**'
-      - 'Directory.build.props'
-      - 'Directory.build.targets'
-      - 'Directory.packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
       - '.github/workflows/fluent-ribbon-uno.yml'
   pull_request:
     paths:
       - 'Fluent.Ribbon.Uno/**'
       - 'Fluent.Ribbon/**'
-      - 'Directory.build.props'
-      - 'Directory.build.targets'
-      - 'Directory.packages.props'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
       - '.github/workflows/fluent-ribbon-uno.yml'
   workflow_dispatch:
 
@@ -49,6 +49,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -73,7 +75,7 @@ jobs:
 
       - name: Test Uno contracts
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release -p:TargetFrameworks=net10.0
+        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release
 
       - name: Test API compatibility tool
         working-directory: Fluent.Ribbon.Uno
@@ -163,7 +165,7 @@ jobs:
 
       - name: Test Uno contracts
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release -p:TargetFrameworks=net10.0
+        run: dotnet test Fluent.Ribbon.Uno.Tests/Fluent.Ribbon.Uno.Tests.csproj -c Release
 
       - name: Test API compatibility tool
         working-directory: Fluent.Ribbon.Uno
@@ -234,6 +236,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4

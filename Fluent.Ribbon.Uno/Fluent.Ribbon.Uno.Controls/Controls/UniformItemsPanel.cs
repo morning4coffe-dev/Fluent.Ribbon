@@ -5,8 +5,7 @@ namespace Fluent;
 /// <summary>
 /// A lightweight, non-virtualizing panel that arranges its children in a uniform grid.
 /// Each child occupies a cell of <see cref="ItemWidth"/> x <see cref="ItemHeight"/>. The number
-/// of columns is capped by <see cref="MaxColumns"/> (0 means "fit as many as the available width
-/// allows").
+/// of columns is constrained by <see cref="MinColumns"/> and <see cref="MaxColumns"/>.
 /// </summary>
 /// <remarks>
 /// The ribbon galleries host pre-built <see cref="UIElement"/> instances directly (not data items
@@ -24,9 +23,9 @@ public partial class UniformItemsPanel : Panel
             nameof(ItemWidth),
             typeof(double),
             typeof(UniformItemsPanel),
-            new PropertyMetadata(60.0, OnLayoutPropertyChanged));
+            new PropertyMetadata(double.NaN, OnLayoutPropertyChanged));
 
-    /// <summary>Gets or sets the width of each cell. 0 uses each child's desired width.</summary>
+    /// <summary>Gets or sets the width of each cell. NaN or 0 uses each child's desired width.</summary>
     public double ItemWidth
     {
         get => (double)GetValue(ItemWidthProperty);
@@ -39,13 +38,28 @@ public partial class UniformItemsPanel : Panel
             nameof(ItemHeight),
             typeof(double),
             typeof(UniformItemsPanel),
-            new PropertyMetadata(24.0, OnLayoutPropertyChanged));
+            new PropertyMetadata(double.NaN, OnLayoutPropertyChanged));
 
-    /// <summary>Gets or sets the height of each cell. 0 uses each child's desired height.</summary>
+    /// <summary>Gets or sets the height of each cell. NaN or 0 uses each child's desired height.</summary>
     public double ItemHeight
     {
         get => (double)GetValue(ItemHeightProperty);
         set => SetValue(ItemHeightProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="MinColumns"/> dependency property.</summary>
+    public static readonly DependencyProperty MinColumnsProperty =
+        DependencyProperty.Register(
+            nameof(MinColumns),
+            typeof(int),
+            typeof(UniformItemsPanel),
+            new PropertyMetadata(0, OnLayoutPropertyChanged));
+
+    /// <summary>Gets or sets the minimum number of columns for horizontal layout.</summary>
+    public int MinColumns
+    {
+        get => (int)GetValue(MinColumnsProperty);
+        set => SetValue(MinColumnsProperty, value);
     }
 
     /// <summary>Identifies the <see cref="MaxColumns"/> dependency property.</summary>
@@ -63,36 +77,36 @@ public partial class UniformItemsPanel : Panel
         set => SetValue(MaxColumnsProperty, value);
     }
 
+    /// <summary>Identifies the <see cref="Orientation"/> dependency property.</summary>
+    public static readonly DependencyProperty OrientationProperty =
+        DependencyProperty.Register(
+            nameof(Orientation),
+            typeof(Orientation),
+            typeof(UniformItemsPanel),
+            new PropertyMetadata(Orientation.Horizontal, OnLayoutPropertyChanged));
+
+    /// <summary>
+    /// Gets or sets the gallery orientation. Vertical galleries use one column, matching WPF.
+    /// </summary>
+    public Orientation Orientation
+    {
+        get => (Orientation)GetValue(OrientationProperty);
+        set => SetValue(OrientationProperty, value);
+    }
+
     private static void OnLayoutPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         ((UniformItemsPanel)d).InvalidateMeasure();
     }
 
     private int ComputeColumns(double availableWidth, double effectiveCellWidth, int itemCount)
-    {
-        if (itemCount == 0)
-        {
-            return 1;
-        }
-
-        int fit;
-        if (double.IsInfinity(availableWidth) || availableWidth <= 0 || effectiveCellWidth <= 0)
-        {
-            // No usable width constraint: place everything on one row unless MaxColumns caps it.
-            fit = itemCount;
-        }
-        else
-        {
-            fit = Math.Max(1, (int)(availableWidth / effectiveCellWidth));
-        }
-
-        if (MaxColumns > 0)
-        {
-            fit = Math.Min(fit, MaxColumns);
-        }
-
-        return Math.Max(1, Math.Min(fit, itemCount));
-    }
+        => GalleryLayoutMath.ComputeColumns(
+            availableWidth,
+            effectiveCellWidth,
+            itemCount,
+            MinColumns,
+            MaxColumns,
+            Orientation);
 
     /// <inheritdoc/>
     protected override Size MeasureOverride(Size availableSize)

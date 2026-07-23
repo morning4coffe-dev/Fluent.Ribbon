@@ -1,0 +1,375 @@
+[CmdletBinding()]
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Debug",
+
+    [ValidateRange(800, 3840)]
+    [int]$Width = 1600,
+
+    [ValidateRange(600, 2160)]
+    [int]$Height = 1000,
+
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot "artifacts\visual-parity")
+)
+
+$ErrorActionPreference = "Stop"
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+$winUiTargetFramework = "net10.0-windows10.0.26100"
+$winUiProject = Join-Path $PSScriptRoot "Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj"
+$wpfProject = Join-Path $repositoryRoot "Fluent.Ribbon.Showcase\Fluent.Ribbon.Showcase.csproj"
+$OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class ShowcaseWindowNativeMethods
+{
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int X,
+        int Y,
+        int cx,
+        int cy,
+        uint uFlags);
+}
+"@
+
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory)]
+        [scriptblock]$Command,
+
+        [Parameter(Mandatory)]
+        [string]$Description
+    )
+
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Get-MSBuildPath {
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path -LiteralPath $vswhere)) {
+        throw "Visual Studio Build Tools were not found."
+    }
+
+    $path = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" |
+        Select-Object -First 1
+    if (-not $path) {
+        throw "MSBuild.exe was not found."
+    }
+
+    return $path
+}
+
+function Wait-ForMainWindow {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId
+    )
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $process = Get-Process -Id $ProcessId -ErrorAction Stop
+        $process.Refresh()
+        if ($process.MainWindowHandle -ne [IntPtr]::Zero) {
+            return $process.MainWindowHandle
+        }
+
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    throw "Process $ProcessId did not create a main window."
+}
+
+function Set-ComparisonWindowSize {
+    param(
+        [Parameter(Mandatory)]
+        [IntPtr]$WindowHandle
+    )
+
+    $noMove = 0x0002
+    $noZOrder = 0x0004
+    $noActivate = 0x0010
+    $result = [ShowcaseWindowNativeMethods]::SetWindowPos(
+        $WindowHandle,
+        [IntPtr]::Zero,
+        0,
+        0,
+        $Width,
+        $Height,
+        $noMove -bor $noZOrder -bor $noActivate)
+    if (-not $result) {
+        throw "Could not resize comparison window."
+    }
+}
+
+function Get-WinUiProcessId {
+    param(
+        [Parameter(Mandatory)]
+        [string]$OutputPath,
+
+        [string]$LaunchArguments
+    )
+
+    $winAppArguments = @("run", $OutputPath, "--detach", "--json")
+    if ($LaunchArguments) {
+        $winAppArguments += @("--args", $LaunchArguments)
+    }
+
+    $json = (& winapp @winAppArguments | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "winapp run failed with exit code $LASTEXITCODE."
+    }
+
+    $launch = $json | ConvertFrom-Json
+    foreach ($propertyName in "processId", "pid", "PID") {
+        if ($launch.PSObject.Properties.Name -contains $propertyName) {
+            return [int]$launch.$propertyName
+        }
+    }
+
+    if ($json -match '"(?:processId|pid|PID)"\s*:\s*(\d+)') {
+        return [int]$Matches[1]
+    }
+
+    throw "Could not read the WinUI process ID from winapp output: $json"
+}
+
+function Capture-OpenSurface {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$Selector,
+
+        [Parameter(Mandatory)]
+        [string]$Prefix,
+
+        [Parameter(Mandatory)]
+        [string]$State,
+
+        [switch]$Click,
+
+        [switch]$AlreadyOpen,
+
+        [switch]$VerifyExpanded
+    )
+
+    & winapp ui wait-for $Selector -a $ProcessId -t 10000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not find '$Selector' in process $ProcessId."
+    }
+
+    if (-not $AlreadyOpen) {
+        if ($Click) {
+            & winapp ui click $Selector -a $ProcessId | Out-Null
+        }
+        else {
+            & winapp ui invoke $Selector -a $ProcessId | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not open '$State' in process $ProcessId."
+        }
+    }
+
+    Start-Sleep -Milliseconds 500
+    $windowHandle = [long](Wait-ForMainWindow -ProcessId $ProcessId)
+    if ($AlreadyOpen) {
+        $deadline = [DateTime]::UtcNow.AddSeconds(15)
+        do {
+            $windows = (& winapp ui list-windows -a $ProcessId --json 2>$null | Out-String) |
+                ConvertFrom-Json
+            $popupWindow = $windows |
+                Where-Object { $_.title -eq "PopupHost" -and $_.height -ge 150 } |
+                Sort-Object { [double]$_.width * [double]$_.height } -Descending |
+                Select-Object -First 1
+            if ($popupWindow) {
+                break
+            }
+
+            Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $deadline)
+
+        if (-not $popupWindow) {
+            throw "'$State' did not create a PopupHost window in process $ProcessId."
+        }
+    }
+
+    if ($AlreadyOpen -or $VerifyExpanded) {
+        $expandTimeoutSeconds = if ($AlreadyOpen) { 15 } else { 5 }
+        $deadline = [DateTime]::UtcNow.AddSeconds($expandTimeoutSeconds)
+        do {
+            $searchResult = (& winapp ui search $Selector -w $windowHandle --json 2>$null | Out-String) |
+                ConvertFrom-Json
+            $expandedMatches = @(
+                $searchResult.matches |
+                    Where-Object { $_.expandState -eq "expanded" }
+            )
+            if ($expandedMatches.Count -gt 0) {
+                break
+            }
+
+            Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $deadline)
+
+        if ($expandedMatches.Count -eq 0) {
+            throw "'$State' did not leave '$Selector' expanded in process $ProcessId."
+        }
+    }
+
+    $path = Join-Path $OutputDirectory "$Prefix-$State.png"
+    & winapp ui screenshot -w $windowHandle -o $path --capture-screen | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not capture '$State' for process $ProcessId."
+    }
+}
+
+function Capture-ShowcaseState {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$Prefix,
+
+        [Parameter(Mandatory)]
+        [string]$State,
+
+        [switch]$SelectState
+    )
+
+    if ($SelectState) {
+        & winapp ui wait-for $State -a $ProcessId -t 10000 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not find '$State' in process $ProcessId."
+        }
+
+        $searchResult = (& winapp ui search $State -a $ProcessId --json 2>$null | Out-String) | ConvertFrom-Json
+        $tabMatches = @(
+            $searchResult.matches |
+                Where-Object {
+                    $_.name -eq $State -and $_.type -in @("Tab", "TabItem")
+                }
+        )
+        if ($tabMatches.Count -ne 1) {
+            throw "Expected one '$State' tab in process $ProcessId, found $($tabMatches.Count)."
+        }
+
+        $selector = $tabMatches[0].selector
+        & winapp ui wait-for $selector -a $ProcessId -t 10000 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not find '$State' in process $ProcessId."
+        }
+
+        & winapp ui invoke $selector -a $ProcessId | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not select '$State' in process $ProcessId."
+        }
+
+        Start-Sleep -Milliseconds 500
+
+        $propertyJson = (& winapp ui get-property $selector -a $ProcessId -p "IsSelected" --json | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not verify '$State' selection in process $ProcessId."
+        }
+
+        $propertyResult = $propertyJson | ConvertFrom-Json
+        $isSelected = $propertyResult.properties.IsSelected
+        if ($isSelected -notin @($true, "True", "true")) {
+            throw "'$State' did not become selected in process $ProcessId."
+        }
+    }
+
+    $safeState = $State -replace "[^A-Za-z0-9]+", "-"
+    $path = Join-Path $OutputDirectory "$Prefix-$safeState.png"
+    $windowHandle = [long](Wait-ForMainWindow -ProcessId $ProcessId)
+    & winapp ui screenshot -w $windowHandle -o $path | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not capture '$State' for process $ProcessId."
+    }
+}
+
+if (-not (Get-Command winapp -ErrorAction SilentlyContinue)) {
+    throw "winapp CLI is required. Run /winui-setup before using this script."
+}
+
+New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+$msbuild = Get-MSBuildPath
+$wpfProcess = $null
+$winUiProcessId = $null
+
+Push-Location $repositoryRoot
+try {
+    Invoke-Checked -Description "WPF Showcase build" -Command {
+        dotnet build $wpfProject -f net8.0-windows -c $Configuration --nologo
+    }
+
+    Invoke-Checked -Description "WinUI Showcase build" -Command {
+        & $msbuild $winUiProject /restore /t:Build /nologo /v:m `
+            "/p:Configuration=$Configuration" `
+            /p:Platform=x64 `
+            /p:PublishTrimmed=false `
+            "/p:TargetFramework=$winUiTargetFramework" `
+            "/p:TargetFrameworks=$winUiTargetFramework"
+    }
+
+    $wpfExecutable = Join-Path $repositoryRoot "bin\Fluent.Ribbon.Showcase\$Configuration\net8.0-windows\Fluent.Ribbon.Showcase.exe"
+    $winUiOutput = Join-Path $PSScriptRoot "Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\bin\x64\$Configuration\$winUiTargetFramework\win-x64"
+
+    $wpfProcess = Start-Process -FilePath $wpfExecutable -PassThru
+    $winUiProcessId = Get-WinUiProcessId -OutputPath $winUiOutput
+
+    Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $wpfProcess.Id)
+    Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $winUiProcessId)
+    Start-Sleep -Seconds 1
+
+    $states = @("Toolbars", "Insert", "Galleries", "Resizing & Screentips")
+    foreach ($state in $states) {
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State $state -SelectState
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State $state -SelectState
+    }
+
+    Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Toolbars" -SelectState
+    Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Toolbars" -SelectState
+    Capture-OpenSurface -ProcessId $wpfProcess.Id -Selector "comboBoxFontSize" -Prefix "wpf" -State "ComboBoxPopup" -Click -VerifyExpanded
+    & winapp ui invoke "comboBoxFontSize" -a $wpfProcess.Id | Out-Null
+    Start-Sleep -Milliseconds 250
+
+    Capture-OpenSurface -ProcessId $wpfProcess.Id -Selector "Backstage" -Prefix "wpf" -State "Backstage"
+    Capture-OpenSurface -ProcessId $winUiProcessId -Selector "Open Backstage" -Prefix "winui" -State "Backstage"
+
+    Stop-Process -Id $winUiProcessId
+    Wait-Process -Id $winUiProcessId -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    $winUiProcessId = Get-WinUiProcessId `
+        -OutputPath $winUiOutput `
+        -LaunchArguments "--showcase-tab=0 --showcase-open-surface=fontSizeCombo --showcase-open-delay=3000"
+    Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $winUiProcessId)
+    Start-Sleep -Seconds 1
+    Capture-OpenSurface `
+        -ProcessId $winUiProcessId `
+        -Selector "fontSizeCombo" `
+        -Prefix "winui" `
+        -State "ComboBoxPopup" `
+        -AlreadyOpen
+
+    Write-Host "Visual parity screenshots written to $OutputDirectory"
+}
+finally {
+    if ($wpfProcess -and -not $wpfProcess.HasExited) {
+        Stop-Process -Id $wpfProcess.Id
+    }
+
+    if ($winUiProcessId -and (Get-Process -Id $winUiProcessId -ErrorAction SilentlyContinue)) {
+        Stop-Process -Id $winUiProcessId
+    }
+
+    Pop-Location
+}

@@ -64,8 +64,9 @@
 
                         <!-- Title Bar: Menu + QAT + Contextual Groups + Title -->
                         <Grid
+                            x:Name="PART_TitleBarHost"
                             Background="{TemplateBinding Background}"
-                            MinHeight="30">
+                            MinHeight="22">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
@@ -83,7 +84,7 @@
                                 Margin="4,0" />
 
                             <!-- Title + Contextual Groups overlay -->
-                            <Grid Grid.Column="2">
+                            <Grid x:Name="PART_TitleBarDragRegion" Grid.Column="2">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>

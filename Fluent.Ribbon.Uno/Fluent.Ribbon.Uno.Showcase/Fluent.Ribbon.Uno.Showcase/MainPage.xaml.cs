@@ -37,16 +37,58 @@ public sealed partial class MainPage : Page
         UpdateLocalizationSample();
 
         // Populate via ItemsSource to mirror the WPF "Toolbars" tab.
-        fontNameCombo.ItemsSource = new[] { "Arial", "Calibri", "Segoe UI", "Tahoma", "Times New Roman" };
-        fontSizeCombo.ItemsSource = new[] { "8", "10", "11", "12", "14", "16", "18", "24", "36", "72" };
+        fontNameCombo.ItemsSource = new[]
+        {
+            "Arial",
+            "Calibri",
+            "Cambria",
+            "Consolas",
+            "Georgia",
+            "Segoe UI",
+            "Tahoma",
+            "Times New Roman",
+            "Verdana",
+        };
+        fontSizeCombo.ItemsSource = new[]
+        {
+            "7", "8", "9", "10", "11", "12", "14", "16", "18",
+            "20", "22", "24", "28", "32", "36", "48", "72",
+        };
         fontNameCombo.SelectedIndex = 0;
-        fontSizeCombo.SelectedIndex = 3;
+        fontSizeCombo.SelectedIndex = 1;
 
         InitializeShowcaseTabs();
         InitializeModernShowcase(); // Modern extensions (beyond WPF) — see Modern\README.md
         InitializeDiagnostics();
         App.LogAutoTestStartup("MAIN PAGE CONSTRUCTOR END");
     }
+
+#if WINDOWS
+    internal void ConfigureWindowTitleBar(Window window)
+    {
+        Loaded += (_, _) =>
+        {
+            MainRibbon.ApplyTemplate();
+            if (MainRibbon.TitleBarHost is not FrameworkElement titleBarHost
+                || MainRibbon.TitleBarDragRegion is not FrameworkElement dragRegion)
+            {
+                return;
+            }
+
+            window.ExtendsContentIntoTitleBar = true;
+
+            var scale = titleBarHost.XamlRoot?.RasterizationScale ?? 1.0;
+            var appTitleBar = window.AppWindow.TitleBar;
+            titleBarHost.MinHeight = Math.Max(22, appTitleBar.Height / scale);
+            titleBarHost.Margin = new Thickness(
+                appTitleBar.LeftInset / scale,
+                0,
+                appTitleBar.RightInset / scale,
+                0);
+            window.SetTitleBar(dragRegion);
+        };
+    }
+#endif
 
     // Seeds the cloned WPF Showcase tabs (Insert/Tests/Galleries/Binding). RibbonComboBox and
     // InRibbonGallery host their content via ItemsSource / .Items, so populate them in code-behind.
@@ -89,8 +131,20 @@ public sealed partial class MainPage : Page
         }
 
         SeedColorGallery(GalWithoutGrouping, 12);
-        SeedColorGallery(GalGrouped, 16);
-        SeedColorGallery(GalInRibbon, 8);
+        SeedGroupedColorGallery(GalGrouped);
+        GalGroupedAdvanced.GroupByAdvanced = item =>
+            item is FrameworkElement element ? element.Tag?.ToString() ?? string.Empty : string.Empty;
+        SeedGroupedColorGallery(GalGroupedAdvanced);
+        for (var i = 1; i <= 8; i++)
+        {
+            GalInRibbon.Items.Add(
+                new RibbonGalleryItem
+                {
+                    Content = i.ToString(),
+                    Group = i <= 4 ? "Group 1" : "Group 2",
+                });
+        }
+
         SeedColorGallery(GalVertical, 6);
 
         foreach (var (name, color) in Palette)
@@ -126,6 +180,56 @@ public sealed partial class MainPage : Page
         {
             gallery.Items.Add(MakeColorTile(Palette[i % Palette.Length].Color));
         }
+    }
+
+    private void SeedGroupedColorGallery(InRibbonGallery gallery)
+    {
+        for (var i = 0; i < Palette.Length; i++)
+        {
+            var (name, color) = Palette[i];
+            gallery.Items.Add(MakeGroupedColorTile(name, color, i < 5 ? "Group A" : "Group B"));
+        }
+    }
+
+    private static Grid MakeGroupedColorTile(
+        string name,
+        Windows.UI.Color color,
+        string group)
+    {
+        var tile = new Grid
+        {
+            Tag = group,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
+        tile.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+        tile.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        tile.Children.Add(
+            new Border
+            {
+                Width = 14,
+                Height = 14,
+                Background = new SolidColorBrush(color),
+                BorderBrush = new SolidColorBrush(Rgb(0x90, 0x90, 0x90)),
+                BorderThickness = new Thickness(0.5),
+                CornerRadius = new CornerRadius(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+
+        var label = new TextBlock
+        {
+            Text = name,
+            FontSize = 9,
+            Margin = new Thickness(2, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        Grid.SetColumn(label, 1);
+        tile.Children.Add(label);
+
+        return tile;
     }
 
     private static Border MakeColorTile(Windows.UI.Color color) => new()

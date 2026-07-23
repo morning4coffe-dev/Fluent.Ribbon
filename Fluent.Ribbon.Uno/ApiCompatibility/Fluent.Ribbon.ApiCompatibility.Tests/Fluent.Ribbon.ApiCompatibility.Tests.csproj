@@ -34,6 +34,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Fluent.Ribbon.ApiCompatibility\Fluent.Ribbon.ApiCompatibility.csproj" />
-    <ProjectReference Include="..\..\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj" />
+    <ProjectReference
+      Include="..\..\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj"
+      AdditionalProperties="TargetFrameworks=net10.0" />
   </ItemGroup>
 </Project>

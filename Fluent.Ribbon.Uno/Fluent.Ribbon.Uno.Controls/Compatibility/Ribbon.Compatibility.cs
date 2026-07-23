@@ -197,7 +197,7 @@ public partial class Ribbon : ILogicalChildSupport
             nameof(ContentHeight),
             typeof(double),
             typeof(Ribbon),
-            new PropertyMetadata(94D, OnContentHeightChanged));
+            new PropertyMetadata(RibbonTabControl.DefaultContentHeight, OnContentHeightChanged));
 
     /// <summary>Identifies the <see cref="CanQuickAccessLocationChanging"/> dependency property.</summary>
     public static readonly DependencyProperty CanQuickAccessLocationChangingProperty =

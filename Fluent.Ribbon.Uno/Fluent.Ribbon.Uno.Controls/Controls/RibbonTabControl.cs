@@ -37,7 +37,7 @@ public partial class RibbonTabControl : TabView
             nameof(ContentHeight),
             typeof(double),
             typeof(RibbonTabControl),
-            new PropertyMetadata(94.0));
+            new PropertyMetadata(DefaultContentHeight, OnContentHeightChanged));
 
     /// <summary>
     /// Gets or sets the height of the content area.
@@ -60,6 +60,11 @@ public partial class RibbonTabControl : TabView
         // Use TabView's default style/template — no custom template needed
         IsAddTabButtonVisible = false;
         TabWidthMode = TabViewWidthMode.SizeToContent;
+        Padding = new Thickness(0);
+        Resources["TabViewHeaderPadding"] = new Thickness(0);
+        Resources["TabViewItemMinHeight"] = 25.0;
+        Resources["TabViewItemHeaderPadding"] = new Thickness(9, 0, 9, 0);
+        Resources["TabViewSelectedItemHeaderPadding"] = new Thickness(9, 0, 9, 0);
         InitializeCompatibility();
     }
 
@@ -73,6 +78,7 @@ public partial class RibbonTabControl : TabView
         base.OnApplyTemplate();
         _contentPresenter = GetTemplateChild(PART_ContentPresenter) as ContentPresenter;
         UpdateCompatibilityTemplateParts();
+        UpdateItemContentHeights();
         UpdateMinimizedState();
     }
 
@@ -82,6 +88,22 @@ public partial class RibbonTabControl : TabView
         {
             tabControl.OnMinimizedCompatibilityChanged((bool)e.NewValue);
             tabControl.UpdateMinimizedState();
+        }
+    }
+
+    private static void OnContentHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RibbonTabControl tabControl)
+        {
+            tabControl.UpdateItemContentHeights();
+        }
+    }
+
+    private void UpdateItemContentHeights()
+    {
+        foreach (var item in TabItems.OfType<RibbonTabItem>())
+        {
+            item.SetContentHeight(ContentHeight);
         }
     }
 
