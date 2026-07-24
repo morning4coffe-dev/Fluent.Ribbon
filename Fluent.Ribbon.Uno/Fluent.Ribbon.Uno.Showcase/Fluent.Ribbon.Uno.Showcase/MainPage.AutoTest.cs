@@ -10,10 +10,12 @@
 //   SHOWCASE_AUTOTEST_EXIT=1    Exit the process once the walk completes (so a runner can detect "done").
 //   SHOWCASE_OPEN_SURFACE=name  Leave fontNameCombo or fontSizeCombo open for visual capture.
 //   SHOWCASE_OPEN_DELAY_MS=ms   Delay surface expansion so a harness can resize the window first.
+//   SHOWCASE_STATE=state        Apply comma-separated dark, light, rtl, ltr, simplified,
+//                               classic, minimized, or expanded state before capture.
 //
 // SHOWCASE_TAB and SHOWCASE_OPEN_SURFACE also accept the command-line forms
-// --showcase-tab=<index>, --showcase-open-surface=<name>, and
-// --showcase-open-delay=<milliseconds> for packaged launches.
+// --showcase-tab=<index>, --showcase-open-surface=<name>,
+// --showcase-open-delay=<milliseconds>, and --showcase-state=<state>.
 //
 // The walker deliberately drives controls programmatically because synthetic
 // mouse/keyboard input does not reach the Uno Skia window. Any layout crash that
@@ -77,14 +79,23 @@ public sealed partial class MainPage
         var tabVar = GetDiagnosticOption("SHOWCASE_TAB", "showcase-tab");
         var surfaceVar = GetDiagnosticOption("SHOWCASE_OPEN_SURFACE", "showcase-open-surface");
         var surfaceDelayVar = GetDiagnosticOption("SHOWCASE_OPEN_DELAY_MS", "showcase-open-delay");
+        var stateVar = GetDiagnosticOption("SHOWCASE_STATE", "showcase-state");
         var autotest = AutoTestEnabled;
-        if (string.IsNullOrEmpty(tabVar) && string.IsNullOrEmpty(surfaceVar) && !autotest)
+        if (string.IsNullOrEmpty(tabVar)
+            && string.IsNullOrEmpty(surfaceVar)
+            && string.IsNullOrEmpty(stateVar)
+            && !autotest)
         {
             return;
         }
 
         this.Loaded += async (_, _) =>
-            await RunConfiguredDiagnosticsAsync(tabVar, surfaceVar, surfaceDelayVar, autotest);
+            await RunConfiguredDiagnosticsAsync(
+                tabVar,
+                surfaceVar,
+                surfaceDelayVar,
+                stateVar,
+                autotest);
     }
 
     internal void StartAutoTestFromHost()
@@ -99,6 +110,7 @@ public sealed partial class MainPage
                 GetDiagnosticOption("SHOWCASE_TAB", "showcase-tab"),
                 GetDiagnosticOption("SHOWCASE_OPEN_SURFACE", "showcase-open-surface"),
                 GetDiagnosticOption("SHOWCASE_OPEN_DELAY_MS", "showcase-open-delay"),
+                GetDiagnosticOption("SHOWCASE_STATE", "showcase-state"),
                 autotest: true));
         App.LogAutoTestStartup($"AUTOTEST DISPATCH QUEUED {queued}");
     }
@@ -107,6 +119,7 @@ public sealed partial class MainPage
         string? tabVar,
         string? surfaceVar,
         string? surfaceDelayVar,
+        string? stateVar,
         bool autotest)
     {
         if (autoTestStarted)
@@ -118,6 +131,11 @@ public sealed partial class MainPage
         if (int.TryParse(tabVar, out var idx) && idx >= 0 && idx < MainRibbon.Tabs.Count)
         {
             MainRibbon.SelectedTabIndex = idx;
+        }
+
+        if (!string.IsNullOrWhiteSpace(stateVar))
+        {
+            await ApplyConfiguredStateAsync(stateVar);
         }
 
         if (!string.IsNullOrEmpty(surfaceVar))
@@ -151,6 +169,49 @@ public sealed partial class MainPage
         }
     }
 
+    private async Task ApplyConfiguredStateAsync(string stateValue)
+    {
+        foreach (var state in stateValue.Split(
+                     ',',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            switch (state.ToLowerInvariant())
+            {
+                case "dark":
+                    ApplyShowcaseTheme(ElementTheme.Dark);
+                    break;
+                case "light":
+                    ApplyShowcaseTheme(ElementTheme.Light);
+                    break;
+                case "rtl":
+                    FlowDirection = FlowDirection.RightToLeft;
+                    RtlModeButton.IsChecked = true;
+                    break;
+                case "ltr":
+                    FlowDirection = FlowDirection.LeftToRight;
+                    RtlModeButton.IsChecked = false;
+                    break;
+                case "simplified":
+                    MainRibbon.IsSimplified = true;
+                    break;
+                case "classic":
+                    MainRibbon.IsSimplified = false;
+                    break;
+                case "minimized":
+                    MainRibbon.IsMinimized = true;
+                    break;
+                case "expanded":
+                    MainRibbon.IsMinimized = false;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unknown Showcase state '{state}'.");
+            }
+        }
+
+        await SettleAsync();
+    }
+
     private static string? GetDiagnosticOption(string environmentVariable, string argumentName)
     {
         var value = Environment.GetEnvironmentVariable(environmentVariable);
@@ -177,6 +238,26 @@ public sealed partial class MainPage
                 return argument[prefix.Length..];
             }
         }
+
+#if __WASM__
+        var query = global::Uno.Foundation.WebAssemblyRuntime.InvokeJS(
+            "globalThis.location.search");
+        foreach (var entry in query.TrimStart('?').Split(
+                     '&',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = entry.Split('=', 2);
+            var key = Uri.UnescapeDataString(parts[0]);
+            if (!string.Equals(key, argumentName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return parts.Length == 1
+                ? string.Empty
+                : Uri.UnescapeDataString(parts[1].Replace('+', ' '));
+        }
+#endif
 
         return null;
     }
@@ -549,13 +630,49 @@ public sealed partial class MainPage
             AutoLog("  Simplified ON");
             MainRibbon.IsSimplified = true;
             await SettleAsync();
-            Require(Math.Abs(tabControl!.ContentHeight - 44) < 0.1, "simplified content height was not applied");
+            Require(Math.Abs(tabControl!.ContentHeight - 52) < 0.1, "simplified content height was not applied");
+            Require(MainRibbon.Tabs[0].IsSimplified, "selected tab did not enter simplified mode");
+            Require(FontToolBar.IsSimplified, "font toolbar did not enter simplified mode");
+            Require(ColorToolBar.IsSimplified, "color toolbar did not enter simplified mode");
+            Require(SpinnersGroup.State == RibbonGroupBoxState.Collapsed, "custom simplified group state was not applied");
+
+            MainRibbon.ContentHeight = regularContentHeight + 8;
+            await SettleAsync();
+            Require(
+                Math.Abs(tabControl.ContentHeight - 52) < 0.1,
+                "ContentHeight replaced the active simplified height");
+            MainRibbon.ContentHeight = regularContentHeight;
+
+            var styledGroup = new RibbonGroupBox
+            {
+                Style = new Style(typeof(RibbonGroupBox))
+                {
+                    Setters =
+                    {
+                        new Setter(
+                            RibbonGroupBox.SimplifiedStateDefinitionProperty,
+                            new RibbonGroupBoxStateDefinition("Collapsed")),
+                    },
+                },
+                IsSimplified = true,
+            };
+            Require(
+                styledGroup.State == RibbonGroupBoxState.Collapsed,
+                "styled simplified state definition was ignored");
+            styledGroup.TryClearCacheAndResetStateAndScaleAndNotifyParentRibbonGroupsContainer();
+            Require(
+                styledGroup.State == RibbonGroupBoxState.Collapsed,
+                "simplified state reset restored an unsupported state");
+
             AutoLog("  Simplified OFF");
             MainRibbon.IsSimplified = false;
             await SettleAsync();
             Require(
                 Math.Abs(tabControl.ContentHeight - regularContentHeight) < 0.1,
                 "regular content height was not restored after simplified mode");
+            Require(!MainRibbon.Tabs[0].IsSimplified, "selected tab did not leave simplified mode");
+            Require(!FontToolBar.IsSimplified, "font toolbar did not leave simplified mode");
+            Require(!ColorToolBar.IsSimplified, "color toolbar did not leave simplified mode");
 
             AutoLog("  Minimized ON");
             MainRibbon.IsMinimized = true;
@@ -696,6 +813,92 @@ public sealed partial class MainPage
         AutoLog("TOOLBARSTATUSTEST BEGIN");
         try
         {
+            MainRibbon.RibbonStateStorage.Reset();
+            await SettleAsync(2, 75);
+            var boldInQuickAccess =
+                qatBold.Target is IQuickAccessItemProvider boldProvider
+                && MainRibbon.IsInQuickAccessToolBar(boldProvider);
+            if (MainRibbon.QuickAccessToolBarItems.Count != 5
+                || !boldInQuickAccess)
+            {
+                AutoLog(
+                    $"  FAIL TOOLBARSTATUSTEST main QAT count={MainRibbon.QuickAccessToolBarItems.Count} "
+                    + $"bold={boldInQuickAccess}");
+                return;
+            }
+
+            qatCopy.IsChecked = true;
+            MainRibbon.RibbonStateStorage.SaveTemporary();
+            var originalCopyIndex = MainRibbon.QuickAccessItems.IndexOf(qatCopy);
+            MainRibbon.QuickAccessItems.Remove(qatCopy);
+            MainRibbon.QuickAccessItems.Insert(0, qatCopy);
+            qatCopy.IsChecked = false;
+            MainRibbon.RibbonStateStorage.LoadTemporary();
+            await SettleAsync(2, 75);
+            if (!qatCopy.IsChecked
+                || qatCopy.Target is not IQuickAccessItemProvider copyProvider
+                || !MainRibbon.IsInQuickAccessToolBar(copyProvider))
+            {
+                AutoLog("  FAIL TOOLBARSTATUSTEST QAT state did not round-trip");
+                return;
+            }
+
+            MainRibbon.QuickAccessItems.Remove(qatCopy);
+            MainRibbon.QuickAccessItems.Insert(originalCopyIndex, qatCopy);
+            await SettleAsync(1, 75);
+
+            if (qatCopy.Target is not IQuickAccessItemProvider originalCopyProvider
+                || btnItalic is not IQuickAccessItemProvider italicProvider)
+            {
+                AutoLog("  FAIL TOOLBARSTATUSTEST QAT retarget providers unavailable");
+                return;
+            }
+
+            qatCopy.Target = btnItalic;
+            await SettleAsync(2, 75);
+            if (MainRibbon.IsInQuickAccessToolBar(originalCopyProvider)
+                || !MainRibbon.IsInQuickAccessToolBar(italicProvider))
+            {
+                AutoLog("  FAIL TOOLBARSTATUSTEST QAT retarget left the previous provider");
+                return;
+            }
+
+            qatCopy.Target = copyButton;
+            await SettleAsync(2, 75);
+            if (MainRibbon.IsInQuickAccessToolBar(italicProvider)
+                || !MainRibbon.IsInQuickAccessToolBar(originalCopyProvider))
+            {
+                AutoLog("  FAIL TOOLBARSTATUSTEST QAT retarget did not restore the provider");
+                return;
+            }
+
+            qatCopy.IsChecked = false;
+            MainRibbon.RibbonStateStorage.SaveTemporary();
+            await SettleAsync(1, 75);
+
+            var runtimeCustomizationItem = new QuickAccessMenuItem
+            {
+                Header = "Runtime command",
+                Target = btnItalic,
+            };
+            MainRibbon.QuickAccessItems.Add(runtimeCustomizationItem);
+            await SettleAsync(1, 75);
+            if (MainRibbon.QuickAccessToolBar?.QuickAccessItems.Contains(
+                    runtimeCustomizationItem) != true)
+            {
+                AutoLog("  FAIL TOOLBARSTATUSTEST runtime QAT item was not synchronized");
+                return;
+            }
+
+            MainRibbon.QuickAccessItems.Remove(runtimeCustomizationItem);
+            await SettleAsync(1, 75);
+            if (MainRibbon.QuickAccessToolBar?.QuickAccessItems.Contains(
+                    runtimeCustomizationItem) == true)
+            {
+                AutoLog("  FAIL TOOLBARSTATUSTEST removed QAT item remained synchronized");
+                return;
+            }
+
             if (Content is not Panel root)
             {
                 AutoLog("  FAIL TOOLBARSTATUSTEST page content is not a panel");

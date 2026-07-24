@@ -381,9 +381,7 @@ public partial class RibbonGroupBox :
             return false;
         }
 
-        StateIntermediate = IsSimplified
-            ? SimplifiedStateDefinition.States[0]
-            : StateDefinition.States[0];
+        StateIntermediate = GetInitialStateForMode(IsSimplified);
         State = StateIntermediate;
         ScaleIntermediate = 0;
         InvalidateMeasure();

@@ -164,14 +164,18 @@ public partial class BackstageButton : Control
         _isPressed = true;
         UpdateVisualState();
 
+        InvokeForAutomation();
+        e.Handled = true;
+    }
+
+    internal void InvokeForAutomation()
+    {
         Click?.Invoke(this, new RoutedEventArgs());
 
         if (Command?.CanExecute(CommandParameter) == true)
         {
             Command.Execute(CommandParameter);
         }
-
-        e.Handled = true;
     }
 
     /// <inheritdoc/>
@@ -215,4 +219,8 @@ public partial class BackstageButton : Control
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonBackstageButtonAutomationPeer(this);
 }

@@ -19,6 +19,21 @@ public partial class RibbonGroupItemsPanel : Panel
 
     private List<Windows.Foundation.Rect> _arrangeRects = new();
 
+    /// <summary>Identifies the <see cref="IsSimplified"/> dependency property.</summary>
+    public static readonly DependencyProperty IsSimplifiedProperty =
+        DependencyProperty.Register(
+            nameof(IsSimplified),
+            typeof(bool),
+            typeof(RibbonGroupItemsPanel),
+            new PropertyMetadata(false, OnIsSimplifiedChanged));
+
+    /// <summary>Gets or sets whether items should use the single-row simplified layout.</summary>
+    public bool IsSimplified
+    {
+        get => (bool)GetValue(IsSimplifiedProperty);
+        set => SetValue(IsSimplifiedProperty, value);
+    }
+
     private enum ItemKind
     {
         Large,
@@ -46,6 +61,18 @@ public partial class RibbonGroupItemsPanel : Panel
         var contentHeight = double.IsInfinity(availableSize.Height) || availableSize.Height <= 0
             ? FallbackHeight
             : availableSize.Height;
+
+        if (IsSimplified)
+        {
+            foreach (var child in Children)
+            {
+                child.Measure(new Windows.Foundation.Size(double.PositiveInfinity, contentHeight));
+            }
+
+            var simplifiedWidth = BuildSimplifiedLayout(contentHeight, out _arrangeRects);
+            return new Windows.Foundation.Size(simplifiedWidth, contentHeight);
+        }
+
         var rowHeight = contentHeight / RowsPerColumn;
 
         // Measure each child against the space it will actually receive.
@@ -66,8 +93,20 @@ public partial class RibbonGroupItemsPanel : Panel
         var height = finalSize.Height > 0 ? finalSize.Height : FallbackHeight;
 
         // Recompute against the final height so rows line up even if it differs from measure.
-        BuildLayout(height, out var rects);
+        if (IsSimplified)
+        {
+            BuildSimplifiedLayout(height, out var simplifiedRects);
+            ArrangeChildren(simplifiedRects);
+            return finalSize;
+        }
 
+        BuildLayout(height, out var rects);
+        ArrangeChildren(rects);
+        return finalSize;
+    }
+
+    private void ArrangeChildren(IReadOnlyList<Windows.Foundation.Rect> rects)
+    {
         var index = 0;
         foreach (var child in Children)
         {
@@ -78,8 +117,32 @@ public partial class RibbonGroupItemsPanel : Panel
 
             index++;
         }
+    }
 
-        return finalSize;
+    private double BuildSimplifiedLayout(
+        double contentHeight,
+        out List<Windows.Foundation.Rect> rects)
+    {
+        var result = new List<Windows.Foundation.Rect>(Children.Count);
+        var x = 0.0;
+
+        foreach (var child in Children)
+        {
+            var width = child.DesiredSize.Width;
+            var desiredHeight = child is RibbonSeparator
+                ? contentHeight
+                : child.DesiredSize.Height;
+            var height = desiredHeight > 0
+                ? System.Math.Min(contentHeight, desiredHeight)
+                : contentHeight;
+            var y = System.Math.Max(0, (contentHeight - height) / 2);
+
+            result.Add(new Windows.Foundation.Rect(x, y, width, height));
+            x += width;
+        }
+
+        rects = result;
+        return x;
     }
 
     /// <summary>
@@ -155,5 +218,14 @@ public partial class RibbonGroupItemsPanel : Panel
 
         rects = result;
         return x;
+    }
+
+    private static void OnIsSimplifiedChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var panel = (RibbonGroupItemsPanel)sender;
+        panel.InvalidateMeasure();
+        panel.InvalidateArrange();
     }
 }

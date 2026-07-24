@@ -329,6 +329,15 @@ public partial class RibbonQuickAccessToolBarAutomationPeer : FrameworkElementAu
             }
         }
 
+        if (OwnerToolBar.OverflowButtonForAutomation is { Visibility: Visibility.Visible } overflowButton)
+        {
+            var peer = CreatePeerForElement(overflowButton);
+            if (peer is not null)
+            {
+                children.Add(peer);
+            }
+        }
+
         if (OwnerToolBar.MenuButtonForAutomation is { Visibility: Visibility.Visible } menuButton)
         {
             var peer = CreatePeerForElement(menuButton);

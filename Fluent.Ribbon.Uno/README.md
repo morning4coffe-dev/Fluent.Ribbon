@@ -192,6 +192,18 @@ For repeatable WPF/WinUI visual comparisons on Windows, run:
 The script builds both Showcases, resizes them to the same physical dimensions,
 and writes matching Toolbars, Insert, Galleries, Resizing, ComboBox popup, and
 Backstage screenshots under `artifacts\visual-parity`.
+Use `-CaptureHighContrast` while a Windows Contrast Theme is active for a
+separate High Contrast-only capture; normal baselines require Contrast Themes
+to be disabled.
+
+The Showcase diagnostic options also work as WebAssembly query parameters. This
+allows deterministic browser baselines without UI automation, for example:
+
+```text
+http://localhost:5000/?showcase-tab=0&showcase-state=dark
+http://localhost:5000/?showcase-tab=0&showcase-state=rtl
+http://localhost:5000/?showcase-tab=0&showcase-state=simplified
+```
 
 The GitHub Actions matrix builds the controls, compatibility facade, WPF-style
 XAML fixture, and Showcase for WinUI, Desktop/Skia on Windows/Linux/macOS,
@@ -206,11 +218,11 @@ are present, but several advanced behaviours are intentionally simplified:
 | Feature | WPF Version | Uno Version |
 |---------|-------------|-------------|
 | Window Chrome | ControlzEx WindowChrome | Not supported (use platform windowing) |
-| Quick Access Toolbar | Add/remove from controls, customization menu, state persistence (`IQuickAccessItemProvider`) | Visual toolbar with overflow and add/remove support for provider controls; item persistence is still incomplete |
+| Quick Access Toolbar | Add/remove from controls, customization menu, state persistence (`IQuickAccessItemProvider`) | Provider-backed add/remove, overflow, customization, and checked-item persistence |
 | Backstage / App Menu | Adorner overlay with open/close animations | Implemented, simplified (no adorner/animation) |
-| KeyTips | Full Alt-key navigation tree | Alt/F10 navigation and activation implemented; WPF focus restoration and all nested scopes are still being hardened |
+| KeyTips | Full Alt-key navigation tree | Alt/F10 navigation, focus restoration, and nested Backstage scopes implemented |
 | Galleries | Grouping, filtering, live hover preview | Implemented for `RibbonGallery` and `InRibbonGallery`; Uno uses a custom control instead of WPF `Selector` inheritance |
-| ComboBox popup | WPF-sized long list with optional `TopPopupContent` | Selection/editing and compact list popup are implemented; native WinUI currently constrains the visible viewport, and `TopPopupContent` is not used by the Showcase until its native layout is stable |
+| ComboBox popup | WPF-sized long list with optional `TopPopupContent` | Long-list sizing, top content, selection/item automation, and editable value automation are implemented; placement and open/close animation remain platform-native |
 | ColorGallery | Standard/theme/recent colors + custom-color dialog | Standard/theme/recent colors with injectable cross-platform picker and WinUI `ContentDialog` fallback |
 | ScreenTip | Rich tooltip + F1 help hook | `Title`/`Text`/`DisableReason` with F1 help integration |
 | Spinner | `TextToValueConverter`, full validation | Simplified numeric spinner |

@@ -15,6 +15,8 @@ namespace Fluent;
 [TemplatePart(Name = PART_TitleBarDragRegion, Type = typeof(FrameworkElement))]
 public partial class Ribbon : Control
 {
+    private const double SimplifiedContentHeight = 52;
+
     private const string PART_TabControl = "PART_RibbonTabControl";
     private const string PART_QuickAccessToolBar = "PART_QuickAccessToolBar";
     private const string PART_ContextualGroupsPanel = "PART_ContextualGroupsPanel";
@@ -56,6 +58,8 @@ public partial class Ribbon : Control
     /// Gets the non-interactive region that can be registered for native title-bar dragging.
     /// </summary>
     public FrameworkElement? TitleBarDragRegion { get; private set; }
+
+    internal Backstage? ActiveBackstage { get; set; }
 
     #region Dependency Properties
 
@@ -327,26 +331,14 @@ public partial class Ribbon : Control
     {
         foreach (var tab in Tabs)
         {
-            foreach (var group in tab.Groups)
-            {
-                group.IsSimplified = IsSimplified;
-
-                // When simplified, force all groups to Medium size so buttons show inline
-                if (IsSimplified)
-                {
-                    group.State = RibbonGroupBoxState.Medium;
-                }
-                else
-                {
-                    group.State = RibbonGroupBoxState.Large;
-                }
-            }
+            tab.UpdateSimplifiedState(IsSimplified);
         }
 
         // Adjust tab content height for simplified ribbon
         if (_tabControl is not null)
         {
-            _tabControl.ContentHeight = IsSimplified ? 44 : ContentHeight;
+            _tabControl.IsSimplified = IsSimplified;
+            _tabControl.ContentHeight = IsSimplified ? SimplifiedContentHeight : ContentHeight;
         }
 
         VisualStateManager.GoToState(this, IsSimplified ? "SimplifiedOn" : "SimplifiedOff", true);
@@ -877,16 +869,41 @@ public partial class Ribbon : Control
         var inactive = above ? _belowRibbonQAT : _quickAccessToolBar;
 
         inactive?.Items.Clear();
+        SynchronizeQuickAccessCustomizationItems(inactive, []);
 
         if (active is null)
         {
             return;
         }
 
+        SynchronizeQuickAccessCustomizationItems(active, QuickAccessItems);
         active.Items.Clear();
         foreach (var item in QuickAccessToolBarItems)
         {
             active.Items.Add(item);
+        }
+    }
+
+    private static void SynchronizeQuickAccessCustomizationItems(
+        QuickAccessToolBar? toolbar,
+        IReadOnlyList<QuickAccessMenuItem> items)
+    {
+        if (toolbar is null)
+        {
+            return;
+        }
+
+        var targetItems = toolbar.QuickAccessItems;
+        if (targetItems.Count == items.Count
+            && targetItems.Select((item, index) => ReferenceEquals(item, items[index])).All(value => value))
+        {
+            return;
+        }
+
+        targetItems.Clear();
+        foreach (var item in items)
+        {
+            targetItems.Add(item);
         }
     }
 

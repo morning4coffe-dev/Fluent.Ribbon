@@ -9,6 +9,8 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontSize" Value="32" />
+        <Setter Property="Padding" Value="8,4" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:InRibbonGallery">
@@ -140,7 +142,7 @@
                             Visibility="Collapsed"
                             Background="Transparent"
                             BorderThickness="0"
-                            Padding="8,4"
+                            Padding="{TemplateBinding Padding}"
                             MinWidth="56"
                             AutomationProperties.AutomationId="InRibbonGalleryCollapsedButton"
                             AutomationProperties.Name="Open gallery"
@@ -150,7 +152,7 @@
                                 <FontIcon
                                     Glyph="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}}"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                    FontSize="32"
+                                    FontSize="{TemplateBinding FontSize}"
                                     Foreground="{ThemeResource RibbonIconBrush}"
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
 

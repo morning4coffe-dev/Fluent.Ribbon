@@ -4,6 +4,7 @@ namespace Fluent;
 /// Holds transitionable states when the ribbon automatically resizes the <see cref="RibbonGroupBox"/>.
 /// </summary>
 [System.ComponentModel.TypeConverter(typeof(Converters.RibbonGroupBoxStateDefinitionConverter))]
+[Windows.Foundation.Metadata.CreateFromString(MethodName = "Fluent.RibbonGroupBoxStateDefinition.FromString")]
 public readonly struct RibbonGroupBoxStateDefinition : IEquatable<RibbonGroupBoxStateDefinition>
 {
     private const int MaxStateDefinitionParts = 4;

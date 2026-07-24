@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using Fluent;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
@@ -33,28 +34,40 @@ public sealed partial class MainPage : Page
         App.LogAutoTestStartup("MAIN PAGE CONSTRUCTOR BEGIN");
         this.InitializeComponent();
         App.LogAutoTestStartup("MAIN PAGE XAML INITIALIZED");
+        qatPink.Target = pinkButton;
+        qatPaste.Target = pasteButton;
+        qatCut.Target = cutButton;
+        qatCopy.Target = copyButton;
+        qatGallery.Target = GalInRibbon;
+        qatBold.Target = btnBold;
         SampleColorGallery.SelectedColorChanged += OnColorGallerySelectionChanged;
         UpdateLocalizationSample();
 
         // Populate via ItemsSource to mirror the WPF "Toolbars" tab.
-        fontNameCombo.ItemsSource = new[]
+        foreach (var item in new object[]
         {
+            CreateComboBoxGroupHeader("Theme Fonts"),
             "Arial",
-            "Calibri",
-            "Cambria",
-            "Consolas",
-            "Georgia",
+            "Tahoma",
+            CreateComboBoxGroupHeader("Recent Used Fonts"),
+            "Tahoma",
+            CreateComboBoxGroupHeader("All Fonts"),
+            "Arial",
             "Segoe UI",
             "Tahoma",
-            "Times New Roman",
-            "Verdana",
-        };
+            "Webdings",
+            "Winding",
+        })
+        {
+            fontNameCombo.Items.Add(item);
+        }
+
         fontSizeCombo.ItemsSource = new[]
         {
             "7", "8", "9", "10", "11", "12", "14", "16", "18",
             "20", "22", "24", "28", "32", "36", "48", "72",
         };
-        fontNameCombo.SelectedIndex = 0;
+        fontNameCombo.SelectedIndex = 1;
         fontSizeCombo.SelectedIndex = 1;
 
         InitializeShowcaseTabs();
@@ -232,6 +245,24 @@ public sealed partial class MainPage : Page
         return tile;
     }
 
+    private static ComboBoxItem CreateComboBoxGroupHeader(string text)
+    {
+        var header = new ComboBoxItem
+        {
+            Content = new TextBlock
+            {
+                Text = text,
+                FontSize = 10,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            },
+            IsEnabled = false,
+            IsHitTestVisible = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        };
+        AutomationProperties.SetName(header, text);
+        return header;
+    }
+
     private static Border MakeColorTile(Windows.UI.Color color) => new()
     {
         Background = new SolidColorBrush(color),
@@ -280,6 +311,13 @@ public sealed partial class MainPage : Page
         MainRibbon.IsSimplified = !MainRibbon.IsSimplified;
     }
 
+    private void OnToggleRtl(object sender, RoutedEventArgs e)
+    {
+        FlowDirection = FlowDirection == FlowDirection.RightToLeft
+            ? FlowDirection.LeftToRight
+            : FlowDirection.RightToLeft;
+    }
+
     private void OnToggleTheme(object sender, RoutedEventArgs e)
     {
         if (sender is ToggleButton toggleButton)
@@ -287,14 +325,18 @@ public sealed partial class MainPage : Page
             var theme = toggleButton.IsChecked == true
                 ? ElementTheme.Dark
                 : ElementTheme.Light;
+            ApplyShowcaseTheme(theme);
+        }
+    }
 
-            RequestedTheme = theme;
+    private void ApplyShowcaseTheme(ElementTheme theme)
+    {
+        RequestedTheme = theme;
+        DarkModeButton.IsChecked = theme == ElementTheme.Dark;
 
-            // Also set on the XamlRoot content to propagate theme to all controls
-            if (XamlRoot?.Content is FrameworkElement rootElement)
-            {
-                rootElement.RequestedTheme = theme;
-            }
+        if (XamlRoot?.Content is FrameworkElement rootElement)
+        {
+            rootElement.RequestedTheme = theme;
         }
     }
 

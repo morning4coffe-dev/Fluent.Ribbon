@@ -16,11 +16,16 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
 {
     private Fluent.Collections.ItemCollectionWithLogicalTreeSupport<QuickAccessMenuItem>? _quickAccessItems;
     private readonly Dictionary<QuickAccessMenuItem, long> _quickAccessItemTokens = new();
+    private readonly Dictionary<QuickAccessMenuItem, long> _quickAccessTargetTokens = new();
+    private readonly Dictionary<QuickAccessMenuItem, IQuickAccessItemProvider>
+        _quickAccessSynchronizedProviders = new();
     private readonly HashSet<FrameworkElement> _trackedItems = new();
     private readonly HashSet<FrameworkElement> _overflowedItems = new();
     private bool _overflowUpdatePending;
 
     internal WinUIButton? MenuButtonForAutomation => _menuButton;
+
+    internal WinUIButton? OverflowButtonForAutomation => _overflowButton;
 
     /// <summary>
     /// Occurs when items are added to or removed from the toolbar.
@@ -75,6 +80,13 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
         SynchronizeQuickAccessMenuItems();
         UpdateKeyTips();
         Refresh();
+        DispatcherQueue.TryEnqueue(
+            () =>
+            {
+                SynchronizeQuickAccessMenuItems();
+                UpdateKeyTips();
+                Refresh();
+            });
     }
 
     private void OnCompatibilityItemsChanged(NotifyCollectionChangedEventArgs args)
@@ -146,11 +158,20 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
         {
             foreach (var item in args.OldItems.OfType<QuickAccessMenuItem>())
             {
+                RemoveSynchronizedQuickAccessMenuItem(item);
+
                 if (_quickAccessItemTokens.Remove(item, out var token))
                 {
                     item.UnregisterPropertyChangedCallback(
                         QuickAccessMenuItem.IsCheckedProperty,
                         token);
+                }
+
+                if (_quickAccessTargetTokens.Remove(item, out var targetToken))
+                {
+                    item.UnregisterPropertyChangedCallback(
+                        QuickAccessMenuItem.TargetProperty,
+                        targetToken);
                 }
             }
         }
@@ -162,12 +183,20 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
                 _quickAccessItemTokens[item] = item.RegisterPropertyChangedCallback(
                     QuickAccessMenuItem.IsCheckedProperty,
                     OnQuickAccessItemCheckedChanged);
+                _quickAccessTargetTokens[item] = item.RegisterPropertyChangedCallback(
+                    QuickAccessMenuItem.TargetProperty,
+                    OnQuickAccessItemTargetChanged);
                 SynchronizeQuickAccessMenuItem(item, initialize: true);
             }
         }
 
         if (args.Action == NotifyCollectionChangedAction.Reset)
         {
+            foreach (var item in _quickAccessSynchronizedProviders.Keys.ToArray())
+            {
+                RemoveSynchronizedQuickAccessMenuItem(item);
+            }
+
             foreach (var (item, token) in _quickAccessItemTokens)
             {
                 item.UnregisterPropertyChangedCallback(
@@ -176,6 +205,15 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
             }
 
             _quickAccessItemTokens.Clear();
+
+            foreach (var (item, token) in _quickAccessTargetTokens)
+            {
+                item.UnregisterPropertyChangedCallback(
+                    QuickAccessMenuItem.TargetProperty,
+                    token);
+            }
+
+            _quickAccessTargetTokens.Clear();
         }
     }
 
@@ -186,6 +224,16 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
         if (sender is QuickAccessMenuItem item)
         {
             SynchronizeQuickAccessMenuItem(item, initialize: false);
+        }
+    }
+
+    private void OnQuickAccessItemTargetChanged(
+        DependencyObject sender,
+        DependencyProperty property)
+    {
+        if (sender is QuickAccessMenuItem item)
+        {
+            SynchronizeQuickAccessMenuItem(item, initialize: true);
         }
     }
 
@@ -201,8 +249,20 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
         QuickAccessMenuItem item,
         bool initialize)
     {
-        if (item.Target is not IQuickAccessItemProvider provider
-            || QuickAccessHelper.FindOwningRibbon(this) is not { } ribbon)
+        if (QuickAccessHelper.FindOwningRibbon(this) is not { } ribbon)
+        {
+            return;
+        }
+
+        var provider = item.Target as IQuickAccessItemProvider;
+        if (_quickAccessSynchronizedProviders.TryGetValue(item, out var previousProvider)
+            && !ReferenceEquals(previousProvider, provider))
+        {
+            ribbon.RemoveFromQuickAccessToolBar(previousProvider);
+            _quickAccessSynchronizedProviders.Remove(item);
+        }
+
+        if (provider is null)
         {
             return;
         }
@@ -210,17 +270,36 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
         if (initialize && ribbon.IsInQuickAccessToolBar(provider))
         {
             item.IsChecked = true;
+            _quickAccessSynchronizedProviders[item] = provider;
             return;
         }
 
         if (item.IsChecked)
         {
             ribbon.AddToQuickAccessToolBar(provider);
+            _quickAccessSynchronizedProviders[item] = provider;
         }
         else
         {
             ribbon.RemoveFromQuickAccessToolBar(provider);
+            _quickAccessSynchronizedProviders.Remove(item);
         }
+    }
+
+    private void RemoveSynchronizedQuickAccessMenuItem(QuickAccessMenuItem item)
+    {
+        if (!_quickAccessSynchronizedProviders.Remove(item, out var provider))
+        {
+            return;
+        }
+
+        if (QuickAccessHelper.FindOwningRibbon(this) is not { } ribbon
+            || ribbon.QuickAccessItems.Contains(item))
+        {
+            return;
+        }
+
+        ribbon.RemoveFromQuickAccessToolBar(provider);
     }
 
     private void AddQuickAccessCustomizationItems(StackPanel panel)

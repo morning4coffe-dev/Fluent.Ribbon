@@ -487,7 +487,7 @@ public partial class InRibbonGallery :
     {
         var clone = new InRibbonGallery
         {
-            Header = Header,
+            Header = null,
             HeaderTemplate = HeaderTemplate,
             HeaderTemplateSelector = HeaderTemplateSelector,
             Icon = Icon,
@@ -511,8 +511,17 @@ public partial class InRibbonGallery :
             CanCollapseToButton = true,
             IsCollapsed = true,
             Size = RibbonControlSize.Small,
+            Width = 22,
+            Height = 22,
+            MinWidth = 22,
+            MaxWidth = 22,
+            FontSize = 16,
+            Padding = new Thickness(0),
             _quickAccessOwner = this,
         };
+        AutomationProperties.SetName(
+            clone,
+            Header?.ToString() ?? "Gallery");
 
         foreach (var filter in Filters)
         {

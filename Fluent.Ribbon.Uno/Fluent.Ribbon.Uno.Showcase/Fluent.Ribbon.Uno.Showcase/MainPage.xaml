@@ -77,19 +77,15 @@
                                                  Visibility="Collapsed" />
             </fluent:Ribbon.ContextualGroups>
 
-            <!-- Quick Access Toolbar items (mirrored above/below the ribbon) -->
-            <fluent:Ribbon.QuickAccessToolBarItems>
-                <fluent:RibbonButton Size="Small" IconGlyph="&#xE77F;" ToolTipService.ToolTip="Paste" />
-                <fluent:RibbonButton Size="Small" IconGlyph="&#xE8C6;" ToolTipService.ToolTip="Cut" />
-                <fluent:RibbonDropDownButton Size="Small" IconGlyph="&#xE7C1;" ToolTipService.ToolTip="Drop-down">
-                    <fluent:RibbonDropDownButton.Items>
-                        <fluent:RibbonMenuItem Header="Command 1" />
-                        <fluent:RibbonMenuItem Header="Command 2" />
-                    </fluent:RibbonDropDownButton.Items>
-                </fluent:RibbonDropDownButton>
-                <fluent:RibbonButton Size="Small" IconGlyph="&#xE80A;" ToolTipService.ToolTip="Gallery" />
-                <fluent:RibbonButton Size="Small" IconGlyph="&#xE7A7;" ToolTipService.ToolTip="Undo" />
-            </fluent:Ribbon.QuickAccessToolBarItems>
+            <!-- Quick Access Toolbar providers and customization defaults -->
+            <fluent:Ribbon.QuickAccessItems>
+                <fluent:QuickAccessMenuItem x:Name="qatPink" Header="Pink" IsChecked="True" />
+                <fluent:QuickAccessMenuItem x:Name="qatPaste" Header="Paste" IsChecked="True" />
+                <fluent:QuickAccessMenuItem x:Name="qatCut" Header="Cut" IsChecked="True" />
+                <fluent:QuickAccessMenuItem x:Name="qatCopy" Header="Copy" />
+                <fluent:QuickAccessMenuItem x:Name="qatGallery" Header="Gallery" IsChecked="True" />
+                <fluent:QuickAccessMenuItem x:Name="qatBold" Header="Bold" IsChecked="True" />
+            </fluent:Ribbon.QuickAccessItems>
 
             <!-- Toolbar items shown on the right of the title bar -->
             <fluent:Ribbon.ToolBarItems>
@@ -106,7 +102,7 @@
                         <!-- Clipboard Group -->
                         <fluent:RibbonGroupBox Header="Clipboard" IconGlyph="&#xE77F;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="C">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonSplitButton Header="Paste" Size="Large" IconGlyph="&#xE77F;" fluent:KeyTip.Keys="V">
+                                <fluent:RibbonSplitButton x:Name="pasteButton" Header="Paste" Size="Large" IconGlyph="&#xE77F;" fluent:KeyTip.Keys="V">
                                     <fluent:RibbonSplitButton.Items>
                                         <fluent:RibbonMenuItem Header="Keep Source Formatting" IconGlyph="&#xE77F;" />
                                         <fluent:RibbonMenuItem Header="Merge Formatting" IconGlyph="&#xE8D2;" />
@@ -119,8 +115,8 @@
                                         <fluent:ScreenTip Title="Paste (Ctrl+V)" Text="Paste the contents of the clipboard." DisableReason="Copy something first to use Paste." />
                                     </ToolTipService.ToolTip>
                                 </fluent:RibbonSplitButton>
-                                <fluent:RibbonButton Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" IsEnabled="False" fluent:KeyTip.Keys="X" />
-                                <fluent:RibbonButton Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" IsEnabled="False" fluent:KeyTip.Keys="C" />
+                                <fluent:RibbonButton x:Name="cutButton" Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" IsEnabled="False" fluent:KeyTip.Keys="X" />
+                                <fluent:RibbonButton x:Name="copyButton" Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" IsEnabled="False" fluent:KeyTip.Keys="C" />
                                 <fluent:RibbonButton Header="Format Painter" Size="Medium" IconGlyph="&#xE790;" fluent:KeyTip.Keys="FP" />
                                 <fluent:RibbonDropDownButton Header="DropDown&#x0A;Button" Size="Large" IconGlyph="&#xE7C1;" HasTriangle="True" fluent:KeyTip.Keys="W">
                                     <fluent:RibbonDropDownButton.Items>
@@ -141,10 +137,32 @@
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonToolBar x:Name="FontToolBar">
                                     <fluent:RibbonToolBar.Items>
-                                        <fluent:RibbonComboBox x:Name="fontNameCombo" InputWidth="75" />
+                                        <fluent:RibbonComboBox x:Name="fontNameCombo" InputWidth="75">
+                                            <fluent:RibbonComboBox.TopPopupContent>
+                                                <Border
+                                                    Padding="4"
+                                                    Background="{ThemeResource ComboBoxDropDownBackground}">
+                                                    <FontIcon
+                                                        Glyph="&#xE8D2;"
+                                                        FontSize="12"
+                                                        AutomationProperties.AccessibilityView="Raw" />
+                                                </Border>
+                                            </fluent:RibbonComboBox.TopPopupContent>
+                                        </fluent:RibbonComboBox>
                                         <fluent:RibbonComboBox
                                             x:Name="fontSizeCombo"
-                                            InputWidth="49" />
+                                            InputWidth="49">
+                                            <fluent:RibbonComboBox.TopPopupContent>
+                                                <Border
+                                                    Padding="4"
+                                                    Background="{ThemeResource ComboBoxDropDownBackground}">
+                                                    <FontIcon
+                                                        Glyph="&#xE8EF;"
+                                                        FontSize="12"
+                                                        AutomationProperties.AccessibilityView="Raw" />
+                                                </Border>
+                                            </fluent:RibbonComboBox.TopPopupContent>
+                                        </fluent:RibbonComboBox>
                                         <fluent:RibbonButton x:Name="btnGrowFont" Size="Small" IconGlyph="&#xE8E8;" ToolTipService.ToolTip="Grow Font" />
                                         <fluent:RibbonButton x:Name="btnShrinkFont" Size="Small" IconGlyph="&#xE8E7;" ToolTipService.ToolTip="Shrink Font" />
                                         <fluent:RibbonDropDownButton x:Name="btnChangeCase" Size="Small" IconGlyph="&#xE97F;" HasTriangle="True" ToolTipService.ToolTip="Change Case">
@@ -221,6 +239,29 @@
                                                 </fluent:RibbonToolBarRow>
                                             </fluent:RibbonToolBarLayoutDefinition.Rows>
                                         </fluent:RibbonToolBarLayoutDefinition>
+                                        <fluent:RibbonToolBarLayoutDefinition ForSimplified="True" RowCount="1">
+                                            <fluent:RibbonToolBarLayoutDefinition.Rows>
+                                                <fluent:RibbonToolBarRow>
+                                                    <fluent:RibbonToolBarRow.Children>
+                                                        <fluent:RibbonToolBarControlGroupDefinition>
+                                                            <fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                                <fluent:RibbonToolBarControlDefinition Target="fontNameCombo" Width="110" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="fontSizeCombo" Width="64" Size="Small" />
+                                                            </fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                        </fluent:RibbonToolBarControlGroupDefinition>
+                                                        <fluent:RibbonToolBarControlGroupDefinition>
+                                                            <fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnBold" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnItalic" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnUnderline" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnHighlight" Size="Small" />
+                                                                <fluent:RibbonToolBarControlDefinition Target="btnFontColor" Size="Small" />
+                                                            </fluent:RibbonToolBarControlGroupDefinition.Children>
+                                                        </fluent:RibbonToolBarControlGroupDefinition>
+                                                    </fluent:RibbonToolBarRow.Children>
+                                                </fluent:RibbonToolBarRow>
+                                            </fluent:RibbonToolBarLayoutDefinition.Rows>
+                                        </fluent:RibbonToolBarLayoutDefinition>
                                     </fluent:RibbonToolBar.LayoutDefinitions>
                                 </fluent:RibbonToolBar>
                             </fluent:RibbonGroupBox.Items>
@@ -263,13 +304,26 @@
                                                 </fluent:RibbonToolBarRow>
                                             </fluent:RibbonToolBarLayoutDefinition.Rows>
                                         </fluent:RibbonToolBarLayoutDefinition>
+                                        <fluent:RibbonToolBarLayoutDefinition ForSimplified="True" RowCount="1">
+                                            <fluent:RibbonToolBarLayoutDefinition.Rows>
+                                                <fluent:RibbonToolBarRow>
+                                                    <fluent:RibbonToolBarRow.Children>
+                                                        <fluent:RibbonToolBarControlDefinition Target="groupSpinner" Width="120" />
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnGreen" Size="Small" />
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnGray" Size="Small" />
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnYellow" Size="Small" />
+                                                        <fluent:RibbonToolBarControlDefinition Target="btnBrown" Size="Small" />
+                                                    </fluent:RibbonToolBarRow.Children>
+                                                </fluent:RibbonToolBarRow>
+                                            </fluent:RibbonToolBarLayoutDefinition.Rows>
+                                        </fluent:RibbonToolBarLayoutDefinition>
                                     </fluent:RibbonToolBar.LayoutDefinitions>
                                 </fluent:RibbonToolBar>
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
                         <!-- Spinners Group -->
-                        <fluent:RibbonGroupBox Header="Spinners" IconGlyph="&#xE8EF;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="ZXB">
+                        <fluent:RibbonGroupBox x:Name="SpinnersGroup" Header="Spinners" IconGlyph="&#xE8EF;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" SimplifiedStateDefinition="Collapsed" fluent:KeyTip.Keys="ZXB">
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonSpinner Header="Left:" IconGlyph="&#xE8EF;" Value="1" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" IsEnabled="False" />
                                 <fluent:RibbonSpinner Header="Right:" IconGlyph="&#xE8EF;" Value="1" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" SelectAllTextOnFocus="True" />
@@ -452,7 +506,7 @@
                                 <fluent:RibbonButton Header="Refresh (Galleries)" Size="Medium" IconGlyph="&#xE72C;" />
                                 <fluent:RibbonToggleButton x:Name="ShowHideGalleries" Header="Show/Hide (Galleries)"
                                                            Size="Medium" IconGlyph="&#xE7B3;" IsChecked="True" />
-                                <fluent:RibbonButton Header="Pink" Size="Large" IconGlyph="&#xE790;" Foreground="#E3008C" />
+                                <fluent:RibbonButton x:Name="pinkButton" Header="Pink" Size="Large" IconGlyph="&#xE790;" Foreground="#E3008C" />
                                 <fluent:InRibbonGallery x:Name="GalWithoutGrouping" Header="InRibbonGallery"
                                                         IconGlyph="&#xE80A;" ItemHeight="56" ItemWidth="40"
                                                         MaxItemsInRow="5" MinItemsInRow="3" Selectable="False" fluent:KeyTip.Keys="G" />
@@ -773,11 +827,12 @@
                                 MaxWidth="640"
                                 TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,6,0,0">
-                                <Button Content="Toggle Table Tools" Click="OnToggleTableTools" Padding="12,6" />
-                                <Button Content="Open Backstage" Click="OnOpenBackstage" Padding="12,6" />
-                                <Button Content="Toggle Minimize" Click="OnToggleMinimize" Padding="12,6" />
-                                <Button Content="Toggle Simplified" Click="OnToggleSimplified" Padding="12,6" />
-                                <ToggleButton Content="Dark Mode" Click="OnToggleTheme" Padding="12,6" />
+                                <Button x:Name="ToggleTableToolsButton" AutomationProperties.AutomationId="ToggleTableToolsButton" Content="Toggle Table Tools" Click="OnToggleTableTools" Padding="12,6" />
+                                <Button x:Name="OpenBackstageButton" AutomationProperties.AutomationId="OpenBackstageButton" Content="Open Backstage" Click="OnOpenBackstage" Padding="12,6" />
+                                <Button x:Name="ToggleMinimizeButton" AutomationProperties.AutomationId="ToggleMinimizeButton" Content="Toggle Minimize" Click="OnToggleMinimize" Padding="12,6" />
+                                <Button x:Name="ToggleSimplifiedButton" AutomationProperties.AutomationId="ToggleSimplifiedButton" Content="Toggle Simplified" Click="OnToggleSimplified" Padding="12,6" />
+                                <ToggleButton x:Name="DarkModeButton" AutomationProperties.AutomationId="DarkModeButton" Content="Dark Mode" Click="OnToggleTheme" Padding="12,6" />
+                                <ToggleButton x:Name="RtlModeButton" AutomationProperties.AutomationId="RtlModeButton" Content="RTL" Click="OnToggleRtl" Padding="12,6" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -1093,65 +1148,100 @@
             <fluent:Backstage.Content>
                 <fluent:BackstageTabControl BackButtonUid="BackstageView.Back">
                     <fluent:BackstageTabControl.Items>
-                <fluent:BackstageTabItem Header="Info" IconGlyph="&#xE946;">
-                    <fluent:BackstageTabItem.Content>
-                        <StackPanel Spacing="16" MaxWidth="600">
-                            <TextBlock Text="Document Information" FontSize="24" FontWeight="Bold" />
-                            <TextBlock Text="File name: Document1.docx" FontSize="14" />
-                            <TextBlock Text="Location: /Documents/" FontSize="14" />
-                            <TextBlock Text="Size: 42 KB" FontSize="14" />
-                            <TextBlock Text="Last modified: Today" FontSize="14" />
-                        </StackPanel>
-                    </fluent:BackstageTabItem.Content>
-                </fluent:BackstageTabItem>
+                        <fluent:BackstageButton Header="Save" KeyTip="S">
+                            <fluent:BackstageButton.Icon>
+                                <FontIcon Glyph="&#xE74E;" />
+                            </fluent:BackstageButton.Icon>
+                        </fluent:BackstageButton>
 
-                <fluent:BackstageTabItem Header="New" IconGlyph="&#xE8A5;">
-                    <fluent:BackstageTabItem.Content>
-                        <StackPanel Spacing="16" MaxWidth="600">
-                            <TextBlock Text="New Document" FontSize="24" FontWeight="Bold" />
-                            <TextBlock Text="Choose a template to create a new document." FontSize="14" TextWrapping="Wrap" />
-                            <Button Content="Blank Document" Padding="16,8" />
-                            <Button Content="From Template..." Padding="16,8" />
-                        </StackPanel>
-                    </fluent:BackstageTabItem.Content>
-                </fluent:BackstageTabItem>
+                        <fluent:BackstageButton Header="Save As" KeyTip="A">
+                            <fluent:BackstageButton.Icon>
+                                <FontIcon Glyph="&#xE792;" />
+                            </fluent:BackstageButton.Icon>
+                        </fluent:BackstageButton>
 
-                <fluent:BackstageTabItem Header="Open" IconGlyph="&#xE838;">
-                    <fluent:BackstageTabItem.Content>
-                        <StackPanel Spacing="16" MaxWidth="600">
-                            <TextBlock Text="Open" FontSize="24" FontWeight="Bold" />
-                            <TextBlock Text="Recent Documents" FontSize="16" FontWeight="SemiBold" />
-                            <TextBlock Text="Document1.docx - Modified today" FontSize="14" />
-                            <TextBlock Text="Report_Q4.docx - Modified yesterday" FontSize="14" />
-                            <TextBlock Text="Proposal.docx - Modified last week" FontSize="14" />
-                            <Button Content="Browse..." Padding="16,8" />
-                        </StackPanel>
-                    </fluent:BackstageTabItem.Content>
-                </fluent:BackstageTabItem>
+                        <fluent:BackstageTabItem Header="Disabled" IsEnabled="False" />
 
-                <fluent:BackstageTabItem Header="Save" IconGlyph="&#xE74E;" />
-                <fluent:BackstageTabItem Header="Save As" IconGlyph="&#xE792;" />
+                        <fluent:BackstageTabItem Header="Home" IconGlyph="&#xE80F;" KeyTip="T">
+                            <fluent:BackstageTabItem.Content>
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="This is a BackstageTabItem with some sample content." />
 
-                <fluent:BackstageTabItem Header="Print" IconGlyph="&#xE749;">
-                    <fluent:BackstageTabItem.Content>
-                        <StackPanel Spacing="16" MaxWidth="600">
-                            <TextBlock Text="Print" FontSize="24" FontWeight="Bold" />
-                            <TextBlock Text="Copies:" FontSize="14" />
-                            <NumberBox Value="1" Minimum="1" Maximum="999" SpinButtonPlacementMode="Compact" />
-                            <Button Content="Print" Padding="32,8" />
-                        </StackPanel>
-                    </fluent:BackstageTabItem.Content>
-                </fluent:BackstageTabItem>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <fluent:RibbonButton
+                                            Header="Button with bound command"
+                                            Size="Medium"
+                                            IconGlyph="&#xE8A7;" />
+                                        <fluent:RibbonButton
+                                            x:Name="backstageHomeButton"
+                                            Header="Button"
+                                            Size="Medium"
+                                            IconGlyph="&#xE8B7;"
+                                            fluent:KeyTip.Keys="BH" />
+                                        <fluent:RibbonToggleButton
+                                            Header="Toggle"
+                                            Size="Medium"
+                                            IconGlyph="&#xE7C9;" />
+                                        <fluent:RibbonDropDownButton
+                                            Header="DropDownButton"
+                                            Size="Medium"
+                                            IconGlyph="&#xE70D;">
+                                            <fluent:RibbonDropDownButton.Items>
+                                                <fluent:RibbonMenuItem Header="Blue" />
+                                                <fluent:RibbonMenuItem Header="Gray" />
+                                                <fluent:RibbonMenuItem Header="Green" />
+                                            </fluent:RibbonDropDownButton.Items>
+                                        </fluent:RibbonDropDownButton>
+                                        <fluent:RibbonComboBox
+                                            Header="ComboBox"
+                                            InputWidth="70"
+                                            SelectedIndex="0">
+                                            <x:String>1</x:String>
+                                            <x:String>2</x:String>
+                                            <x:String>3</x:String>
+                                            <x:String>4</x:String>
+                                            <x:String>5</x:String>
+                                        </fluent:RibbonComboBox>
+                                        <fluent:RibbonSpinner
+                                            Header="Spinner"
+                                            InputWidth="50"
+                                            Format="0"
+                                            Value="1" />
+                                    </StackPanel>
 
-                <fluent:BackstageTabItem Header="Export" IconGlyph="&#xEDE1;">
-                    <fluent:BackstageTabItem.Content>
-                        <StackPanel Spacing="16" MaxWidth="600">
-                            <TextBlock Text="Export" FontSize="24" FontWeight="Bold" />
-                            <Button Content="Create PDF/XPS Document" Padding="16,8" />
-                            <Button Content="Change File Type" Padding="16,8" />
-                        </StackPanel>
-                    </fluent:BackstageTabItem.Content>
-                </fluent:BackstageTabItem>
+                                    <TextBlock
+                                        MaxWidth="1100"
+                                        TextWrapping="Wrap"
+                                        Text="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer mi elit, efficitur a sapien sit amet, euismod tempus quam. Aenean porta nisl id erat eleifend, vehicula convallis orci posuere. Maecenas id eleifend magna. Aenean quis nunc id odio tristique scelerisque et eu felis. Donec vestibulum augue sit amet dignissim feugiat. Pellentesque dignissim maximus lacinia. Maecenas dictum velit ut dui tempor imperdiet. Maecenas mi tortor, hendrerit consequat augue eget, rhoncus efficitur nunc. Cras in risus eu mi efficitur posuere et sit amet turpis. Sed sit amet auctor felis. Sed ultricies dui urna, in venenatis dui volutpat in. Curabitur congue congue scelerisque." />
+                                </StackPanel>
+                            </fluent:BackstageTabItem.Content>
+                        </fluent:BackstageTabItem>
+
+                        <fluent:SeparatorTabItem Header="Separator" />
+
+                        <fluent:BackstageTabItem Header="Recent" IconGlyph="&#xE81C;" KeyTip="R">
+                            <fluent:BackstageTabItem.Content>
+                                <StackPanel Spacing="8">
+                                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Recent" />
+                                    <TextBlock Text="Test1" FontWeight="SemiBold" />
+                                    <Button
+                                        x:Name="backstageRecentButton"
+                                        Content="1"
+                                        HorizontalAlignment="Stretch"
+                                        fluent:KeyTip.Keys="R1" />
+                                    <Button Content="2" HorizontalAlignment="Stretch" />
+                                    <Button Content="3" HorizontalAlignment="Stretch" />
+                                    <TextBlock Text="Test2" FontWeight="SemiBold" />
+                                    <Button Content="4" HorizontalAlignment="Stretch" />
+                                </StackPanel>
+                            </fluent:BackstageTabItem.Content>
+                        </fluent:BackstageTabItem>
+
+                        <fluent:BackstageButton Header="Exit" KeyTip="X">
+                            <fluent:BackstageButton.Icon>
+                                <FontIcon Glyph="&#xE8BB;" />
+                            </fluent:BackstageButton.Icon>
+                        </fluent:BackstageButton>
                     </fluent:BackstageTabControl.Items>
                 </fluent:BackstageTabControl>
             </fluent:Backstage.Content>

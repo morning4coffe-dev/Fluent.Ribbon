@@ -229,7 +229,10 @@ public partial class RibbonTabItem
         foreach (var group in Groups)
         {
             group.IsSimplified = isSimplified;
+            group.State = group.GetInitialStateForMode(isSimplified);
         }
+
+        ScheduleUpdateGroupSizes();
     }
 
     string? IKeyTipedControl.KeyTip

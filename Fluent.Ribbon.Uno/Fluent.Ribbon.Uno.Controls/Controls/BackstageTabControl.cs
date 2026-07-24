@@ -248,6 +248,12 @@ public partial class BackstageTabControl : Selector, ILogicalChildSupport
                     backButton,
                     BackButtonUid);
             }
+
+            if (string.IsNullOrWhiteSpace(
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(backButton)))
+            {
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(backButton, "Back");
+            }
         }
 
         UpdateSelectedContent();

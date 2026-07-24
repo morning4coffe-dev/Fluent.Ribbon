@@ -26,6 +26,22 @@
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
+                            <VisualStateGroup x:Name="SimplifiedStates">
+                                <VisualState x:Name="Classic" />
+                                <VisualState x:Name="Simplified">
+                                    <VisualState.Setters>
+                                        <Setter Target="HeaderRow.Visibility" Value="Collapsed" />
+                                        <Setter Target="PART_CollapsedButton.Padding" Value="6,1" />
+                                        <Setter Target="PART_CollapsedGlyph.FontSize" Value="24" />
+                                        <Setter Target="PART_CollapsedImage.Width" Value="24" />
+                                        <Setter Target="PART_CollapsedImage.Height" Value="24" />
+                                        <Setter Target="PART_CollapsedHeaderContentControl.FontSize" Value="10" />
+                                        <Setter Target="PART_CollapsedHeaderContentControl.Margin" Value="0" />
+                                        <Setter Target="PART_CollapsedChevron.FontSize" Value="7" />
+                                        <Setter Target="PART_CollapsedChevron.Margin" Value="0" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
                         <!-- Normal Content -->
@@ -43,10 +59,11 @@
 
                                 <fluent:RibbonGroupItemsPanel
                                     x:Name="PART_ItemsPanel"
+                                    IsSimplified="{TemplateBinding IsSimplified}"
                                     VerticalAlignment="Stretch"
                                     HorizontalAlignment="Left" />
 
-                                <Grid Grid.Row="1" Margin="0,4,0,2">
+                                <Grid x:Name="HeaderRow" Grid.Row="1" Margin="0,4,0,2">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
@@ -103,12 +120,14 @@
                             <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                 <!-- Icon Glyph (preferred) -->
                                 <FontIcon
+                                    x:Name="PART_CollapsedGlyph"
                                     Glyph="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}}"
                                     FontSize="32"
                                     Foreground="{ThemeResource RibbonIconBrush}"
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
                                 <!-- Fallback image icon -->
                                 <Image
+                                    x:Name="PART_CollapsedImage"
                                     Source="{TemplateBinding CollapsedIcon}"
                                     Width="32"
                                     Height="32"
@@ -122,7 +141,12 @@
                                     FontSize="11"
                                     HorizontalContentAlignment="Center"
                                     Margin="0,2,0,0" />
-                                <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" Margin="0,2,0,0" />
+                                <FontIcon
+                                    x:Name="PART_CollapsedChevron"
+                                    Glyph="&#xE70D;"
+                                    FontSize="8"
+                                    Foreground="{ThemeResource RibbonIconBrush}"
+                                    Margin="0,2,0,0" />
                             </StackPanel>
                         </Button>
 

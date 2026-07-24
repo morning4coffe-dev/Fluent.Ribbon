@@ -327,5 +327,5 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
 
     /// <inheritdoc/>
     protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
-        => new Fluent.Automation.Peers.RibbonComboBoxAutomationPeer(this);
+        => new Fluent.Automation.Peers.RibbonComboBoxAccessibleAutomationPeer(this);
 }

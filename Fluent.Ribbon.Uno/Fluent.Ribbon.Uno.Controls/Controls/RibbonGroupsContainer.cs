@@ -77,7 +77,7 @@ public partial class RibbonGroupsContainer : Panel, IScrollInfo
             _reduceOrderIndex = _reduceOrder.Length - 1;
             foreach (var child in Children.OfType<RibbonGroupBox>())
             {
-                child.StateIntermediate = currentSimplifiedState ? RibbonGroupBoxState.Medium : RibbonGroupBoxState.Large;
+                child.StateIntermediate = child.GetInitialStateForMode(currentSimplifiedState);
             }
         }
 

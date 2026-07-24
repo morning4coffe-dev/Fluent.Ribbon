@@ -9,6 +9,16 @@ param(
     [ValidateRange(600, 2160)]
     [int]$Height = 1000,
 
+    [bool]$IncludeVisualMatrix = $true,
+
+    [ValidateRange(800, 1600)]
+    [int]$NarrowWidth = 900,
+
+    [ValidateRange(600, 1200)]
+    [int]$NarrowHeight = 700,
+
+    [switch]$CaptureHighContrast,
+
     [string]$OutputDirectory = (Join-Path $PSScriptRoot "artifacts\visual-parity")
 )
 
@@ -36,6 +46,8 @@ public static class ShowcaseWindowNativeMethods
         uint uFlags);
 }
 "@
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
 
 function Invoke-Checked {
     param(
@@ -90,7 +102,11 @@ function Wait-ForMainWindow {
 function Set-ComparisonWindowSize {
     param(
         [Parameter(Mandatory)]
-        [IntPtr]$WindowHandle
+        [IntPtr]$WindowHandle,
+
+        [int]$TargetWidth = $Width,
+
+        [int]$TargetHeight = $Height
     )
 
     $noMove = 0x0002
@@ -101,8 +117,8 @@ function Set-ComparisonWindowSize {
         [IntPtr]::Zero,
         0,
         0,
-        $Width,
-        $Height,
+        $TargetWidth,
+        $TargetHeight,
         $noMove -bor $noZOrder -bor $noActivate)
     if (-not $result) {
         throw "Could not resize comparison window."
@@ -117,7 +133,7 @@ function Get-WinUiProcessId {
         [string]$LaunchArguments
     )
 
-    $winAppArguments = @("run", $OutputPath, "--detach", "--json")
+    $winAppArguments = @("run", $OutputPath, "--clean", "--detach", "--json")
     if ($LaunchArguments) {
         $winAppArguments += @("--args", $LaunchArguments)
     }
@@ -141,6 +157,252 @@ function Get-WinUiProcessId {
     throw "Could not read the WinUI process ID from winapp output: $json"
 }
 
+function Restart-WinUiShowcase {
+    param(
+        [int]$CurrentProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$OutputPath,
+
+        [string]$LaunchArguments,
+
+        [int]$TargetWidth = $Width,
+
+        [int]$TargetHeight = $Height
+    )
+
+    if ($CurrentProcessId -gt 0 -and
+        (Get-Process -Id $CurrentProcessId -ErrorAction SilentlyContinue)) {
+        Stop-Process -Id $CurrentProcessId
+        Wait-Process -Id $CurrentProcessId -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+
+    $processId = Get-WinUiProcessId `
+        -OutputPath $OutputPath `
+        -LaunchArguments $LaunchArguments
+    Set-ComparisonWindowSize `
+        -WindowHandle (Wait-ForMainWindow -ProcessId $processId) `
+        -TargetWidth $TargetWidth `
+        -TargetHeight $TargetHeight
+    Start-Sleep -Seconds 1
+    return $processId
+}
+
+function Get-AutomationElement {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$AutomationId
+    )
+
+    $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+        $ProcessId)
+    $automationIdCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty,
+        $AutomationId)
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        $processCondition,
+        $automationIdCondition)
+    $element = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $condition)
+    if (-not $element) {
+        throw "Could not find automation element '$AutomationId' in process $ProcessId."
+    }
+
+    return $element
+}
+
+function Set-ExpandCollapseState {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$AutomationId,
+
+        [Parameter(Mandatory)]
+        [bool]$Expand
+    )
+
+    $element = Get-AutomationElement -ProcessId $ProcessId -AutomationId $AutomationId
+    $pattern = $element.GetCurrentPattern(
+        [System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+    if ($Expand) {
+        $pattern.Expand()
+    }
+    else {
+        $pattern.Collapse()
+    }
+}
+
+function Invoke-ShowcaseElement {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$Selector
+    )
+
+    & winapp ui wait-for $Selector -a $ProcessId -t 10000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not find '$Selector' in process $ProcessId."
+    }
+
+    & winapp ui invoke $Selector -a $ProcessId -q 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    $lastError = $null
+    do {
+        try {
+            $element = Get-AutomationElement -ProcessId $ProcessId -AutomationId $Selector
+            $element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+            return
+        }
+        catch {
+            $lastError = $_
+        }
+
+        try {
+            $element = Get-AutomationElement -ProcessId $ProcessId -AutomationId $Selector
+            $element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+            return
+        }
+        catch {
+            $lastError = $_
+        }
+
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    throw "Could not invoke '$Selector' in process $ProcessId. $lastError"
+}
+
+function Select-ShowcaseItem {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$OwnerSelector,
+
+        [Parameter(Mandatory)]
+        [string]$ItemName
+    )
+
+    Invoke-ShowcaseElement -ProcessId $ProcessId -Selector $OwnerSelector
+    Start-Sleep -Milliseconds 250
+    $ownerElement = $null
+    try {
+        $ownerElement = Get-AutomationElement -ProcessId $ProcessId -AutomationId $OwnerSelector
+    }
+    catch {
+        # Some selectors are names rather than automation IDs.
+    }
+
+    $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+        $ProcessId)
+    $nameCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty,
+        $ItemName)
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        $processCondition,
+        $nameCondition)
+    $candidates = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $condition) |
+        Sort-Object { $_.Current.IsOffscreen }
+
+    foreach ($candidate in $candidates) {
+        try {
+            $patterns = $candidate.GetSupportedPatterns()
+            if ($patterns -contains [System.Windows.Automation.SelectionItemPattern]::Pattern) {
+                $selectionPattern = $candidate.GetCurrentPattern(
+                    [System.Windows.Automation.SelectionItemPattern]::Pattern)
+                $selectionPattern.Select()
+                Close-ShowcaseItemOwner `
+                    -ProcessId $ProcessId `
+                    -OwnerSelector $OwnerSelector `
+                    -OwnerElement $ownerElement
+                return
+            }
+
+            if ($patterns -contains [System.Windows.Automation.InvokePattern]::Pattern) {
+                $invokePattern = $candidate.GetCurrentPattern(
+                    [System.Windows.Automation.InvokePattern]::Pattern)
+                $invokePattern.Invoke()
+                Close-ShowcaseItemOwner `
+                    -ProcessId $ProcessId `
+                    -OwnerSelector $OwnerSelector `
+                    -OwnerElement $ownerElement
+                return
+            }
+        }
+        catch {
+            # Continue past stale elements recreated by theme changes.
+        }
+    }
+
+    throw "Could not select '$ItemName' in process $ProcessId."
+}
+
+function Close-ShowcaseItemOwner {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$OwnerSelector,
+
+        [System.Windows.Automation.AutomationElement]$OwnerElement
+    )
+
+    $owners = @()
+    if ($OwnerElement) {
+        $owners += $OwnerElement
+    }
+
+    try {
+        $currentOwner = Get-AutomationElement `
+            -ProcessId $ProcessId `
+            -AutomationId $OwnerSelector
+        if ($owners -notcontains $currentOwner) {
+            $owners += $currentOwner
+        }
+    }
+    catch {
+        # The owner can be recreated by a theme change.
+    }
+
+    foreach ($owner in $owners) {
+        try {
+            $patterns = $owner.GetSupportedPatterns()
+            if ($patterns -contains [System.Windows.Automation.ExpandCollapsePattern]::Pattern) {
+                $expandPattern = $owner.GetCurrentPattern(
+                    [System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+                if ($expandPattern.Current.ExpandCollapseState -eq
+                    [System.Windows.Automation.ExpandCollapseState]::Expanded) {
+                    $expandPattern.Collapse()
+                }
+            }
+        }
+        catch {
+            # Continue past stale elements recreated by the selected state.
+        }
+    }
+
+    Start-Sleep -Milliseconds 350
+}
+
 function Capture-OpenSurface {
     param(
         [Parameter(Mandatory)]
@@ -157,7 +419,7 @@ function Capture-OpenSurface {
 
         [switch]$Click,
 
-        [switch]$AlreadyOpen,
+        [switch]$ExpandCollapse,
 
         [switch]$VerifyExpanded
     )
@@ -167,67 +429,108 @@ function Capture-OpenSurface {
         throw "Could not find '$Selector' in process $ProcessId."
     }
 
-    if (-not $AlreadyOpen) {
-        if ($Click) {
-            & winapp ui click $Selector -a $ProcessId | Out-Null
-        }
-        else {
-            & winapp ui invoke $Selector -a $ProcessId | Out-Null
-        }
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not open '$State' in process $ProcessId."
-        }
+    if ($ExpandCollapse) {
+        Set-ExpandCollapseState -ProcessId $ProcessId -AutomationId $Selector -Expand $true
+    }
+    elseif ($Click) {
+        & winapp ui click $Selector -a $ProcessId | Out-Null
+    }
+    else {
+        & winapp ui invoke $Selector -a $ProcessId | Out-Null
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not open '$State' in process $ProcessId."
     }
 
     Start-Sleep -Milliseconds 500
     $windowHandle = [long](Wait-ForMainWindow -ProcessId $ProcessId)
-    if ($AlreadyOpen) {
-        $deadline = [DateTime]::UtcNow.AddSeconds(15)
+
+    if ($VerifyExpanded) {
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
         do {
-            $windows = (& winapp ui list-windows -a $ProcessId --json 2>$null | Out-String) |
-                ConvertFrom-Json
-            $popupWindow = $windows |
-                Where-Object { $_.title -eq "PopupHost" -and $_.height -ge 150 } |
-                Sort-Object { [double]$_.width * [double]$_.height } -Descending |
-                Select-Object -First 1
-            if ($popupWindow) {
+            if ($ExpandCollapse) {
+                $element = Get-AutomationElement -ProcessId $ProcessId -AutomationId $Selector
+                $pattern = $element.GetCurrentPattern(
+                    [System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+                $isExpanded =
+                    $pattern.Current.ExpandCollapseState -eq
+                    [System.Windows.Automation.ExpandCollapseState]::Expanded
+            }
+            else {
+                $searchResult = (& winapp ui search $Selector -w $windowHandle --json 2>$null | Out-String) |
+                    ConvertFrom-Json
+                $isExpanded = @(
+                    $searchResult.matches |
+                        Where-Object { $_.expandState -eq "expanded" }
+                ).Count -gt 0
+            }
+
+            if ($isExpanded) {
                 break
             }
 
             Start-Sleep -Milliseconds 100
         } while ([DateTime]::UtcNow -lt $deadline)
 
-        if (-not $popupWindow) {
-            throw "'$State' did not create a PopupHost window in process $ProcessId."
-        }
-    }
-
-    if ($AlreadyOpen -or $VerifyExpanded) {
-        $expandTimeoutSeconds = if ($AlreadyOpen) { 15 } else { 5 }
-        $deadline = [DateTime]::UtcNow.AddSeconds($expandTimeoutSeconds)
-        do {
-            $searchResult = (& winapp ui search $Selector -w $windowHandle --json 2>$null | Out-String) |
-                ConvertFrom-Json
-            $expandedMatches = @(
-                $searchResult.matches |
-                    Where-Object { $_.expandState -eq "expanded" }
-            )
-            if ($expandedMatches.Count -gt 0) {
-                break
-            }
-
-            Start-Sleep -Milliseconds 100
-        } while ([DateTime]::UtcNow -lt $deadline)
-
-        if ($expandedMatches.Count -eq 0) {
+        if (-not $isExpanded) {
             throw "'$State' did not leave '$Selector' expanded in process $ProcessId."
         }
     }
 
     $path = Join-Path $OutputDirectory "$Prefix-$State.png"
-    & winapp ui screenshot -w $windowHandle -o $path --capture-screen | Out-Null
+    & winapp ui screenshot -a $ProcessId -o $path | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Could not capture '$State' for process $ProcessId."
+    }
+}
+
+function Select-ShowcaseTab {
+    param(
+        [Parameter(Mandatory)]
+        [int]$ProcessId,
+
+        [Parameter(Mandatory)]
+        [string]$State
+    )
+
+    & winapp ui wait-for $State -a $ProcessId -t 10000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not find '$State' in process $ProcessId."
+    }
+
+    $searchResult = (& winapp ui search $State -a $ProcessId --json 2>$null | Out-String) | ConvertFrom-Json
+    $tabMatches = @(
+        $searchResult.matches |
+            Where-Object {
+                $_.name -eq $State -and $_.type -in @("Tab", "TabItem")
+            }
+    )
+    if ($tabMatches.Count -ne 1) {
+        throw "Expected one '$State' tab in process $ProcessId, found $($tabMatches.Count)."
+    }
+
+    $selector = $tabMatches[0].selector
+    & winapp ui wait-for $selector -a $ProcessId -t 10000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not find '$State' in process $ProcessId."
+    }
+
+    & winapp ui invoke $selector -a $ProcessId | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not select '$State' in process $ProcessId."
+    }
+
+    Start-Sleep -Milliseconds 500
+
+    $propertyJson = (& winapp ui get-property $selector -a $ProcessId -p "IsSelected" --json | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not verify '$State' selection in process $ProcessId."
+    }
+
+    $propertyResult = $propertyJson | ConvertFrom-Json
+    $isSelected = $propertyResult.properties.IsSelected
+    if ($isSelected -notin @($true, "True", "true")) {
+        throw "'$State' did not become selected in process $ProcessId."
     }
 }
 
@@ -246,45 +549,7 @@ function Capture-ShowcaseState {
     )
 
     if ($SelectState) {
-        & winapp ui wait-for $State -a $ProcessId -t 10000 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not find '$State' in process $ProcessId."
-        }
-
-        $searchResult = (& winapp ui search $State -a $ProcessId --json 2>$null | Out-String) | ConvertFrom-Json
-        $tabMatches = @(
-            $searchResult.matches |
-                Where-Object {
-                    $_.name -eq $State -and $_.type -in @("Tab", "TabItem")
-                }
-        )
-        if ($tabMatches.Count -ne 1) {
-            throw "Expected one '$State' tab in process $ProcessId, found $($tabMatches.Count)."
-        }
-
-        $selector = $tabMatches[0].selector
-        & winapp ui wait-for $selector -a $ProcessId -t 10000 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not find '$State' in process $ProcessId."
-        }
-
-        & winapp ui invoke $selector -a $ProcessId | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not select '$State' in process $ProcessId."
-        }
-
-        Start-Sleep -Milliseconds 500
-
-        $propertyJson = (& winapp ui get-property $selector -a $ProcessId -p "IsSelected" --json | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not verify '$State' selection in process $ProcessId."
-        }
-
-        $propertyResult = $propertyJson | ConvertFrom-Json
-        $isSelected = $propertyResult.properties.IsSelected
-        if ($isSelected -notin @($true, "True", "true")) {
-            throw "'$State' did not become selected in process $ProcessId."
-        }
+        Select-ShowcaseTab -ProcessId $ProcessId -State $State
     }
 
     $safeState = $State -replace "[^A-Za-z0-9]+", "-"
@@ -324,11 +589,32 @@ try {
     $winUiOutput = Join-Path $PSScriptRoot "Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\bin\x64\$Configuration\$winUiTargetFramework\win-x64"
 
     $wpfProcess = Start-Process -FilePath $wpfExecutable -PassThru
-    $winUiProcessId = Get-WinUiProcessId -OutputPath $winUiOutput
+    $winUiProcessId = Get-WinUiProcessId `
+        -OutputPath $winUiOutput `
+        -LaunchArguments "--showcase-tab=0 --showcase-state=classic"
 
     Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $wpfProcess.Id)
     Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $winUiProcessId)
     Start-Sleep -Seconds 1
+
+    Add-Type -AssemblyName PresentationFramework
+    $isHighContrast = [System.Windows.SystemParameters]::HighContrast
+    if ($CaptureHighContrast) {
+        if (-not $isHighContrast) {
+            throw "High Contrast capture requires Windows Contrast Themes to be enabled before running the script."
+        }
+
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Toolbars" -SelectState
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Toolbars" -SelectState
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "HighContrast-Toolbars"
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "HighContrast-Toolbars"
+        Write-Host "High Contrast screenshots written to $OutputDirectory"
+        return
+    }
+
+    if ($isHighContrast) {
+        throw "Disable Windows Contrast Themes for normal baselines, or use -CaptureHighContrast for a High Contrast-only run."
+    }
 
     $states = @("Toolbars", "Insert", "Galleries", "Resizing & Screentips")
     foreach ($state in $states) {
@@ -336,10 +622,85 @@ try {
         Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State $state -SelectState
     }
 
+    if ($IncludeVisualMatrix) {
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Toolbars" -SelectState
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Toolbars" -SelectState
+
+        Select-ShowcaseItem -ProcessId $wpfProcess.Id -OwnerSelector "BaseColors" -ItemName "Dark"
+        Select-ShowcaseTab -ProcessId $wpfProcess.Id -State "Toolbars"
+        $winUiProcessId = Restart-WinUiShowcase `
+            -CurrentProcessId $winUiProcessId `
+            -OutputPath $winUiOutput `
+            -LaunchArguments "--showcase-tab=0 --showcase-state=dark"
+        Start-Sleep -Milliseconds 500
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Dark-Toolbars"
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Dark-Toolbars"
+
+        Select-ShowcaseItem -ProcessId $wpfProcess.Id -OwnerSelector "BaseColors" -ItemName "Light"
+        Select-ShowcaseTab -ProcessId $wpfProcess.Id -State "Toolbars"
+
+        Select-ShowcaseItem -ProcessId $wpfProcess.Id -OwnerSelector "Window flow direction" -ItemName "RightToLeft"
+        Select-ShowcaseTab -ProcessId $wpfProcess.Id -State "Toolbars"
+        $winUiProcessId = Restart-WinUiShowcase `
+            -CurrentProcessId $winUiProcessId `
+            -OutputPath $winUiOutput `
+            -LaunchArguments "--showcase-tab=0 --showcase-state=rtl"
+        Start-Sleep -Milliseconds 500
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "RTL-Toolbars"
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "RTL-Toolbars"
+
+        Select-ShowcaseItem -ProcessId $wpfProcess.Id -OwnerSelector "Window flow direction" -ItemName "LeftToRight"
+        Select-ShowcaseTab -ProcessId $wpfProcess.Id -State "Toolbars"
+
+        Select-ShowcaseItem -ProcessId $wpfProcess.Id -OwnerSelector "Ribbon Display Options" -ItemName "Use Simplified Ribbon"
+        Select-ShowcaseTab -ProcessId $wpfProcess.Id -State "Toolbars"
+        $winUiProcessId = Restart-WinUiShowcase `
+            -CurrentProcessId $winUiProcessId `
+            -OutputPath $winUiOutput `
+            -LaunchArguments "--showcase-tab=0 --showcase-state=simplified"
+        Start-Sleep -Milliseconds 500
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Simplified-Toolbars"
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Simplified-Toolbars"
+
+        Select-ShowcaseItem -ProcessId $wpfProcess.Id -OwnerSelector "Ribbon Display Options" -ItemName "Use Classic Ribbon"
+        Select-ShowcaseTab -ProcessId $wpfProcess.Id -State "Toolbars"
+
+        Invoke-ShowcaseElement -ProcessId $wpfProcess.Id -Selector "IsMinimized"
+        $winUiProcessId = Restart-WinUiShowcase `
+            -CurrentProcessId $winUiProcessId `
+            -OutputPath $winUiOutput `
+            -LaunchArguments "--showcase-tab=0 --showcase-state=minimized"
+        Start-Sleep -Milliseconds 500
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Minimized-Toolbars"
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Minimized-Toolbars"
+
+        Invoke-ShowcaseElement -ProcessId $wpfProcess.Id -Selector "IsMinimized"
+
+        Set-ComparisonWindowSize `
+            -WindowHandle (Wait-ForMainWindow -ProcessId $wpfProcess.Id) `
+            -TargetWidth $NarrowWidth `
+            -TargetHeight $NarrowHeight
+        $winUiProcessId = Restart-WinUiShowcase `
+            -CurrentProcessId $winUiProcessId `
+            -OutputPath $winUiOutput `
+            -TargetWidth $NarrowWidth `
+            -TargetHeight $NarrowHeight
+        Start-Sleep -Milliseconds 500
+        Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Narrow-Toolbars"
+        Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Narrow-Toolbars"
+
+        Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $wpfProcess.Id)
+        $winUiProcessId = Restart-WinUiShowcase `
+            -CurrentProcessId $winUiProcessId `
+            -OutputPath $winUiOutput `
+            -LaunchArguments "--showcase-tab=0 --showcase-state=classic"
+
+    }
+
     Capture-ShowcaseState -ProcessId $wpfProcess.Id -Prefix "wpf" -State "Toolbars" -SelectState
     Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Toolbars" -SelectState
-    Capture-OpenSurface -ProcessId $wpfProcess.Id -Selector "comboBoxFontSize" -Prefix "wpf" -State "ComboBoxPopup" -Click -VerifyExpanded
-    & winapp ui invoke "comboBoxFontSize" -a $wpfProcess.Id | Out-Null
+    Capture-OpenSurface -ProcessId $wpfProcess.Id -Selector "comboBoxFontSize" -Prefix "wpf" -State "ComboBoxPopup" -ExpandCollapse -VerifyExpanded
+    Set-ExpandCollapseState -ProcessId $wpfProcess.Id -AutomationId "comboBoxFontSize" -Expand $false
     Start-Sleep -Milliseconds 250
 
     Capture-OpenSurface -ProcessId $wpfProcess.Id -Selector "Backstage" -Prefix "wpf" -State "Backstage"
@@ -350,15 +711,17 @@ try {
     Start-Sleep -Seconds 2
     $winUiProcessId = Get-WinUiProcessId `
         -OutputPath $winUiOutput `
-        -LaunchArguments "--showcase-tab=0 --showcase-open-surface=fontSizeCombo --showcase-open-delay=3000"
+        -LaunchArguments "--showcase-tab=0 --showcase-state=classic"
     Set-ComparisonWindowSize -WindowHandle (Wait-ForMainWindow -ProcessId $winUiProcessId)
     Start-Sleep -Seconds 1
+    Capture-ShowcaseState -ProcessId $winUiProcessId -Prefix "winui" -State "Toolbars" -SelectState
     Capture-OpenSurface `
         -ProcessId $winUiProcessId `
         -Selector "fontSizeCombo" `
         -Prefix "winui" `
         -State "ComboBoxPopup" `
-        -AlreadyOpen
+        -ExpandCollapse `
+        -VerifyExpanded
 
     Write-Host "Visual parity screenshots written to $OutputDirectory"
 }

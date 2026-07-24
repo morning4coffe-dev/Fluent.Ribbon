@@ -29,6 +29,7 @@ public class RibbonStateStorage : IRibbonStateStorage
     private bool _isMinimized;
     private bool _showQuickAccessToolBarBelowRibbon;
     private bool _isSimplified;
+    private HashSet<string>? _defaultQuickAccessSelection;
 
     /// <summary>Creates a standalone state container.</summary>
     public RibbonStateStorage()
@@ -178,12 +179,20 @@ public class RibbonStateStorage : IRibbonStateStorage
     /// <summary>Creates the serialized ribbon state.</summary>
     protected virtual StringBuilder CreateStateData()
     {
+        CaptureDefaultQuickAccessSelection();
         var builder = new StringBuilder();
         builder.Append(IsMinimized.ToString(CultureInfo.InvariantCulture));
         builder.Append(',');
         builder.Append((!ShowQuickAccessToolBarBelowRibbon).ToString(CultureInfo.InvariantCulture));
         builder.Append(',');
         builder.Append(IsSimplified.ToString(CultureInfo.InvariantCulture));
+        if (_ribbon is not null && _ribbon.QuickAccessItems.Count > 0)
+        {
+            builder.Append(',');
+            builder.Append("v2:");
+            builder.Append(string.Join('|', GetSelectedQuickAccessKeys()));
+        }
+
         return builder;
     }
 
@@ -191,6 +200,7 @@ public class RibbonStateStorage : IRibbonStateStorage
     public virtual void LoadTemporary()
     {
         ThrowIfDisposed();
+        CaptureDefaultQuickAccessSelection();
         _memoryStream.Position = 0;
         Load(_memoryStream);
     }
@@ -199,6 +209,7 @@ public class RibbonStateStorage : IRibbonStateStorage
     public virtual void Load()
     {
         ThrowIfDisposed();
+        CaptureDefaultQuickAccessSelection();
         IsLoading = true;
 
         try
@@ -278,6 +289,11 @@ public class RibbonStateStorage : IRibbonStateStorage
         {
             IsSimplified = isSimplified;
         }
+
+        if (values.Length > 3)
+        {
+            ApplyQuickAccessSelection(values[3]);
+        }
     }
 
     /// <summary>Determines whether a WPF-compatible isolated-storage file exists.</summary>
@@ -315,6 +331,11 @@ public class RibbonStateStorage : IRibbonStateStorage
         IsMinimized = false;
         ShowQuickAccessToolBarBelowRibbon = false;
         IsSimplified = false;
+        CaptureDefaultQuickAccessSelection();
+        if (_defaultQuickAccessSelection is not null)
+        {
+            ApplyQuickAccessSelection(_defaultQuickAccessSelection);
+        }
 
         ExecutePersistentOperation(
             RibbonStateStorageOperation.Reset,
@@ -374,6 +395,104 @@ public class RibbonStateStorage : IRibbonStateStorage
     }
 
     private static string GetSettingsKey(string key) => $"{StorageContainerName}.{key}";
+
+    private void CaptureDefaultQuickAccessSelection()
+    {
+        if (_defaultQuickAccessSelection is null && _ribbon is not null)
+        {
+            _defaultQuickAccessSelection = GetSelectedQuickAccessKeys();
+        }
+    }
+
+    private void ApplyQuickAccessSelection(string serializedIndexes)
+    {
+        if (_ribbon is null)
+        {
+            return;
+        }
+
+        if (serializedIndexes.StartsWith("v2:", StringComparison.Ordinal))
+        {
+            var selectedKeys = serializedIndexes[3..]
+                .Split('|', StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal);
+            ApplyQuickAccessSelection(selectedKeys);
+            return;
+        }
+
+        var selectedIndexes = serializedIndexes
+            .Split('|', StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                ? index
+                : -1)
+            .Where(index => index >= 0)
+            .ToHashSet();
+        ApplyQuickAccessSelection(
+            Enumerable.Range(0, _ribbon.QuickAccessItems.Count)
+                .Select(selectedIndexes.Contains)
+                .ToArray());
+    }
+
+    private HashSet<string> GetSelectedQuickAccessKeys()
+    {
+        if (_ribbon is null)
+        {
+            return [];
+        }
+
+        return _ribbon.QuickAccessItems
+            .Select((item, index) => (item, index))
+            .Where(entry => entry.item.IsChecked)
+            .Select(entry => GetQuickAccessPersistenceKey(entry.item, entry.index))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private void ApplyQuickAccessSelection(IReadOnlySet<string> selectedKeys)
+    {
+        if (_ribbon is null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < _ribbon.QuickAccessItems.Count; index++)
+        {
+            var item = _ribbon.QuickAccessItems[index];
+            item.IsChecked = selectedKeys.Contains(
+                GetQuickAccessPersistenceKey(item, index));
+        }
+    }
+
+    private static string GetQuickAccessPersistenceKey(
+        QuickAccessMenuItem item,
+        int index)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Name))
+        {
+            return $"item:{Uri.EscapeDataString(item.Name)}";
+        }
+
+        if (item.Target is FrameworkElement target
+            && !string.IsNullOrWhiteSpace(target.Name))
+        {
+            return $"target:{Uri.EscapeDataString(target.Name)}";
+        }
+
+        return $"index:{index.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private void ApplyQuickAccessSelection(IReadOnlyList<bool> selection)
+    {
+        if (_ribbon is null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < _ribbon.QuickAccessItems.Count; index++)
+        {
+            _ribbon.QuickAccessItems[index].IsChecked =
+                index < selection.Count && selection[index];
+        }
+    }
 
     private void CopyStateToTemporaryStorage(string state)
     {

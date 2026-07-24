@@ -411,6 +411,7 @@ public partial class Backstage : RibbonControl
             return;
         }
 
+        parentRibbon.ActiveBackstage = this;
         parentRibbon.IsBackstageOrStartScreenOpen = true;
         if (HideContextTabsOnOpen
             && parentRibbon.TitleBar is { } titleBar
@@ -426,6 +427,11 @@ public partial class Backstage : RibbonControl
         if (parentRibbon is null)
         {
             return;
+        }
+
+        if (ReferenceEquals(parentRibbon.ActiveBackstage, this))
+        {
+            parentRibbon.ActiveBackstage = null;
         }
 
         parentRibbon.IsBackstageOrStartScreenOpen =

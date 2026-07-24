@@ -11,6 +11,9 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 [TemplatePart(Name = PART_CollapsedButton, Type = typeof(WinUIButton))]
 public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 {
+    private static readonly RibbonGroupBoxStateDefinition DefaultSimplifiedStateDefinition =
+        new("Large,Middle,Collapsed");
+
     private const string PART_ItemsPanel = "PART_ItemsPanel";
     private const string PART_HeaderPresenter = "PART_HeaderPresenter";
     private const string PART_CollapsedButton = "PART_CollapsedButton";
@@ -282,13 +285,19 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     {
         if (d is RibbonGroupBox groupBox)
         {
+            var isSimplified = (bool)e.NewValue;
+            groupBox.State = groupBox.GetInitialStateForMode(isSimplified);
+
             foreach (var item in groupBox.Items)
             {
                 if (item is ISimplifiedStateControl simplifiedControl)
                 {
-                    simplifiedControl.UpdateSimplifiedState((bool)e.NewValue);
+                    simplifiedControl.UpdateSimplifiedState(isSimplified);
                 }
             }
+
+            groupBox.UpdateVisualState();
+            groupBox.UpdateItemSizes();
         }
     }
 
@@ -315,7 +324,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             nameof(SimplifiedStateDefinition),
             typeof(RibbonGroupBoxStateDefinition),
             typeof(RibbonGroupBox),
-            new PropertyMetadata(default(RibbonGroupBoxStateDefinition)));
+            new PropertyMetadata(DefaultSimplifiedStateDefinition));
 
     /// <summary>
     /// Gets or sets the state definition for simplified mode.
@@ -341,6 +350,20 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// Positive values enlarge scalable children; negative values reduce them.
     /// </summary>
     internal int ScaleIntermediate { get; set; }
+
+    internal RibbonGroupBoxStateDefinition GetStateDefinitionForMode(bool isSimplified)
+        => isSimplified ? SimplifiedStateDefinition : StateDefinition;
+
+    internal RibbonGroupBoxState GetInitialStateForMode(bool isSimplified)
+    {
+        var definition = GetStateDefinitionForMode(isSimplified);
+        if (isSimplified && definition == DefaultSimplifiedStateDefinition)
+        {
+            return RibbonGroupBoxState.Medium;
+        }
+
+        return definition.States[0];
+    }
 
     /// <summary>
     /// Gets the desired size using the intermediate state, without committing the state change.
@@ -614,6 +637,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         };
 
         VisualStateManager.GoToState(this, stateName, true);
+        VisualStateManager.GoToState(this, IsSimplified ? "Simplified" : "Classic", true);
     }
 
     private void UpdateItemSizes()

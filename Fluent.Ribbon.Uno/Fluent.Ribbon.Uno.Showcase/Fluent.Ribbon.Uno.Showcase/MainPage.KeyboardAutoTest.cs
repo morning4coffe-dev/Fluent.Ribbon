@@ -178,6 +178,15 @@ public sealed partial class MainPage
                 return;
             }
 
+            firstTab.Focus(FocusState.Programmatic);
+            service.Show();
+            service.Hide();
+            if (!ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot), firstTab))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS in-ribbon focus was not restored after dismissal");
+                return;
+            }
+
             service.Show();
             var partialCandidates = GetKeyTipTargets(service);
             var partialTarget = partialCandidates.FirstOrDefault(target =>
@@ -375,6 +384,22 @@ public sealed partial class MainPage
                 return;
             }
 
+            service.Show();
+            var backstageTargets = GetKeyTipTargets(service);
+            var hasHomeTarget = backstageTargets.Any(
+                target => ReferenceEquals(target.Element, backstageHomeButton));
+            var hasRecentTarget = backstageTargets.Any(
+                target => ReferenceEquals(target.Element, backstageRecentButton));
+            if (!hasHomeTarget || hasRecentTarget)
+            {
+                AutoLog(
+                    "  FAIL KEYBOARD-FOCUS Backstage scope included the wrong tab content "
+                    + $"home={hasHomeTarget} recent={hasRecentTarget} "
+                    + $"targets={string.Join(',', backstageTargets.Select(target => $"{target.Element.GetType().Name}:{target.Keys}"))}");
+                return;
+            }
+
+            InvokeKeyTipDismissal(service, "DismissForPointerInput");
             BackstageView.OnKeyTipBack();
             await SettleAsync(1);
             if (BackstageView.IsOpen

@@ -157,7 +157,7 @@ public partial class KeyTipService
             return;
         }
 
-        _focusBackup = FocusRoutingHelper.CaptureFocusedElement(_ribbon, onlyWhenOutsideOwner: true);
+        _focusBackup = FocusRoutingHelper.CaptureFocusedElement(_ribbon);
         _isActive = true;
         _typedKeys = string.Empty;
         _scopeStack.Clear();
@@ -611,6 +611,20 @@ public partial class KeyTipService
             return backstage;
         }
 
+        if (_ribbon.ActiveBackstage is { IsOpen: true } activeBackstage
+            && IsEligible(activeBackstage))
+        {
+            return activeBackstage;
+        }
+
+        if (_rootElement is not null
+            && FocusRoutingHelper.FindDescendant<Backstage>(_rootElement) is
+                { IsOpen: true } hostedBackstage
+            && IsEligible(hostedBackstage))
+        {
+            return hostedBackstage;
+        }
+
         if (_ribbon.Menu is ApplicationMenu { IsDropDownOpen: true } applicationMenu
             && IsEligible(applicationMenu))
         {
@@ -726,9 +740,9 @@ public partial class KeyTipService
         foreach (var child in EnumerateLogicalChildren(root))
         {
             TryAddTarget(child, child, scope, seen);
-            CollectVisualTargets(child, scope, seen);
             if (ShouldDescendInto(child, scope))
             {
+                CollectVisualTargets(child, scope, seen);
                 CollectLogicalTargets(child, scope, seen, visited);
             }
         }
@@ -744,6 +758,7 @@ public partial class KeyTipService
         return child switch
         {
             RibbonGroupBox { State: RibbonGroupBoxState.Collapsed } => false,
+            BackstageTabItem { IsSelected: false } => false,
             ApplicationMenu { IsDropDownOpen: false } => false,
             Backstage { IsOpen: false } => false,
             StartScreen { IsOpen: false } => false,

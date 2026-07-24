@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
+using Microsoft.UI.Xaml.Media;
 
 /// <summary>
 /// Exposes <see cref="Ribbon"/> as an expandable ribbon region.
@@ -159,10 +160,16 @@ public partial class RibbonBackstageAutomationPeer : RibbonControlAutomationPeer
     protected override List<AutomationPeer>? GetChildrenCore()
     {
         var peers = new List<AutomationPeer>();
-        if (OwnerBackstage.Content is not null
-            && CreatePeerForElement(OwnerBackstage.Content) is { } peer)
+        if (OwnerBackstage.Content is BackstageTabControl tabControl)
         {
-            peers.Add(peer);
+            peers.Add(
+                CreatePeerForElement(tabControl)
+                ?? new RibbonBackstageTabControlAutomationPeer(tabControl));
+        }
+        else if (OwnerBackstage.Content is FrameworkElement content
+                 && CreatePeerForElement(content) is { } contentPeer)
+        {
+            peers.Add(contentPeer);
         }
 
         return peers;
@@ -207,21 +214,44 @@ public partial class RibbonBackstageTabControlAutomationPeer :
     protected override List<AutomationPeer>? GetChildrenCore()
     {
         var peers = new List<AutomationPeer>();
+        if (OwnerTabControl.IsBackButtonVisible
+            && OwnerTabControl.BackButton is UIElement
+            {
+                Visibility: Visibility.Visible,
+            } backButton
+            && CreatePeerForElement(backButton) is { } backButtonPeer)
+        {
+            peers.Add(backButtonPeer);
+        }
+
         foreach (var item in OwnerTabControl.Items)
         {
-            if (item is UIElement element
-                && CreatePeerForElement(element) is { } peer)
+            switch (item)
             {
-                peers.Add(peer);
-            }
-            else
-            {
-                peers.Add(CreateItemAutomationPeer(item));
+                case BackstageTabItem tabItem:
+                    peers.Add(
+                        CreatePeerForElement(tabItem)
+                        ?? new RibbonBackstageTabItemAutomationPeer(tabItem));
+                    break;
+                case BackstageButton button:
+                    peers.Add(
+                        CreatePeerForElement(button)
+                        ?? new RibbonBackstageButtonAutomationPeer(button));
+                    break;
+                case UIElement element when CreatePeerForElement(element) is { } peer:
+                    peers.Add(peer);
+                    break;
+                default:
+                    peers.Add(CreateItemAutomationPeer(item));
+                    break;
             }
         }
 
         return peers;
     }
+
+    /// <inheritdoc cref="AutomationPeer.GetPattern"/>
+    public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
     bool ISelectionProvider.CanSelectMultiple => false;
 
@@ -241,6 +271,58 @@ public partial class RibbonBackstageTabControlAutomationPeer :
         return peer is null ? [] : [ProviderFromPeer(peer)];
     }
 
+}
+
+internal sealed partial class RibbonBackstageButtonAutomationPeer : FrameworkElementAutomationPeer,
+    IInvokeProvider
+{
+    internal RibbonBackstageButtonAutomationPeer(BackstageButton owner)
+        : base(owner)
+    {
+    }
+
+    private BackstageButton OwnerButton => (BackstageButton)Owner;
+
+    protected override string GetClassNameCore() => nameof(BackstageButton);
+
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.Button;
+
+    protected override string GetNameCore()
+    {
+        var name = base.GetNameCore();
+        return string.IsNullOrWhiteSpace(name)
+            ? AutomationPeerHelpers.GetObjectName(OwnerButton.Header)
+            : name;
+    }
+
+    protected override string GetAccessKeyCore()
+    {
+        var accessKey = base.GetAccessKeyCore();
+        return string.IsNullOrWhiteSpace(accessKey)
+            ? OwnerButton.KeyTip ?? string.Empty
+            : accessKey;
+    }
+
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Invoke
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    public new object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
+
+    public void Invoke()
+    {
+        if (!OwnerButton.IsEnabled)
+        {
+            return;
+        }
+
+        if (!OwnerButton.DispatcherQueue.TryEnqueue(OwnerButton.InvokeForAutomation))
+        {
+            throw new InvalidOperationException("Could not dispatch the Backstage button action.");
+        }
+    }
 }
 
 /// <summary>
@@ -347,18 +429,33 @@ public partial class RibbonBackstageTabItemAutomationPeer : FrameworkElementAuto
     protected override List<AutomationPeer>? GetChildrenCore()
     {
         var peers = new List<AutomationPeer>();
-        foreach (var element in new object?[]
-                 {
-                     OwnerTabItem.Header,
-                     OwnerTabItem.Content
-                 }.OfType<UIElement>())
+        if (OwnerTabItem.Header is UIElement header)
         {
-            if (CreatePeerForElement(element) is { } peer)
-            {
-                peers.Add(peer);
-            }
+            AddPeerOrDescendants(header, peers);
+        }
+
+        if (OwnerTabItem.IsSelected && OwnerTabItem.Content is DependencyObject content)
+        {
+            AddPeerOrDescendants(content, peers);
         }
 
         return peers;
+    }
+
+    private void AddPeerOrDescendants(
+        DependencyObject element,
+        ICollection<AutomationPeer> peers)
+    {
+        if (element is UIElement uiElement
+            && CreatePeerForElement(uiElement) is { } peer)
+        {
+            peers.Add(peer);
+            return;
+        }
+
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(element); index++)
+        {
+            AddPeerOrDescendants(VisualTreeHelper.GetChild(element, index), peers);
+        }
     }
 }

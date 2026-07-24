@@ -1,6 +1,7 @@
 namespace Fluent;
 
 using System.Collections;
+using System.Collections.Specialized;
 using Windows.System;
 
 /// <summary>
@@ -560,7 +561,15 @@ public partial class Ribbon : ILogicalChildSupport
         Loaded += OnCompatibilityLoaded;
         Unloaded += OnCompatibilityUnloaded;
         _keyTipKeys.CollectionChanged += OnKeyTipKeysCollectionChanged;
+        _quickAccessItems.CollectionChanged += OnQuickAccessCustomizationItemsCollectionChanged;
         SyncKeyTipKeys();
+    }
+
+    private void OnQuickAccessCustomizationItemsCollectionChanged(
+        object? sender,
+        NotifyCollectionChangedEventArgs args)
+    {
+        SyncQuickAccessItems();
     }
 
     private void UpdateCompatibilityTemplateParts()
@@ -661,9 +670,12 @@ public partial class Ribbon : ILogicalChildSupport
 
     private static void OnContentHeightChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
-        if (((Ribbon)sender)._tabControl is { } tabControl)
+        var ribbon = (Ribbon)sender;
+        if (ribbon._tabControl is { } tabControl)
         {
-            tabControl.ContentHeight = (double)args.NewValue;
+            tabControl.ContentHeight = ribbon.IsSimplified
+                ? SimplifiedContentHeight
+                : (double)args.NewValue;
         }
     }
 

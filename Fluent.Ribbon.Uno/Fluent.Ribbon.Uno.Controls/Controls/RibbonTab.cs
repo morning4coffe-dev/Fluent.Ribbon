@@ -330,11 +330,11 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
         try
         {
-            // Reset all groups to Large first so we always re-evaluate from the
-            // unreduced layout; this lets groups expand again when space grows.
+            // Reset all groups to the largest state supported by the active mode
+            // before applying width-driven reductions.
             foreach (var group in Groups)
             {
-                group.State = RibbonGroupBoxState.Large;
+                group.State = group.GetInitialStateForMode(IsSimplified);
             }
 
             // Build the reduce order
@@ -390,13 +390,13 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
                 var groupIndex = -1;
                 for (int i = 0; i < Groups.Count; i++)
                 {
-                    var group = Groups[i];
+                    var candidateGroup = Groups[i];
 
                     // Match by x:Name first (unambiguous), then by header text.
                     // Using the name lets developers disambiguate groups that share
                     // the same header, or that use a non-string header.
-                    if (string.Equals(group.Name, name, StringComparison.Ordinal)
-                        || string.Equals(group.Header?.ToString(), name, StringComparison.Ordinal))
+                    if (string.Equals(candidateGroup.Name, name, StringComparison.Ordinal)
+                        || string.Equals(candidateGroup.Header?.ToString(), name, StringComparison.Ordinal))
                     {
                         groupIndex = i;
                         break;
@@ -405,32 +405,46 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
                 if (groupIndex == -1) continue;
 
-                if (!groupStateTracker.ContainsKey(groupIndex))
-                {
-                    groupStateTracker[groupIndex] = RibbonGroupBoxState.Medium;
-                }
-                else
-                {
-                    groupStateTracker[groupIndex] = groupStateTracker[groupIndex] switch
-                    {
-                        RibbonGroupBoxState.Medium => RibbonGroupBoxState.Small,
-                        RibbonGroupBoxState.Small => RibbonGroupBoxState.Collapsed,
-                        _ => RibbonGroupBoxState.Collapsed,
-                    };
-                }
+                var group = Groups[groupIndex];
+                var currentState = groupStateTracker.TryGetValue(groupIndex, out var trackedState)
+                    ? trackedState
+                    : group.GetInitialStateForMode(IsSimplified);
+                var targetState = group
+                    .GetStateDefinitionForMode(IsSimplified)
+                    .ReduceState(currentState);
+                groupStateTracker[groupIndex] = targetState;
 
-                result.Add((groupIndex, groupStateTracker[groupIndex]));
+                if (targetState != currentState)
+                {
+                    result.Add((groupIndex, targetState));
+                }
             }
         }
         else
         {
-            // Default: reduce right to left
-            var states = new[] { RibbonGroupBoxState.Medium, RibbonGroupBoxState.Small, RibbonGroupBoxState.Collapsed };
-            foreach (var targetState in states)
+            // Default: reduce right to left through each group's supported states.
+            var groupStateTracker = Groups
+                .Select(group => group.GetInitialStateForMode(IsSimplified))
+                .ToArray();
+
+            var hasMoreStates = true;
+            while (hasMoreStates)
             {
+                hasMoreStates = false;
                 for (int i = Groups.Count - 1; i >= 0; i--)
                 {
+                    var currentState = groupStateTracker[i];
+                    var targetState = Groups[i]
+                        .GetStateDefinitionForMode(IsSimplified)
+                        .ReduceState(currentState);
+                    if (targetState == currentState)
+                    {
+                        continue;
+                    }
+
+                    groupStateTracker[i] = targetState;
                     result.Add((i, targetState));
+                    hasMoreStates = true;
                 }
             }
         }
