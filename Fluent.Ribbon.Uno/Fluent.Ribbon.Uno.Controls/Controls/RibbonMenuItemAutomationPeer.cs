@@ -61,5 +61,5 @@ public partial class RibbonMenuItemAutomationPeer : FrameworkElementAutomationPe
     }
 
     /// <inheritdoc/>
-    public void Invoke() => OwnerItem.InvokeItem();
+    public void Invoke() => OwnerItem.InvokeFromAutomation();
 }

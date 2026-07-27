@@ -3,8 +3,10 @@ namespace Fluent;
 /// <summary>
 /// Represents a TextBox control within a Ribbon.
 /// </summary>
-public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider
+public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider, IQuickAccessItemProvider, IRibbonHeaderAlignable
 {
+    private FrameworkElement? _headerPresenter;
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
@@ -171,7 +173,23 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     {
         DefaultStyleKey = typeof(RibbonTextBox);
         GotFocus += OnRibbonTextBoxGotFocus;
+        QuickAccessHelper.AttachContextMenu(this);
     }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc />
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+
+        _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
+    }
+
+    /// <inheritdoc />
+    FrameworkElement? IRibbonHeaderAlignable.HeaderPresenter => _headerPresenter;
 
     #endregion
 
@@ -214,6 +232,47 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
         };
 
         VisualStateManager.GoToState(this, stateName, true);
+    }
+
+    #endregion
+
+    #region IQuickAccessItemProvider
+
+    /// <inheritdoc />
+    public bool CanAddToQuickAccessToolBar
+    {
+        get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
+        set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
+    }
+
+    /// <inheritdoc />
+    public virtual FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonTextBox
+        {
+            Header = QuickAccessHelper.ClonePresentationValue(Header),
+            MediumIcon = MediumIcon,
+            IconGlyph = IconGlyph,
+            Size = RibbonControlSize.Small,
+            InputWidth = Math.Min(InputWidth, 120d),
+            SelectAllTextOnFocus = SelectAllTextOnFocus,
+            CanAddToQuickAccessToolBar = false,
+        };
+
+        RibbonControl.BindQuickAccessItem(this, clone);
+        BindOneWay(IsReadOnlyProperty);
+        BindOneWay(MaxLengthProperty);
+        BindTwoWay(TextProperty);
+        return clone;
+
+        void BindOneWay(DependencyProperty property) =>
+            RibbonControl.Synchronize(this, property, clone, property);
+
+        void BindTwoWay(DependencyProperty property)
+        {
+            RibbonControl.Synchronize(this, property, clone, property);
+            RibbonControl.Synchronize(clone, property, this, property);
+        }
     }
 
     #endregion

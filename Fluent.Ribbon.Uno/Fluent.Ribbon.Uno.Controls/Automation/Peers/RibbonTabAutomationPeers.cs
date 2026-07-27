@@ -244,6 +244,12 @@ public partial class RibbonTabItemDataAutomationPeer : AutomationPeer,
             : AutomationPeerHelpers.GetObjectName(WrapperTab.Header);
 
     /// <inheritdoc/>
+    protected override string GetAutomationIdCore()
+        => WrapperTab is null
+            ? string.Empty
+            : AutomationProperties.GetAutomationId(WrapperTab);
+
+    /// <inheritdoc/>
     protected override string GetAccessKeyCore() => WrapperTab?.KeyTip ?? string.Empty;
 
     /// <inheritdoc/>

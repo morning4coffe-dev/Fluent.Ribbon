@@ -19,16 +19,32 @@
                                     <VisualState.Setters>
                                         <Setter Target="PART_AdornerLayer.Visibility" Value="Collapsed" />
                                         <Setter Target="PART_AdornerLayer.Opacity" Value="0" />
+                                        <Setter Target="PART_AdornerLayer.IsHitTestVisible" Value="False" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Closing">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_AdornerLayer.Visibility" Value="Visible" />
+                                        <Setter Target="PART_AdornerLayer.Opacity" Value="0" />
+                                        <Setter Target="PART_AdornerLayer.IsHitTestVisible" Value="False" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Open">
                                     <VisualState.Setters>
                                         <Setter Target="PART_AdornerLayer.Visibility" Value="Visible" />
                                         <Setter Target="PART_AdornerLayer.Opacity" Value="1" />
+                                        <Setter Target="PART_AdornerLayer.IsHitTestVisible" Value="True" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualStateGroup.Transitions>
-                                    <VisualTransition GeneratedDuration="0:0:0.2" />
+                                    <VisualTransition
+                                        From="Closed"
+                                        To="Open"
+                                        GeneratedDuration="0:0:0.18" />
+                                    <VisualTransition
+                                        From="Open"
+                                        To="Closing"
+                                        GeneratedDuration="0:0:0.12" />
                                 </VisualStateGroup.Transitions>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>

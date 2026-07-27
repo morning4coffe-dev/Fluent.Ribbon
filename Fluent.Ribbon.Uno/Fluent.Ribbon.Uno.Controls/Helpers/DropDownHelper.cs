@@ -51,7 +51,7 @@ public static class DropDownHelper
 
         popup.HorizontalOffset = point.X;
         popup.VerticalOffset = point.Y;
-        popup.IsOpen = true;
+        FlyoutShowHelper.OpenDeferred(popup);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public static class DropDownHelper
 
         popup.HorizontalOffset = point.X;
         popup.VerticalOffset = point.Y;
-        popup.IsOpen = true;
+        FlyoutShowHelper.OpenDeferred(popup);
     }
 
     /// <summary>

@@ -258,10 +258,17 @@ public partial class RibbonButton : Microsoft.UI.Xaml.Controls.Button, IRibbonCo
         _iconImage = GetTemplateChild(PART_Icon) as Image;
         _labelText = GetTemplateChild(PART_Label) as TextBlock;
 
-        // Ensure initial size state is applied after the template is fully ready.
-        // GoToState("Large") can be a no-op when the template starts in an unnamed state
-        // that visually matches Large. Force through an intermediate state first.
-        VisualStateManager.GoToState(this, "Small", false);
+        // Apply the size state as soon as the template is ready. The default (no-state)
+        // template layout is already the Large presentation (vertical, 32px icon, label
+        // visible), and "Large" is the first state in the SizeStates group, so a freshly
+        // templated button is effectively already "Large". Transition straight to the target
+        // state: for Large buttons this is a harmless no-op that keeps the correct default
+        // layout, while Medium/Small buttons apply their setters over the default. Previously
+        // this forced "Small" first, but Uno does not reliably revert the Small setters when
+        // going Small -> Large, which left Large buttons hosted in plain StackPanel/Grid stuck
+        // in a horizontal, small-icon layout. A deferred pass is kept as a backstop.
+        UpdateVisualState();
+        UpdateScreenTip();
         DispatcherQueue.TryEnqueue(() =>
         {
             UpdateVisualState();
@@ -387,7 +394,7 @@ public partial class RibbonButton : Microsoft.UI.Xaml.Controls.Button, IRibbonCo
     }
 
     /// <inheritdoc />
-    public FrameworkElement? CreateQuickAccessItem()
+    public virtual FrameworkElement? CreateQuickAccessItem()
     {
         var clone = new RibbonButton
         {

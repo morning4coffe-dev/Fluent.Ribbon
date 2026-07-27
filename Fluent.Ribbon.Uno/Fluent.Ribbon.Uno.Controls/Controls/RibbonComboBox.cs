@@ -3,8 +3,10 @@ namespace Fluent;
 /// <summary>
 /// Represents a ComboBox control within a Ribbon.
 /// </summary>
-public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider, IDropDownControl
+public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider, IDropDownControl, IQuickAccessItemProvider, IRibbonHeaderAlignable
 {
+    private FrameworkElement? _headerPresenter;
+
     #region Events
 
     /// <inheritdoc />
@@ -265,6 +267,7 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         base.DropDownClosed += OnNativeDropDownClosed;
         DropDownOpened += (_, _) => { };
         DropDownClosed += (_, _) => { };
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -275,8 +278,12 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
+        _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
         UpdateVisualState();
     }
+
+    /// <inheritdoc />
+    FrameworkElement? IRibbonHeaderAlignable.HeaderPresenter => _headerPresenter;
 
     #endregion
 
@@ -315,12 +322,89 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
 
     private void OnNativeDropDownOpened(object? sender, object e)
     {
+        PopupService.RegisterOpenDropDown(this);
         DropDownOpened?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnNativeDropDownClosed(object? sender, object e)
     {
+        PopupService.UnregisterOpenDropDown(this);
         DropDownClosed?.Invoke(this, EventArgs.Empty);
+    }
+
+    #endregion
+
+    #region IQuickAccessItemProvider
+
+    /// <inheritdoc />
+    public bool CanAddToQuickAccessToolBar
+    {
+        get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
+        set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
+    }
+
+    /// <inheritdoc />
+    public virtual FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonComboBox
+        {
+            Header = QuickAccessHelper.ClonePresentationValue(Header),
+            MediumIcon = MediumIcon,
+            IconGlyph = IconGlyph,
+            Size = RibbonControlSize.Small,
+            InputWidth = Math.Min(InputWidth, 120d),
+            IsEditable = IsEditable,
+            CanAddToQuickAccessToolBar = false,
+        };
+
+        if (ItemsSource is not null)
+        {
+            RibbonControl.Synchronize(
+                this,
+                ItemsControl.ItemsSourceProperty,
+                clone,
+                ItemsControl.ItemsSourceProperty);
+        }
+        else
+        {
+            foreach (var item in Items)
+            {
+                clone.Items.Add(CreateQuickAccessItemData(item));
+            }
+        }
+
+        RibbonControl.BindQuickAccessItem(this, clone);
+        BindOneWay(DisplayMemberPathProperty);
+        BindOneWay(SelectedValuePathProperty);
+        BindTwoWay(SelectedIndexProperty);
+        if (IsEditable)
+        {
+            BindTwoWay(TextProperty);
+        }
+
+        return clone;
+
+        void BindOneWay(DependencyProperty property) =>
+            RibbonControl.Synchronize(this, property, clone, property);
+
+        void BindTwoWay(DependencyProperty property)
+        {
+            RibbonControl.Synchronize(this, property, clone, property);
+            RibbonControl.Synchronize(clone, property, this, property);
+        }
+    }
+
+    private static object CreateQuickAccessItemData(object item)
+    {
+        var name = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(
+            item is ContentControl contentControl ? contentControl.Content : item);
+        return item is Control control
+            ? new ComboBoxItem
+            {
+                Content = name,
+                IsEnabled = control.IsEnabled,
+            }
+            : name;
     }
 
     #endregion

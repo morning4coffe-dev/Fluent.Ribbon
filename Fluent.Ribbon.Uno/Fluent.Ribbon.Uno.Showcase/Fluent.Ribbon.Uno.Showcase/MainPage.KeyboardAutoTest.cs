@@ -401,11 +401,19 @@ public sealed partial class MainPage
 
             InvokeKeyTipDismissal(service, "DismissForPointerInput");
             BackstageView.OnKeyTipBack();
+            var closingSurfaceRemainedVisible =
+                !BackstageView.AreAnimationsEnabled
+                || BackstageView.AdornerLayer?.Visibility == Visibility.Visible;
             await SettleAsync(1);
             if (BackstageView.IsOpen
+                || !closingSurfaceRemainedVisible
+                || BackstageView.AdornerLayer?.Visibility != Visibility.Collapsed
                 || !ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot), focusProbe))
             {
-                AutoLog("  FAIL KEYBOARD-FOCUS backstage did not close and restore focus");
+                AutoLog(
+                    "  FAIL KEYBOARD-FOCUS backstage did not animate closed and restore focus "
+                    + $"closingVisible={closingSurfaceRemainedVisible} "
+                    + $"visibility={BackstageView.AdornerLayer?.Visibility}");
                 return;
             }
 
@@ -680,9 +688,17 @@ public sealed partial class MainPage
 
     private static object? GetScreenTipAcceleratorKey(ScreenTip screenTip)
     {
-        var property = typeof(AutomationProperties)
-            .GetField("AcceleratorKeyProperty", BindingFlags.Public | BindingFlags.Static)
-            ?.GetValue(null) as DependencyProperty;
+        // WinRT projects AutomationProperties.AcceleratorKeyProperty as a static *property*,
+        // not a field (unlike WPF), so probe both before giving up — otherwise this always
+        // reads null and the assertion compares null against "F1".
+        var type = typeof(AutomationProperties);
+        var property = type
+            .GetProperty("AcceleratorKeyProperty", BindingFlags.Public | BindingFlags.Static)
+            ?.GetValue(null) as DependencyProperty
+            ?? type
+                .GetField("AcceleratorKeyProperty", BindingFlags.Public | BindingFlags.Static)
+                ?.GetValue(null) as DependencyProperty;
+
         return property is null ? null : screenTip.GetValue(property);
     }
 

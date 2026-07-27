@@ -15,6 +15,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
     private WinUIButton? button;
     private WinUIButton? dropDownButton;
+    private ButtonPointerClickFallback? primaryClickFallback;
 
     /// <summary>Gets the template part used for the primary action.</summary>
     protected FrameworkElement? PrimaryActionTarget => button;
@@ -166,6 +167,8 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
         if (button is not null)
         {
             button.Click -= OnButtonClick;
+            primaryClickFallback?.Dispose();
+            primaryClickFallback = null;
         }
 
         base.OnApplyTemplate();
@@ -176,6 +179,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
         if (button is not null)
         {
             button.Click += OnButtonClick;
+            primaryClickFallback = ButtonPointerClickFallback.Attach(button, InvokePrimaryAction);
             button.IsEnabled = IsButtonEnabled;
         }
 

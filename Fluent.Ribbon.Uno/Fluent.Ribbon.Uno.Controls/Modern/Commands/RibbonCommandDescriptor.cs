@@ -75,6 +75,14 @@ public sealed class RibbonCommandDescriptor
     public RibbonTabItem OwningTab { get; }
 
     /// <summary>
+    /// Gets whether the command and its owning tab are currently visible and enabled.
+    /// </summary>
+    public bool IsAvailable =>
+        OwningTab.Visibility == Visibility.Visible
+        && SourceControl is UIElement { Visibility: Visibility.Visible }
+        && (SourceControl is not Control control || control.IsEnabled);
+
+    /// <summary>
     /// Gets the location text shown alongside the command.
     /// </summary>
     public string Location => string.IsNullOrWhiteSpace(GroupHeader) ? TabHeader : $"{TabHeader} › {GroupHeader}";
@@ -102,7 +110,7 @@ public sealed class RibbonCommandDescriptor
     /// <returns><c>true</c> when the source control handled the invocation; otherwise <c>false</c>.</returns>
     public bool Invoke()
     {
-        return RibbonInvoker.Invoke(SourceControl);
+        return IsAvailable && RibbonInvoker.Invoke(SourceControl);
     }
 
     /// <inheritdoc/>

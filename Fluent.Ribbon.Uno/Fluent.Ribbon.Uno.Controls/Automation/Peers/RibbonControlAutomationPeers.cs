@@ -156,6 +156,15 @@ public partial class RibbonGroupBoxAutomationPeer : FrameworkElementAutomationPe
             }
         }
 
+        // The dialog launcher is a real, clickable control, so it must be reachable by assistive
+        // technology and keyboard users rather than only by pointing at the chevron.
+        if (OwnerGroup is { IsLauncherVisible: true, LauncherButton: { } launcher }
+            && launcher.Visibility == Visibility.Visible
+            && CreatePeerForElement(launcher) is { } launcherPeer)
+        {
+            peers.Add(launcherPeer);
+        }
+
         return peers;
     }
 

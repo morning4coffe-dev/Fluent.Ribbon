@@ -338,7 +338,9 @@ public partial class Ribbon : Control
         if (_tabControl is not null)
         {
             _tabControl.IsSimplified = IsSimplified;
-            _tabControl.ContentHeight = IsSimplified ? SimplifiedContentHeight : ContentHeight;
+            _tabControl.ContentHeight = IsMinimized
+                ? 0
+                : IsSimplified ? SimplifiedContentHeight : ContentHeight;
         }
 
         VisualStateManager.GoToState(this, IsSimplified ? "SimplifiedOn" : "SimplifiedOff", true);
@@ -463,6 +465,12 @@ public partial class Ribbon : Control
         if (IsSimplified)
         {
             UpdateSimplifiedState();
+        }
+
+        // Re-apply minimized state so the tab control picks it up once the template is available.
+        if (IsMinimized)
+        {
+            UpdateMinimizedState();
         }
 
         // Hook keyboard for Alt/F10 KeyTip navigation (XamlRoot is available now).
@@ -806,6 +814,23 @@ public partial class Ribbon : Control
 
     private void UpdateMinimizedState()
     {
+        // Keep the tab control in sync with the ribbon's minimized state. The template binding on
+        // RibbonTabControl.IsMinimized does not reliably propagate here, so push it explicitly (the
+        // same way UpdateSimplifiedState pushes IsSimplified). Without this the tab control still
+        // reports IsMinimized=false and immediately force-closes the transient tab drop-down that a
+        // KeyTip / header click opens while minimized.
+        if (_tabControl is not null)
+        {
+            _tabControl.IsMinimized = IsMinimized;
+
+            // Drive the content height from code rather than a VisualState setter: leaving the
+            // "Minimized" state did not restore the previous height, so the ribbon stayed collapsed
+            // after un-minimizing.
+            _tabControl.ContentHeight = IsMinimized
+                ? 0
+                : IsSimplified ? SimplifiedContentHeight : ContentHeight;
+        }
+
         VisualStateManager.GoToState(this, IsMinimized ? "Minimized" : "Normal", true);
     }
 

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Fluent;
+using Fluent.Automation.Peers;
 using Fluent.Modern;
 using Fluent.Modern.Automation;
 using Fluent.Modern.Commands;
@@ -17,8 +18,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.System;
 using RibbonInputModeHelper = Fluent.Modern.Helpers.RibbonInputMode;
 using RibbonInputDensity = Fluent.Modern.RibbonInputMode;
@@ -52,6 +53,8 @@ public sealed partial class MainPage
             AutoLog($"MODERN-GUARD FAIL: {string.Join(", ", failures)}");
         }
 
+        await RunModernTabReentryAutoTestAsync();
+
         AutoLog("MODERN-ICONS BEGIN");
         Popup? popup = null;
         try
@@ -66,20 +69,22 @@ public sealed partial class MainPage
             {
                 Header = "Path",
                 Size = RibbonControlSize.Large,
-                LargeIconSource = new PathIconSource { Data = CreateModernStarGeometry() },
-                SmallIconSource = new PathIconSource { Data = CreateModernStarGeometry() },
+                LargeIconSource = new PathIconSource { Data = CreateModernStarGeometry(32) },
+                SmallIconSource = new PathIconSource { Data = CreateModernStarGeometry(16) },
             });
             host.Children.Add(new ModernRibbonButton
             {
                 Header = "SVG",
                 Size = RibbonControlSize.Large,
-                LargeIconSource = new ImageIconSource
+                LargeIconSource = new BitmapIconSource
                 {
-                    ImageSource = new SvgImageSource(new Uri("ms-appx:///Fluent.Ribbon.Uno.Showcase/Assets/Modern/star.svg")),
+                    UriSource = new Uri("ms-appx:///Assets/Modern/star.png"),
+                    ShowAsMonochrome = true,
                 },
-                SmallIconSource = new ImageIconSource
+                SmallIconSource = new BitmapIconSource
                 {
-                    ImageSource = new SvgImageSource(new Uri("ms-appx:///Fluent.Ribbon.Uno.Showcase/Assets/Modern/star.svg")),
+                    UriSource = new Uri("ms-appx:///Assets/Modern/star.png"),
+                    ShowAsMonochrome = true,
                 },
             });
 
@@ -115,6 +120,8 @@ public sealed partial class MainPage
                 // ignore teardown errors
             }
         }
+        RunModernQuickAccessAutoTest();
+
         AutoLog("MODERN-SEARCH BEGIN");
         try
         {
@@ -122,6 +129,16 @@ public sealed partial class MainPage
             if (catalog.Commands.Count == 0)
             {
                 AutoLog("MODERN-SEARCH FAIL: empty catalog");
+                return;
+            }
+
+            if (catalog.Search("Build model", 8).All(
+                    command => !string.Equals(
+                        command.DisplayName,
+                        "Build model",
+                        StringComparison.Ordinal)))
+            {
+                AutoLog("MODERN-SEARCH FAIL: nested panel command was not indexed");
                 return;
             }
 
@@ -149,6 +166,7 @@ public sealed partial class MainPage
             AutoLog($"MODERN-SEARCH THREW: {ex.GetType().Name}: {ex.Message}");
         }
 
+        await RunModernSearchUiAutoTestAsync();
         RunModernCatalogMutationAutoTest();
 
         AutoLog("MODERN-ACCEL BEGIN");
@@ -225,11 +243,11 @@ public sealed partial class MainPage
             AutoLog($"MODERN-ACCEL THREW: {ex.GetType().Name}: {ex.Message}");
         }
 
-        RunModernAdaptiveAutoTest();
+        await RunModernAdaptiveAutoTestAsync();
         RunModernBuilderAutoTest();
         await RunModernCustomizationAutoTestAsync();
         RunModernVisualsAutoTest();
-        RunModernOnboardingAutoTest();
+        await RunModernOnboardingAutoTestAsync();
         RunModernRtlAccentAutoTest();
         RunModernA11yAutoTest();
     }
@@ -257,6 +275,34 @@ public sealed partial class MainPage
                 AutoLog("MODERN-SEARCH-DYNAMIC FAIL: group item mutation was not indexed");
                 return;
             }
+
+            var disabledCommand = new RibbonButton
+            {
+                Header = "Disabled dynamic command",
+                IsEnabled = false,
+            };
+            firstGroup.Items.Add(disabledCommand);
+            if (catalog.Search("Disabled dynamic command", 1).Count != 0)
+            {
+                AutoLog("MODERN-SEARCH-DYNAMIC FAIL: disabled command was searchable");
+                return;
+            }
+
+            disabledCommand.IsEnabled = true;
+            if (catalog.Search("Disabled dynamic command", 1).Count != 1)
+            {
+                AutoLog("MODERN-SEARCH-DYNAMIC FAIL: re-enabled command was not searchable");
+                return;
+            }
+
+            firstTab.Visibility = Visibility.Collapsed;
+            if (catalog.Search("Initial command", 1).Count != 0)
+            {
+                AutoLog("MODERN-SEARCH-DYNAMIC FAIL: hidden-tab command was searchable");
+                return;
+            }
+
+            firstTab.Visibility = Visibility.Visible;
 
             var addedGroup = new RibbonGroupBox { Header = "Dynamic group" };
             addedGroup.Items.Add(new RibbonButton { Header = "Dynamic group command" });
@@ -316,13 +362,160 @@ public sealed partial class MainPage
         }
     }
 
+    private void RunModernQuickAccessAutoTest()
+    {
+        AutoLog("MODERN-QAT BEGIN");
+
+        try
+        {
+            var checkBox = new RibbonCheckBox
+            {
+                Header = "Check",
+                IsChecked = true,
+            };
+            var checkClone = checkBox.CreateQuickAccessItem() as RibbonCheckBox;
+            if (checkClone is null || checkClone.IsChecked != true)
+            {
+                AutoLog("MODERN-QAT FAIL: checkbox clone was invalid");
+                return;
+            }
+
+            checkClone.IsChecked = false;
+            if (checkBox.IsChecked != false)
+            {
+                AutoLog("MODERN-QAT FAIL: checkbox state was not synchronized");
+                return;
+            }
+
+            var radioButton = new RibbonRadioButton
+            {
+                Header = "Radio",
+                IsChecked = false,
+                GroupName = "ModernQat",
+            };
+            var radioClone = radioButton.CreateQuickAccessItem() as RibbonRadioButton;
+            if (radioClone is null)
+            {
+                AutoLog("MODERN-QAT FAIL: radio clone was invalid");
+                return;
+            }
+
+            radioClone.IsChecked = true;
+            if (radioButton.IsChecked != true)
+            {
+                AutoLog("MODERN-QAT FAIL: radio state was not synchronized");
+                return;
+            }
+
+            var otherRadioButton = new RibbonRadioButton
+            {
+                Header = "Other radio",
+                GroupName = "OtherModernQat",
+            };
+            var otherRadioClone =
+                otherRadioButton.CreateQuickAccessItem() as RibbonRadioButton;
+            if (otherRadioClone is null)
+            {
+                AutoLog("MODERN-QAT FAIL: second radio clone was invalid");
+                return;
+            }
+
+            otherRadioClone.IsChecked = true;
+            if (radioButton.IsChecked != true || otherRadioButton.IsChecked != true)
+            {
+                AutoLog("MODERN-QAT FAIL: unrelated radio groups interfered");
+                return;
+            }
+
+            var textBox = new RibbonTextBox
+            {
+                Header = "Text",
+                Text = "Initial",
+            };
+            var textClone = textBox.CreateQuickAccessItem() as RibbonTextBox;
+            if (textClone is null || textClone.Text != "Initial")
+            {
+                AutoLog("MODERN-QAT FAIL: text clone was invalid");
+                return;
+            }
+
+            textClone.Text = "Updated";
+            if (textBox.Text != "Updated")
+            {
+                AutoLog("MODERN-QAT FAIL: text value was not synchronized");
+                return;
+            }
+
+            var comboBox = new RibbonComboBox
+            {
+                Header = "Combo",
+                SelectedIndex = 1,
+            };
+            comboBox.Items.Add("One");
+            comboBox.Items.Add("Two");
+            var comboClone = comboBox.CreateQuickAccessItem() as RibbonComboBox;
+            if (comboClone is null
+                || comboClone.Items.Count != 2
+                || comboClone.SelectedIndex != 1)
+            {
+                AutoLog("MODERN-QAT FAIL: combo clone was invalid");
+                return;
+            }
+
+            comboClone.SelectedIndex = 0;
+            if (comboBox.SelectedIndex != 0)
+            {
+                AutoLog("MODERN-QAT FAIL: combo selection was not synchronized");
+                return;
+            }
+
+            var iconSource = new FontIconSource { Glyph = "\uE734" };
+            var modernButton = new ModernRibbonButton
+            {
+                Header = "Modern",
+                SmallIconSource = iconSource,
+            };
+            var modernClone = modernButton.CreateQuickAccessItem() as ModernRibbonButton;
+            if (modernClone is null
+                || !ReferenceEquals(modernClone.SmallIconSource, iconSource))
+            {
+                AutoLog("MODERN-QAT FAIL: modern IconSource clone was not preserved");
+                return;
+            }
+
+            var ribbon = new Ribbon();
+            ribbon.AddToQuickAccessToolBar((IQuickAccessItemProvider)checkBox);
+            ribbon.AddToQuickAccessToolBar((IQuickAccessItemProvider)radioButton);
+            ribbon.AddToQuickAccessToolBar((IQuickAccessItemProvider)textBox);
+            ribbon.AddToQuickAccessToolBar((IQuickAccessItemProvider)comboBox);
+            ribbon.AddToQuickAccessToolBar((IQuickAccessItemProvider)modernButton);
+            if (ribbon.QuickAccessToolBarItems.Count != 5)
+            {
+                AutoLog(
+                    $"MODERN-QAT FAIL: expected 5 providers, found "
+                    + ribbon.QuickAccessToolBarItems.Count);
+                return;
+            }
+
+            AutoLog("MODERN-QAT PASS");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"MODERN-QAT THREW: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     private void RunModernA11yAutoTest()
     {
         AutoLog("MODERN-A11Y BEGIN");
 
         try
         {
-            var panel = new StackPanel();
+            var panel = new StackPanel
+            {
+                XYFocusKeyboardNavigation = XYFocusKeyboardNavigationMode.Disabled,
+                XYFocusUpNavigationStrategy = XYFocusNavigationStrategy.RectilinearDistance,
+            };
             RibbonFocus.SetEnableXYFocus(panel, true);
             if (panel.XYFocusKeyboardNavigation != XYFocusKeyboardNavigationMode.Enabled)
             {
@@ -331,9 +524,51 @@ public sealed partial class MainPage
             }
 
             RibbonFocus.SetEnableXYFocus(panel, false);
-            if (panel.XYFocusKeyboardNavigation != XYFocusKeyboardNavigationMode.Auto)
+            if (panel.XYFocusKeyboardNavigation != XYFocusKeyboardNavigationMode.Disabled
+                || panel.XYFocusUpNavigationStrategy
+                   != XYFocusNavigationStrategy.RectilinearDistance)
             {
-                AutoLog($"MODERN-A11Y FAIL: expected XYFocus Auto, found {panel.XYFocusKeyboardNavigation}");
+                AutoLog(
+                    $"MODERN-A11Y FAIL: original XYFocus settings were not restored "
+                    + $"({panel.XYFocusKeyboardNavigation}, {panel.XYFocusUpNavigationStrategy})");
+                return;
+            }
+
+            var modernTab = MainRibbon.Tabs.FirstOrDefault(
+                candidate => AutomationProperties.GetAutomationId(candidate) == "ModernTab");
+            var requiredFlyoutPanels = new[]
+            {
+                "ModernAcceleratorPanel",
+                "ModernAdaptivePanel",
+                "ModernRtlAccentPanel",
+                "ModernAccessibilityPanel",
+                "ModernVisualsPanel",
+                "ModernBuilderPanel",
+                "ModernCustomizationPanel",
+                "ModernOnboardingPanel",
+            };
+            var accessibleFlyoutPanels = modernTab?.Groups
+                .SelectMany(group => group.Items)
+                .OfType<FrameworkElement>()
+                .Where(element =>
+                    AutomationProperties.GetAccessibilityView(element)
+                    == AccessibilityView.Control)
+                .Select(AutomationProperties.GetAutomationId)
+                .ToHashSet(StringComparer.Ordinal);
+            if (accessibleFlyoutPanels is null
+                || requiredFlyoutPanels.Any(id => !accessibleFlyoutPanels.Contains(id)))
+            {
+                AutoLog("MODERN-A11Y FAIL: a modern flyout panel was absent from the control view");
+                return;
+            }
+
+            if (FrameworkElementAutomationPeer.CreatePeerForElement(MainRibbon.TabControl)
+                is not RibbonTabControlAutomationPeer tabControlPeer
+                || tabControlPeer.GetChildren()?.Any(
+                    peer => peer.GetAutomationId() == "ModernTab"
+                            || peer.GetName() == "Modern ✨ (beyond WPF)") != true)
+            {
+                AutoLog("MODERN-A11Y FAIL: modern tab was absent from the automation tree");
                 return;
             }
 
@@ -395,6 +630,121 @@ public sealed partial class MainPage
         catch (Exception ex)
         {
             AutoLog($"MODERN-A11Y THREW: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private async Task RunModernTabReentryAutoTestAsync()
+    {
+        AutoLog("MODERN-REENTRY BEGIN");
+
+        try
+        {
+            var modernTab = MainRibbon.Tabs.FirstOrDefault(
+                tab => AutomationProperties.GetAutomationId(tab) == "ModernTab");
+            var otherTab = MainRibbon.Tabs.FirstOrDefault(tab => !ReferenceEquals(tab, modernTab));
+            if (modernTab is null || otherTab is null)
+            {
+                AutoLog("MODERN-REENTRY FAIL: required tabs were not available");
+                return;
+            }
+
+            MainRibbon.SelectedTab = modernTab;
+            await SettleAsync(8, 50);
+            var states = modernTab.Groups.Select(group => group.State).ToArray();
+
+            MainRibbon.SelectedTab = otherTab;
+            await SettleAsync(2, 50);
+            MainRibbon.SelectedTab = modernTab;
+            await SettleAsync(4, 50);
+
+            if (!ReferenceEquals(MainRibbon.SelectedTab, modernTab)
+                || !states.SequenceEqual(modernTab.Groups.Select(group => group.State)))
+            {
+                AutoLog("MODERN-REENTRY FAIL: cached group sizing was not preserved");
+                return;
+            }
+
+            AutoLog("MODERN-REENTRY PASS");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"MODERN-REENTRY THREW: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private async Task RunModernSearchUiAutoTestAsync()
+    {
+        AutoLog("MODERN-SEARCH-UI BEGIN");
+
+        Popup? popup = null;
+        try
+        {
+            var searchBox = new RibbonSearchBox
+            {
+                Ribbon = MainRibbon,
+                Width = 320,
+            };
+            popup = new Popup
+            {
+                Child = searchBox,
+            };
+
+            if (Content is not Panel rootPanel)
+            {
+                AutoLog("MODERN-SEARCH-UI FAIL: root content is not a Panel");
+                return;
+            }
+
+            rootPanel.Children.Add(popup);
+            popup.IsOpen = true;
+            await SettleAsync(2);
+
+            searchBox.ApplyTemplate();
+            if (FindDescendant<AutoSuggestBox>(searchBox) is not { } autoSuggestBox)
+            {
+                AutoLog("MODERN-SEARCH-UI FAIL: AutoSuggestBox template part was not realized");
+                return;
+            }
+
+            autoSuggestBox.Text = "Save";
+            await SettleAsync(2);
+            if (autoSuggestBox.ItemsSource is null || !autoSuggestBox.IsSuggestionListOpen)
+            {
+                AutoLog("MODERN-SEARCH-UI FAIL: matching suggestions did not open");
+                return;
+            }
+
+            autoSuggestBox.Text = string.Empty;
+            await SettleAsync(2);
+            if (autoSuggestBox.ItemsSource is not null || autoSuggestBox.IsSuggestionListOpen)
+            {
+                AutoLog("MODERN-SEARCH-UI FAIL: clearing text left stale suggestions open");
+                return;
+            }
+
+            AutoLog("MODERN-SEARCH-UI PASS");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"MODERN-SEARCH-UI THREW: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                if (popup is not null)
+                {
+                    popup.IsOpen = false;
+                    if (Content is Panel rootPanel)
+                    {
+                        rootPanel.Children.Remove(popup);
+                    }
+                }
+            }
+            catch
+            {
+                // ignore teardown errors
+            }
         }
     }
 
@@ -498,7 +848,7 @@ public sealed partial class MainPage
         }
     }
 
-    private void RunModernAdaptiveAutoTest()
+    private async Task RunModernAdaptiveAutoTestAsync()
     {
         AutoLog("MODERN-ADAPTIVE BEGIN");
         try
@@ -527,15 +877,22 @@ public sealed partial class MainPage
             MainRibbon.IsSimplified = false;
             MainRibbon.IsMinimized = false;
 
-            var host = new Border();
-            RibbonInputModeHelper.SetInputMode(host, RibbonInputDensity.Touch);
-            if (!RibbonInputModeHelper.IsTouchDensityApplied(host))
+            RibbonInputModeHelper.SetInputMode(MainRibbon, RibbonInputDensity.Touch);
+            await SettleAsync(2, 75);
+            if (!RibbonInputModeHelper.IsTouchDensityApplied(MainRibbon)
+                || RibbonInputModeHelper.GetInputMode(MainRibbon) != RibbonInputDensity.Touch)
             {
-                AutoLog("MODERN-ADAPTIVE FAIL: touch density dictionary was not applied");
+                AutoLog("MODERN-ADAPTIVE FAIL: touch input preference was not applied");
                 return;
             }
 
-            if (!TryFindTouchResource(host, RibbonInputModeHelper.TouchTargetMinHeightKey, out var touchTarget)
+            var touchDictionary = new ResourceDictionary
+            {
+                Source = new Uri(RibbonInputModeHelper.TouchDensityDictionaryUri),
+            };
+            if (!touchDictionary.TryGetValue(
+                    RibbonInputModeHelper.TouchTargetMinHeightKey,
+                    out var touchTarget)
                 || touchTarget is not double touchTargetMinHeight
                 || touchTargetMinHeight < 44)
             {
@@ -543,10 +900,12 @@ public sealed partial class MainPage
                 return;
             }
 
-            RibbonInputModeHelper.SetInputMode(host, RibbonInputDensity.Mouse);
-            if (RibbonInputModeHelper.IsTouchDensityApplied(host))
+            RibbonInputModeHelper.SetInputMode(MainRibbon, RibbonInputDensity.Mouse);
+            await SettleAsync(2, 75);
+            if (RibbonInputModeHelper.IsTouchDensityApplied(MainRibbon)
+                || RibbonInputModeHelper.GetInputMode(MainRibbon) != RibbonInputDensity.Mouse)
             {
-                AutoLog("MODERN-ADAPTIVE FAIL: touch density dictionary was not removed");
+                AutoLog("MODERN-ADAPTIVE FAIL: mouse input preference was not restored");
                 return;
             }
 
@@ -794,9 +1153,23 @@ public sealed partial class MainPage
                 return;
             }
 
-            var animationHost = new StackPanel();
+            var animationHost = new Border();
             RibbonAnimations.SetEnableImplicitTransitions(animationHost, true);
+            if (!RibbonAnimations.GetEnableImplicitTransitions(animationHost))
+            {
+                AutoLog("MODERN-VISUALS FAIL: implicit transition state was not retained");
+                return;
+            }
+
+            var animationVisual = ElementCompositionPreview.GetElementVisual(animationHost);
+            animationVisual.Offset = new System.Numerics.Vector3(12f, 0f, 0f);
+            animationVisual.Opacity = 0.72f;
             RibbonAnimations.SetEnableImplicitTransitions(animationHost, false);
+            if (RibbonAnimations.GetEnableImplicitTransitions(animationHost))
+            {
+                AutoLog("MODERN-VISUALS FAIL: implicit transition state was not cleared");
+                return;
+            }
 
             var source = new Border { Width = 24, Height = 24 };
             var target = new Border { Width = 24, Height = 24 };
@@ -819,7 +1192,7 @@ public sealed partial class MainPage
         }
     }
 
-    private void RunModernOnboardingAutoTest()
+    private async Task RunModernOnboardingAutoTestAsync()
     {
         AutoLog("MODERN-ONBOARDING BEGIN");
 
@@ -838,6 +1211,7 @@ public sealed partial class MainPage
 
             infoBarHost = new RibbonInfoBarHost();
             rootPanel.Children.Add(infoBarHost);
+            infoBarHost.ApplyTemplate();
             infoBarHost.Show(InfoBarSeverity.Warning, "T", "M");
 
             if (!infoBarHost.IsOpen
@@ -849,7 +1223,28 @@ public sealed partial class MainPage
                 return;
             }
 
-            infoBarHost.IsOpen = false;
+            if (FindDescendant<InfoBar>(infoBarHost) is not { } innerInfoBar)
+            {
+                AutoLog("MODERN-ONBOARDING FAIL: InfoBar template part was not realized");
+                return;
+            }
+
+            innerInfoBar.IsOpen = false;
+            await SettleAsync(2, 75);
+            if (infoBarHost.IsOpen)
+            {
+                AutoLog("MODERN-ONBOARDING FAIL: InfoBar close state did not synchronize");
+                return;
+            }
+
+            infoBarHost.Show(InfoBarSeverity.Success, "Again", "Reopened");
+            if (!infoBarHost.IsOpen
+                || !innerInfoBar.IsOpen
+                || infoBarHost.Title != "Again")
+            {
+                AutoLog("MODERN-ONBOARDING FAIL: InfoBar did not reopen");
+                return;
+            }
 
             coachMark = RibbonCoachMark.Show(MainRibbon, "t", "m");
             if (coachMark is null)
@@ -895,7 +1290,10 @@ public sealed partial class MainPage
 
         try
         {
-            var container = new Grid();
+            var container = new Grid
+            {
+                FlowDirection = FlowDirection.RightToLeft,
+            };
             container.Children.Add(new ModernRibbonButton
             {
                 Header = "RTL",
@@ -911,9 +1309,9 @@ public sealed partial class MainPage
             }
 
             RibbonFlow.SetIsRightToLeft(container, false);
-            if (container.FlowDirection != FlowDirection.LeftToRight)
+            if (container.FlowDirection != FlowDirection.RightToLeft)
             {
-                AutoLog($"MODERN-RTL-ACCENT FAIL: expected LeftToRight, found {container.FlowDirection}");
+                AutoLog($"MODERN-RTL-ACCENT FAIL: original flow was not restored ({container.FlowDirection})");
                 return;
             }
 

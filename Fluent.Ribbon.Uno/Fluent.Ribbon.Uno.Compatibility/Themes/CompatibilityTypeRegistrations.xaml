@@ -1,0 +1,25 @@
+<!--
+  This dictionary exists solely so the XAML toolchain emits type metadata (an
+  IXamlMetadataProvider) for the WPF-compatibility control aliases that live in this
+  assembly. Without a metadata provider, instantiating one of these aliases purely from
+  C# (with no XAML usage anywhere in the consuming app) makes WinUI fall back to the
+  nearest native base type when resolving the control's default style, which then throws
+  "Cannot apply a Style with TargetType 'Fluent.RibbonX' to an object of type '...'".
+
+  The styles are keyed (never implicit) and contain no setters, so they only register the
+  types and never alter the appearance or the inherited Ribbon* default style/template.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fluent="using:Fluent">
+
+  <Style x:Key="Fluent.Compatibility.GalleryItemRegistration"
+         TargetType="fluent:GalleryItem" />
+  <Style x:Key="Fluent.Compatibility.SpinnerRegistration"
+         TargetType="fluent:Spinner" />
+  <Style x:Key="Fluent.Compatibility.SplitButtonRegistration"
+         TargetType="fluent:SplitButton" />
+  <Style x:Key="Fluent.Compatibility.StatusBarRegistration"
+         TargetType="fluent:StatusBar" />
+
+</ResourceDictionary>

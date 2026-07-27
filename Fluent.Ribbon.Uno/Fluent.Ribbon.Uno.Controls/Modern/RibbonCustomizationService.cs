@@ -272,6 +272,24 @@ public static class RibbonCustomizationService
         }
         catch (Exception exception)
         {
+            issues.Add(Warning("LocalSettingsSaveFailed", "LocalSettings persistence failed; LocalApplicationData will be attempted.", exception));
+        }
+
+        try
+        {
+            var path = GetFallbackStoragePath(key);
+            var directory = System.IO.Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                throw new InvalidOperationException("Ribbon customization storage directory is unavailable.");
+            }
+
+            System.IO.Directory.CreateDirectory(directory);
+            await System.IO.File.WriteAllTextAsync(path, serialized.Value);
+            return new RibbonCustomizationResult<string>("LocalApplicationData", issues);
+        }
+        catch (Exception exception)
+        {
             issues.Add(Error("StorageSaveFailed", "No durable ribbon customization storage backend succeeded.", exception));
             return new RibbonCustomizationResult<string>(null, issues);
         }
@@ -305,15 +323,33 @@ public static class RibbonCustomizationService
             var settings = ApplicationData.Current.LocalSettings;
             if (!settings.Values.TryGetValue($"{StorageContainerName}.{key}", out var value))
             {
-                return new RibbonCustomizationResult<RibbonLayout?>(null, issues);
+                issues.Add(Warning("LocalSettingsValueMissing", "LocalSettings did not contain the requested layout; LocalApplicationData will be attempted."));
             }
-
-            if (value is not string json)
+            else if (value is not string json)
             {
                 issues.Add(Error("InvalidStoredValue", "The stored ribbon customization value is not JSON text."));
                 return new RibbonCustomizationResult<RibbonLayout?>(null, issues);
             }
+            else
+            {
+                var deserialized = DeserializeResult(json);
+                return new RibbonCustomizationResult<RibbonLayout?>(deserialized.Value, issues.Concat(deserialized.Issues));
+            }
+        }
+        catch (Exception exception)
+        {
+            issues.Add(Warning("LocalSettingsLoadFailed", "LocalSettings load failed; LocalApplicationData will be attempted.", exception));
+        }
 
+        try
+        {
+            var path = GetFallbackStoragePath(key);
+            if (!System.IO.File.Exists(path))
+            {
+                return new RibbonCustomizationResult<RibbonLayout?>(null, issues);
+            }
+
+            var json = await System.IO.File.ReadAllTextAsync(path);
             var deserialized = DeserializeResult(json);
             return new RibbonCustomizationResult<RibbonLayout?>(deserialized.Value, issues.Concat(deserialized.Issues));
         }
@@ -353,8 +389,28 @@ public static class RibbonCustomizationService
         }
         catch (Exception exception)
         {
+            issues.Add(Warning("LocalSettingsClearFailed", "LocalSettings clear failed; LocalApplicationData will still be cleared.", exception));
+        }
+
+        try
+        {
+            var path = GetFallbackStoragePath(key);
+            if (System.IO.File.Exists(path))
+            {
+                System.IO.File.Delete(path);
+                clearedBackend = true;
+            }
+            else if (!clearedBackend)
+            {
+                issues.Add(Error(
+                    "StorageClearFailed",
+                    "Primary storage backends could not be cleared and no fallback file existed."));
+            }
+        }
+        catch (Exception exception)
+        {
             issues.Add(clearedBackend
-                ? Warning("LocalSettingsClearFailed", "LocalSettings clear failed after another backend was cleared.", exception)
+                ? Warning("LocalApplicationDataClearFailed", "LocalApplicationData clear failed after another backend was cleared.", exception)
                 : Error("StorageClearFailed", "No durable ribbon customization storage backend could be cleared.", exception));
         }
 
@@ -734,9 +790,40 @@ public static class RibbonCustomizationService
 
     private static string GetFileName(string key)
     {
+        return $"{SanitizePathSegment(key)}.json";
+    }
+
+    private static string SanitizePathSegment(string value)
+    {
         var invalid = System.IO.Path.GetInvalidFileNameChars();
-        var safe = new string(key.Select(character => invalid.Contains(character) ? '_' : character).ToArray());
-        return $"{safe}.json";
+        return new string(
+            value.Select(character => invalid.Contains(character) ? '_' : character)
+                .ToArray());
+    }
+
+    private static string GetFallbackStoragePath(string key)
+    {
+        var localApplicationData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localApplicationData))
+        {
+            throw new InvalidOperationException("Local application data storage is unavailable.");
+        }
+
+        var applicationName =
+            System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name
+            ?? AppDomain.CurrentDomain.FriendlyName;
+        if (string.IsNullOrWhiteSpace(applicationName))
+        {
+            applicationName = "Application";
+        }
+
+        return System.IO.Path.Combine(
+            localApplicationData,
+            "Fluent.Ribbon.Uno",
+            "RibbonCustomization",
+            SanitizePathSegment(applicationName),
+            GetFileName(key));
     }
 
     private static bool HasErrors(IEnumerable<RibbonCustomizationIssue> issues)

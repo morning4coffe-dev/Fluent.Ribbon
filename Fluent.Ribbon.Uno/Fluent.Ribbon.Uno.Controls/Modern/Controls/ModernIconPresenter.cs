@@ -6,12 +6,13 @@ using Fluent;
 /// <para><b>Modern extension</b> — presents a WinUI <see cref="IconSource"/> at ribbon icon sizes.</para>
 /// </summary>
 [ModernExtension]
-[TemplatePart(Name = PART_IconSourceElement, Type = typeof(IconSourceElement))]
+[TemplatePart(Name = PART_IconHost, Type = typeof(ContentPresenter))]
 public partial class ModernIconPresenter : Control
 {
-    private const string PART_IconSourceElement = "PART_IconSourceElement";
+    private const string PART_IconHost = "PART_IconHost";
 
-    private IconSourceElement? _iconSourceElement;
+    private ContentPresenter? _iconHost;
+    private IconSource? _appliedSource;
 
     #region Dependency Properties
 
@@ -163,7 +164,8 @@ public partial class ModernIconPresenter : Control
     {
         base.OnApplyTemplate();
 
-        _iconSourceElement = GetTemplateChild(PART_IconSourceElement) as IconSourceElement;
+        _iconHost = GetTemplateChild(PART_IconHost) as ContentPresenter;
+        _appliedSource = null;
         Update();
     }
 
@@ -196,20 +198,173 @@ public partial class ModernIconPresenter : Control
         Width = size;
         Height = size;
 
-        if (_iconSourceElement is not null)
-        {
-            if (Source is not null)
-            {
-                _iconSourceElement.IconSource = Source;
-            }
-            else
-            {
-                _iconSourceElement.ClearValue(IconSourceElement.IconSourceProperty);
-            }
+        ApplyIconSource();
 
-            _iconSourceElement.Width = size;
-            _iconSourceElement.Height = size;
+        if (_iconHost?.Content is IconSourceElement icon)
+        {
+            icon.Width = size;
+            icon.Height = size;
         }
+    }
+
+    private void ApplyIconSource()
+    {
+        if (_iconHost is null)
+        {
+            return;
+        }
+
+        // Host a freshly built IconSourceElement (with a private, set-once IconSource clone) inside a
+        // plain ContentPresenter, rather than mutating a single templated IconSourceElement.
+        //
+        // Two independent hazards are avoided:
+        //  * Live mutation — RibbonGroupBox rescales its buttons from OnStateChanged and from
+        //    MeasureOverride, flowing a new CurrentIconSource through here mid-pass. Reassigning
+        //    IconSource on an already-realized IconSourceElement during layout corrupts its native
+        //    state, and its next measure fails fatally with a stowed ArgumentException ("Value does
+        //    not fall within the expected range", 0xC000027B). Building a new element and swapping it
+        //    as ContentPresenter content is a safe, deferred content change.
+        //  * Shared instance — a QuickAccessToolBar clone keeps the original's icon sources (see
+        //    ModernRibbonButton.CreateQuickAccessItem) and the compatibility runtime clones controls
+        //    into the QAT, so the same IconSource is realized under two parents at once; WinUI then
+        //    throws "already the child of another element". Cloning gives every host its own element.
+        if (ReferenceEquals(_appliedSource, Source))
+        {
+            return;
+        }
+
+        try
+        {
+            _iconHost.Content = Source is null
+                ? null
+                : new IconSourceElement { IconSource = CloneIconSource(Source) };
+
+            _appliedSource = Source;
+        }
+        catch (Exception)
+        {
+            // A single unrenderable icon must never bring down the app; keep the previous element.
+        }
+    }
+
+    private static IconSource CloneIconSource(IconSource source)
+    {
+        switch (source)
+        {
+            case FontIconSource font:
+                var fontClone = new FontIconSource
+                {
+                    Glyph = font.Glyph,
+                    FontStyle = font.FontStyle,
+                    FontWeight = font.FontWeight,
+                    IsTextScaleFactorEnabled = font.IsTextScaleFactorEnabled,
+                    MirroredWhenRightToLeft = font.MirroredWhenRightToLeft,
+                };
+
+                if (font.FontFamily is not null)
+                {
+                    fontClone.FontFamily = font.FontFamily;
+                }
+
+                if (font.FontSize > 0)
+                {
+                    fontClone.FontSize = font.FontSize;
+                }
+
+                if (font.Foreground is not null)
+                {
+                    fontClone.Foreground = font.Foreground;
+                }
+
+                return fontClone;
+
+            case SymbolIconSource symbol:
+                var symbolClone = new SymbolIconSource { Symbol = symbol.Symbol };
+                if (symbol.Foreground is not null)
+                {
+                    symbolClone.Foreground = symbol.Foreground;
+                }
+
+                return symbolClone;
+
+            case PathIconSource path:
+                var pathClone = new PathIconSource { Data = path.Data };
+                if (path.Foreground is not null)
+                {
+                    pathClone.Foreground = path.Foreground;
+                }
+
+                return pathClone;
+
+            case BitmapIconSource bitmap:
+                var bitmapClone = new BitmapIconSource
+                {
+                    UriSource = bitmap.UriSource,
+                    ShowAsMonochrome = bitmap.ShowAsMonochrome,
+                };
+
+                if (bitmap.Foreground is not null)
+                {
+                    bitmapClone.Foreground = bitmap.Foreground;
+                }
+
+                return bitmapClone;
+
+            case ImageIconSource image:
+                var imageClone = new ImageIconSource { ImageSource = image.ImageSource };
+                if (image.Foreground is not null)
+                {
+                    imageClone.Foreground = image.Foreground;
+                }
+
+                return imageClone;
+
+            default:
+                return CloneUnknownIconSource(source);
+        }
+    }
+
+    // Any IconSource type not covered above (e.g. AnimatedIconSource or a custom subclass) must still
+    // get a private per-host instance: returning the shared original lets the same source be realized
+    // under two parents (original + QuickAccessToolBar clone), which WinUI rejects with "already the
+    // child of another element". Shallow-copy every readable/writable public property onto a fresh
+    // instance of the same runtime type; if that is not possible, fall back to an empty icon rather
+    // than leaking the shared instance.
+    private static IconSource CloneUnknownIconSource(IconSource source)
+    {
+        try
+        {
+            if (Activator.CreateInstance(source.GetType()) is IconSource clone)
+            {
+                foreach (var property in source.GetType().GetProperties(
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                {
+                    if (!property.CanRead
+                        || !property.CanWrite
+                        || property.GetIndexParameters().Length > 0)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        property.SetValue(clone, property.GetValue(source));
+                    }
+                    catch (Exception)
+                    {
+                        // Skip properties that reject a direct copy; the clone stays usable.
+                    }
+                }
+
+                return clone;
+            }
+        }
+        catch (Exception)
+        {
+            // Fall through to the empty-icon fallback below.
+        }
+
+        return new FontIconSource { Glyph = string.Empty };
     }
 
     #endregion

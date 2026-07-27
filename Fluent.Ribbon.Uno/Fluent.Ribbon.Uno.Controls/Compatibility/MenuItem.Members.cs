@@ -132,10 +132,12 @@ public partial class MenuItem
         if ((bool)args.NewValue)
         {
             item.ShowCompatibilitySubmenu();
+            PopupService.RegisterOpenDropDown(item);
             item.DropDownOpened?.Invoke(item, EventArgs.Empty);
         }
         else
         {
+            PopupService.UnregisterOpenDropDown(item);
             item.HideCompatibilitySubmenu();
             item.DropDownClosed?.Invoke(item, EventArgs.Empty);
         }

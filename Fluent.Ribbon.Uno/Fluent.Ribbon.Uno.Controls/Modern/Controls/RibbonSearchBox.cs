@@ -203,6 +203,14 @@ public partial class RibbonSearchBox : Control
     private void OnGotFocus(object sender, RoutedEventArgs e)
     {
         EnsureCatalog();
+
+        // GotFocus bubbles from the inner AutoSuggestBox too; forwarding focus again from there
+        // would fight the AutoSuggestBox's own internal focus handling.
+        if (!ReferenceEquals(e.OriginalSource, this))
+        {
+            return;
+        }
+
         _autoSuggestBox?.Focus(FocusState.Programmatic);
     }
 
@@ -216,18 +224,21 @@ public partial class RibbonSearchBox : Control
         if (string.IsNullOrWhiteSpace(sender.Text))
         {
             sender.ItemsSource = null;
+            sender.IsSuggestionListOpen = false;
             return;
         }
 
         EnsureCatalog();
-        sender.ItemsSource = _catalog?.Search(sender.Text, MaxResults) ?? Array.Empty<RibbonCommandDescriptor>();
+        var suggestions = _catalog?.Search(sender.Text, MaxResults)
+                          ?? Array.Empty<RibbonCommandDescriptor>();
+        sender.ItemsSource = suggestions;
+        sender.IsSuggestionListOpen = suggestions.Count > 0;
     }
 
     private void OnSuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
     {
         if (args.SelectedItem is RibbonCommandDescriptor descriptor)
         {
-            Execute(descriptor);
             sender.Text = descriptor.DisplayName;
         }
     }
@@ -250,11 +261,17 @@ public partial class RibbonSearchBox : Control
 
     private void Execute(RibbonCommandDescriptor descriptor)
     {
+        if (!descriptor.IsAvailable)
+        {
+            return;
+        }
+
         descriptor.Navigate();
         descriptor.Invoke();
         if (_autoSuggestBox is not null)
         {
             _autoSuggestBox.ItemsSource = null;
+            _autoSuggestBox.IsSuggestionListOpen = false;
         }
     }
 

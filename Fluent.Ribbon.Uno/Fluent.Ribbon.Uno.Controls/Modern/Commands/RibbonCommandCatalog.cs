@@ -93,7 +93,7 @@ public sealed class RibbonCommandCatalog : IDisposable
         var normalizedQuery = query.Trim();
         return _commands
             .Select((descriptor, index) => new { Descriptor = descriptor, Index = index, Rank = GetRank(descriptor, normalizedQuery) })
-            .Where(item => item.Rank < int.MaxValue)
+            .Where(item => item.Descriptor.IsAvailable && item.Rank < int.MaxValue)
             .OrderBy(item => item.Rank)
             .ThenBy(item => item.Index)
             .Take(maxResults)
@@ -277,6 +277,7 @@ public sealed class RibbonCommandCatalog : IDisposable
             RibbonDropDownButton dropDownButton =>
                 dropDownButton.Items.OfType<UIElement>(),
             RibbonMenuItem menuItem => menuItem.Items,
+            Panel panel => panel.Children.OfType<UIElement>(),
             _ => Array.Empty<UIElement>()
         };
     }

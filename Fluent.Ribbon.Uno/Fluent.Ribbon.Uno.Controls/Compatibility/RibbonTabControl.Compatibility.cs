@@ -360,10 +360,12 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
                     ?? tabControl.GetFirstVisibleItem();
             }
 
+            PopupService.RegisterOpenDropDown(tabControl);
             tabControl.DropDownOpened?.Invoke(tabControl, EventArgs.Empty);
         }
         else
         {
+            PopupService.UnregisterOpenDropDown(tabControl);
             tabControl.DropDownClosed?.Invoke(tabControl, EventArgs.Empty);
         }
     }

@@ -29,7 +29,6 @@ public partial class InRibbonGallery :
     private readonly Dictionary<RibbonGalleryItem, long> _selectionTokens = new();
     private readonly HashSet<UIElement> _hookedItems = new();
     private readonly List<(string Group, FrameworkElement? Header, UIElement Panel)> _popupGroupEntries = new();
-    private StackPanel? _popupGroupedHost;
     private StackPanel? _popupFilterBar;
     private ResizeableContentControl? _popupResizeHost;
     private Border? _popupBorder;
@@ -40,6 +39,7 @@ public partial class InRibbonGallery :
     private InRibbonGallery? _quickAccessClone;
     private InRibbonGallery? _quickAccessOwner;
     private List<UIElement>? _quickAccessTransferredItems;
+    private UniformItemsPanel? _borrowedOwnerPanel;
 
     /// <summary>Identifies the WPF-compatible size-definition property.</summary>
     public static readonly DependencyProperty SizeDefinitionProperty =
@@ -511,12 +511,9 @@ public partial class InRibbonGallery :
             CanCollapseToButton = true,
             IsCollapsed = true,
             Size = RibbonControlSize.Small,
-            Width = 22,
-            Height = 22,
-            MinWidth = 22,
-            MaxWidth = 22,
+            MinHeight = 24,
             FontSize = 16,
-            Padding = new Thickness(0),
+            Padding = new Thickness(4, 2, 4, 2),
             _quickAccessOwner = this,
         };
         AutomationProperties.SetName(
@@ -588,6 +585,10 @@ public partial class InRibbonGallery :
         {
             SetIsCollapsedInternally(current != RibbonControlSize.Large);
         }
+
+        // The collapsed-button presentation depends on Size (Small uses the compact
+        // horizontal icon+chevron button), so refresh the visual state when Size changes.
+        UpdateVisualState();
 
         UpdateGalleryLayout();
     }
@@ -726,7 +727,7 @@ public partial class InRibbonGallery :
         Scaled?.Invoke(this, EventArgs.Empty);
         ApplyCurrentFilter();
 
-        if (_isPopupOpen)
+        if (_isPopupOpen && !_suppressPopupRebuild)
         {
             PreparePopupContent();
         }
@@ -880,10 +881,13 @@ public partial class InRibbonGallery :
             }
 
             gallery.IsSnapped = true;
+            PopupService.RegisterOpenDropDown(gallery);
             gallery.DropDownOpened?.Invoke(gallery, EventArgs.Empty);
         }
         else
         {
+            PopupService.UnregisterOpenDropDown(gallery);
+
             if (gallery._popup?.IsOpen == true)
             {
                 gallery._popup.IsOpen = false;
@@ -896,6 +900,19 @@ public partial class InRibbonGallery :
 
     private void CloseDropDownCore()
     {
+        // A QAT clone that borrowed its owner's gallery panel returns it to the owner in
+        // OnQuickAccessCloneClosed (which runs immediately after this). Do not run the normal inline
+        // move-back / reconcile here: the shared items live in the borrowed panel, and reconciling
+        // them into this clone's own panel would reparent realized elements out of an unrooted panel
+        // and corrupt their native peers (COMException 0x800F1000).
+        if (_borrowedOwnerPanel is not null)
+        {
+            _isPopupOpen = false;
+            CancelPreview();
+            IsSnapped = IsFrozen;
+            return;
+        }
+
         if (!_isPopupOpen && _popupScroller?.Content is null)
         {
             CancelPreview();
@@ -906,20 +923,30 @@ public partial class InRibbonGallery :
         _isPopupOpen = false;
         CancelPreview();
 
+        // Move the single gallery panel (children intact) back into the inline scroller. As on open,
+        // the shared items are never detached/re-added across the inline<->popup boundary — only the
+        // one container moves — so no native peer is invalidated on the WinUI3 head. Grouped galleries
+        // follow the same flat path (see PreparePopupContent).
         if (_popupScroller is not null)
         {
             _popupScroller.Content = null;
         }
 
-        foreach (var item in Items)
-        {
-            DetachFromParent(item);
-        }
-
         if (_galleryPanel is not null && _scrollViewer is not null)
         {
-            _scrollViewer.Content = _galleryPanel;
-            SyncInlineChildren();
+            if (!ReferenceEquals(_scrollViewer.Content, _galleryPanel))
+            {
+                DetachFromParent(_galleryPanel);
+                _scrollViewer.Content = _galleryPanel;
+            }
+
+            // Now rooted inline again: restore inline column sizing and reconcile any items that were
+            // added/removed while the popup was open. Both are peer-safe here because the panel is
+            // rooted and every item either already lives in it or arrives parent-less.
+            ConfigurePanel(_galleryPanel, MinItemsInRow, GetCurrentItemsInRow());
+            ReconcileFlatPanelChildren();
+            UpdateGalleryLayout();
+            ApplyCurrentFilter();
         }
 
         IsSnapped = IsFrozen;
@@ -932,76 +959,72 @@ public partial class InRibbonGallery :
             return;
         }
 
-        _popupScroller.Content = null;
+        // Match the authoritative WPF InRibbonGallery: a single gallery panel is moved wholesale
+        // between the inline host (_scrollViewer) and the popup host (_popupScroller). The shared
+        // item UIElements are NEVER detached/re-added across the inline<->popup boundary. Detaching a
+        // realized element from a panel that has been removed from the visual tree corrupts its native
+        // peer on the WinUI3 head, so re-hosting it throws COMException (0x800F1000) — the exact hazard
+        // documented on RibbonGallery.SyncItems. Moving only the one container keeps every item's peer
+        // intact on both heads.
+        //
+        // Grouped galleries (GroupBy / GroupByAdvanced) render the same flat item grid in the drop
+        // down. WPF achieves in-popup grouping by toggling a single grouping-capable GalleryPanel
+        // (galleryPanel.IsGrouped); the Uno UniformItemsPanel is not grouping-capable, and emulating it
+        // with per-group child panels is what required the peer-corrupting per-item reparenting. Group
+        // *filtering* (SelectedFilter) still works because it toggles item Visibility on the flat panel.
+        ConfigurePanel(
+            _galleryPanel,
+            MinItemsInDropDownRow,
+            MaxItemsInDropDownRow);
+        _galleryPanel.ItemWidth = ItemWidth;
+        _galleryPanel.ItemHeight = ItemHeight;
+
+        if (!ReferenceEquals(_popupScroller.Content, _galleryPanel))
+        {
+            if (_scrollViewer is not null && ReferenceEquals(_scrollViewer.Content, _galleryPanel))
+            {
+                _scrollViewer.Content = null;
+            }
+
+            DetachFromParent(_galleryPanel);
+            _popupScroller.Content = _galleryPanel;
+        }
+
+        // Ensure the panel hosts exactly the current Items. On a normal open every item is already a
+        // child (no-op). It only ever *adds* elements — e.g. a Quick Access clone whose panel was never
+        // rendered inline, whose items arrive parent-less — which is peer-safe (only detaching a
+        // realized child from an unrooted panel corrupts peers; adding a parent-less child never does).
+        ReconcileFlatPanelChildren();
+        ApplyCurrentFilter();
+    }
+
+    // Ensures the flat (non-grouped) gallery panel hosts exactly the current Items, appending only
+    // elements that are not already children and removing stale ones. Existing realized children are
+    // left in place so their native peers are never invalidated on the WinUI3 head.
+    private void ReconcileFlatPanelChildren()
+    {
+        if (_galleryPanel is null)
+        {
+            return;
+        }
+
+        for (var i = _galleryPanel.Children.Count - 1; i >= 0; i--)
+        {
+            if (!Items.Contains(_galleryPanel.Children[i]))
+            {
+                _galleryPanel.Children.RemoveAt(i);
+            }
+        }
+
         foreach (var item in Items)
         {
+            if (_galleryPanel.Children.Contains(item))
+            {
+                continue;
+            }
+
             DetachFromParent(item);
-        }
-
-        if (!string.IsNullOrWhiteSpace(GroupBy) || GroupByAdvanced is not null)
-        {
-            _popupGroupedHost ??= new StackPanel();
-            _popupGroupedHost.Children.Clear();
-            _popupGroupEntries.Clear();
-
-            var groups = new Dictionary<string, List<UIElement>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in Items)
-            {
-                var group = GetItemGroup(item);
-                if (!groups.TryGetValue(group, out var groupItems))
-                {
-                    groupItems = new List<UIElement>();
-                    groups.Add(group, groupItems);
-                }
-
-                groupItems.Add(item);
-            }
-
-            foreach (var pair in groups)
-            {
-                FrameworkElement? header = null;
-                if (!string.IsNullOrEmpty(pair.Key))
-                {
-                    header = new TextBlock
-                    {
-                        Text = pair.Key,
-                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                        Margin = new Thickness(6, 6, 6, 2),
-                    };
-                    _popupGroupedHost.Children.Add(header);
-                }
-
-                var panel = new UniformItemsPanel
-                {
-                    ItemWidth = ItemWidth,
-                    ItemHeight = ItemHeight,
-                };
-                ConfigurePanel(panel, MinItemsInDropDownRow, MaxItemsInDropDownRow);
-                foreach (var item in pair.Value)
-                {
-                    panel.Children.Add(item);
-                }
-
-                _popupGroupedHost.Children.Add(panel);
-                _popupGroupEntries.Add((pair.Key, header, panel));
-            }
-
-            _popupScroller.Content = _popupGroupedHost;
-            ApplyPopupGroupFilter();
-        }
-        else
-        {
-            ConfigurePanel(
-                _galleryPanel,
-                MinItemsInDropDownRow,
-                MaxItemsInDropDownRow);
-            foreach (var item in Items)
-            {
-                _galleryPanel.Children.Add(item);
-            }
-
-            _popupScroller.Content = _galleryPanel;
-            ApplyCurrentFilter();
+            _galleryPanel.Children.Add(item);
         }
     }
 
@@ -1267,17 +1290,82 @@ public partial class InRibbonGallery :
         owner.IsSnapped = true;
         owner._quickAccessTransferredItems = owner.Items.ToList();
 
-        foreach (var item in owner._quickAccessTransferredItems)
+        // Mirror the owner's items into the clone's *logical* Items collection so the clone's
+        // selection, filtering and public Items surface behave like the owner — WITHOUT reparenting
+        // the item ELEMENTS. The elements stay children of the owner's _galleryPanel, which is
+        // borrowed wholesale into the clone's popup below. Suppressing popup-rebuild + inline sync
+        // guarantees that adding to Items never tries to re-home the shared elements into the clone's
+        // own panel; re-homing them out of the owner's (usually unrooted, off-tab) panel is exactly
+        // what corrupted native peers and threw COMException 0x800F1000. Only the event hooks move,
+        // which is peer-safe because it makes no visual-tree change.
+        clone._suppressPopupRebuild = true;
+        try
         {
-            owner.UnhookItem(item);
-            DetachFromParent(item);
-            clone.Items.Add(item);
+            foreach (var item in owner._quickAccessTransferredItems)
+            {
+                owner.UnhookItem(item);
+                clone.Items.Add(item);
+            }
+        }
+        finally
+        {
+            clone._suppressPopupRebuild = false;
         }
 
         clone.SelectedItem = owner.SelectedItem;
         clone.SelectedFilter = owner.SelectedFilter;
-        clone.PreparePopupContent();
         clone.RebuildPopupSupplementalContent();
+
+        // Borrow the owner's whole gallery panel (all realized items intact) into the clone's popup
+        // host, then apply the clone's current filter to the now-shared items.
+        clone.BorrowOwnerGalleryPanel(owner);
+        clone.ApplyCurrentFilter();
+    }
+
+    // Moves the owner's whole gallery panel (with all realized item children intact) into this
+    // clone's popup host. Only the single container is reparented — never the individual items — so
+    // no native peer is invalidated even when the owner's tab is not selected and its panel is
+    // unrooted. Mirrors the inline<->popup container move performed by PreparePopupContent.
+    private void BorrowOwnerGalleryPanel(InRibbonGallery owner)
+    {
+        if (_popupScroller is null || owner._galleryPanel is not { } panel)
+        {
+            return;
+        }
+
+        if (owner._scrollViewer is not null && ReferenceEquals(owner._scrollViewer.Content, panel))
+        {
+            owner._scrollViewer.Content = null;
+        }
+
+        DetachFromParent(panel);
+        ConfigurePanel(panel, MinItemsInDropDownRow, MaxItemsInDropDownRow);
+        _popupScroller.Content = panel;
+        _borrowedOwnerPanel = panel;
+    }
+
+    // Returns a previously borrowed owner panel to the owner's inline scroller, again moving only the
+    // single container so the shared items' native peers stay intact regardless of rooted state.
+    private void ReturnOwnerGalleryPanel(InRibbonGallery owner)
+    {
+        if (_borrowedOwnerPanel is not { } panel)
+        {
+            return;
+        }
+
+        _borrowedOwnerPanel = null;
+
+        if (_popupScroller is not null && ReferenceEquals(_popupScroller.Content, panel))
+        {
+            _popupScroller.Content = null;
+        }
+
+        DetachFromParent(panel);
+        owner.ConfigurePanel(panel, owner.MinItemsInRow, owner.GetCurrentItemsInRow());
+        if (owner._scrollViewer is not null)
+        {
+            owner._scrollViewer.Content = panel;
+        }
     }
 
     private void OnQuickAccessCloneClosed(object? sender, EventArgs args)
@@ -1288,10 +1376,24 @@ public partial class InRibbonGallery :
         }
 
         var selected = clone.SelectedItem;
-        foreach (var item in clone.Items.ToList())
+
+        // Hand the borrowed panel (with the shared items still parented in it) back to the owner as a
+        // single container BEFORE clearing the clone's logical Items — never reparent the elements.
+        clone.ReturnOwnerGalleryPanel(owner);
+
+        clone._suppressPopupRebuild = true;
+        try
         {
-            clone.Items.Remove(item);
-            owner.HookItem(item);
+            foreach (var item in clone.Items.ToList())
+            {
+                clone.UnhookItem(item);
+                clone.Items.Remove(item);
+                owner.HookItem(item);
+            }
+        }
+        finally
+        {
+            clone._suppressPopupRebuild = false;
         }
 
         owner.SelectedItem = selected;
@@ -1299,6 +1401,10 @@ public partial class InRibbonGallery :
         owner.IsFrozen = false;
         owner.IsSnapped = false;
         owner._quickAccessTransferredItems = null;
-        owner.SyncInlineChildren();
+
+        // The owner's panel already holds every item (it only ever moved as a whole container), so a
+        // full inline resync is unnecessary and unsafe (it would reparent items); just restore filter
+        // visibility on the shared items.
+        owner.ApplyCurrentFilter();
     }
 }

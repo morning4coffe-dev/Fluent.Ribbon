@@ -26,6 +26,7 @@ public abstract class RibbonControl :
     /// <summary>Initializes a new compatibility ribbon control.</summary>
     protected RibbonControl()
     {
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     /// <summary>Identifies the <see cref="KeyTip"/> dependency property.</summary>

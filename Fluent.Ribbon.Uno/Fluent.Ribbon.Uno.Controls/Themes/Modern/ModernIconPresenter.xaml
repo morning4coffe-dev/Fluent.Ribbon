@@ -7,11 +7,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="modernControls:ModernIconPresenter">
-                    <IconSourceElement
-                        x:Name="PART_IconSourceElement"
+                    <ContentPresenter
+                        x:Name="PART_IconHost"
                         Width="{TemplateBinding ActualIconDimension}"
                         Height="{TemplateBinding ActualIconDimension}"
-                        IconSource="{TemplateBinding Source}" />
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

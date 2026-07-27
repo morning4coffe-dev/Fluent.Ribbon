@@ -24,6 +24,19 @@
                                         <Setter Target="CollapsedContent.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <!-- Compact icon+chevron presentation used when the gallery is
+                                     collapsed at Small size (e.g. the Quick Access Toolbar clone),
+                                     mirroring WPF's horizontal Small-size gallery button. -->
+                                <VisualState x:Name="CollapsedToButtonCompact">
+                                    <VisualState.Setters>
+                                        <Setter Target="InlineContent.Visibility" Value="Collapsed" />
+                                        <Setter Target="CollapsedContent.Visibility" Value="Visible" />
+                                        <Setter Target="CollapsedContent.MinWidth" Value="0" />
+                                        <Setter Target="CollapsedButtonPanel.Orientation" Value="Horizontal" />
+                                        <Setter Target="CollapsedButtonHeader.Visibility" Value="Collapsed" />
+                                        <Setter Target="CollapsedButtonChevron.Margin" Value="3,0,0,0" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
@@ -147,13 +160,14 @@
                             AutomationProperties.AutomationId="InRibbonGalleryCollapsedButton"
                             AutomationProperties.Name="Open gallery"
                             VerticalAlignment="Stretch">
-                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                            <StackPanel x:Name="CollapsedButtonPanel" Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <!-- Icon glyph or image -->
                                 <FontIcon
                                     Glyph="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}}"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     FontSize="{TemplateBinding FontSize}"
                                     Foreground="{ThemeResource RibbonIconBrush}"
+                                    VerticalAlignment="Center"
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
 
                                 <Image
@@ -161,9 +175,11 @@
                                     Width="32"
                                     Height="32"
                                     Stretch="Uniform"
+                                    VerticalAlignment="Center"
                                     Visibility="{Binding LargeIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}}" />
 
                                 <ContentPresenter
+                                    x:Name="CollapsedButtonHeader"
                                     Content="{TemplateBinding Header}"
                                     ContentTemplate="{TemplateBinding HeaderTemplate}"
                                     ContentTemplateSelector="{TemplateBinding HeaderTemplateSelector}"
@@ -171,10 +187,12 @@
                                     Margin="0,2,0,0" />
 
                                 <FontIcon
+                                    x:Name="CollapsedButtonChevron"
                                     Glyph="&#xE70D;"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     FontSize="8"
                                     Foreground="{ThemeResource RibbonIconBrush}"
+                                    VerticalAlignment="Center"
                                     Margin="0,2,0,0" />
                             </StackPanel>
                         </Button>

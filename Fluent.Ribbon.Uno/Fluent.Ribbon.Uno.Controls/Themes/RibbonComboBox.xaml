@@ -110,7 +110,7 @@
 
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
                             <StackPanel
@@ -137,7 +137,7 @@
 
                                 <TextBlock
                                     x:Name="HeaderText"
-                                    Text="{TemplateBinding Header}"
+                                    Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     VerticalAlignment="Center"
                                     FontSize="12"
@@ -148,8 +148,9 @@
                             <Grid
                                 x:Name="InputRoot"
                                 Grid.Column="1"
-                                Width="{TemplateBinding InputWidth}"
-                                MinHeight="24"
+                                MinWidth="{TemplateBinding InputWidth}"
+                                HorizontalAlignment="Stretch"
+                                MinHeight="{ThemeResource RibbonControlMinHeight}"
                                 VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />

@@ -15,6 +15,7 @@ public partial class ApplicationMenu : DropDownButton
     private const string PART_Button = "PART_Button";
 
     private WinUIButton? _button;
+    private ButtonPointerClickFallback? _buttonClickFallback;
     private Flyout? _flyout;
     private Grid? _rootPanel;
     private ItemsControl? _leftPane;
@@ -110,6 +111,8 @@ public partial class ApplicationMenu : DropDownButton
         if (_button is not null)
         {
             _button.Click -= OnButtonClick;
+            _buttonClickFallback?.Dispose();
+            _buttonClickFallback = null;
         }
 
         _button = GetTemplateChild(PART_Button) as WinUIButton;
@@ -117,6 +120,7 @@ public partial class ApplicationMenu : DropDownButton
         if (_button is not null)
         {
             _button.Click += OnButtonClick;
+            _buttonClickFallback = ButtonPointerClickFallback.Attach(_button, ToggleDropDown);
             var ownerId = Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(this);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(
                 _button,
@@ -137,6 +141,11 @@ public partial class ApplicationMenu : DropDownButton
     #region Methods
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
+    {
+        ToggleDropDown();
+    }
+
+    private void ToggleDropDown()
     {
         if (IsDropDownOpen)
         {
@@ -168,6 +177,8 @@ public partial class ApplicationMenu : DropDownButton
     /// <inheritdoc />
     public override void CloseDropDown() => Close();
 
+    private protected override void HideDropDownPopup() => _flyout?.Hide();
+
     private void ShowDropDown()
     {
         if (IsDropDownOpen)
@@ -191,7 +202,7 @@ public partial class ApplicationMenu : DropDownButton
 
         _focusBackup = FocusRoutingHelper.CaptureFocusedElement(this);
         IsDropDownOpen = true;
-        _flyout!.ShowAt((FrameworkElement?)_button ?? this);
+        FlyoutShowHelper.ShowDeferred(_flyout!, (FrameworkElement?)_button ?? this);
     }
 
     private void BuildFlyout()
@@ -269,6 +280,11 @@ public partial class ApplicationMenu : DropDownButton
         }
 
         _rootPanel = rootPanel;
+
+        // Escape must dismiss the menu even when focus is inside the flyout. The keyboard
+        // root handler never sees those key events because the flyout content lives in a
+        // separate popup visual tree, so handle Escape on the flyout content itself.
+        rootPanel.KeyDown += OnFlyoutContentKeyDown;
 
         _flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom, Content = rootPanel };
         _flyout.Opened += OnFlyoutOpened;
@@ -398,6 +414,17 @@ public partial class ApplicationMenu : DropDownButton
 
         _keyboardRoot.RemoveHandler(UIElement.KeyDownEvent, new KeyEventHandler(OnKeyboardRootKeyDown));
         _keyboardRoot = null;
+    }
+
+    private void OnFlyoutContentKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (!args.Handled
+            && IsDropDownOpen
+            && args.Key == Windows.System.VirtualKey.Escape)
+        {
+            Close();
+            args.Handled = true;
+        }
     }
 
     private void OnKeyboardRootKeyDown(object sender, KeyRoutedEventArgs args)

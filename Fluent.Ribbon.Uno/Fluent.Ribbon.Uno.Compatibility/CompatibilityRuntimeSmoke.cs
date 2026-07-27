@@ -106,10 +106,25 @@ public static class CompatibilityRuntimeSmoke
 
             foreach (var wrapper in wrappers)
             {
-                attachmentHost?.Children.Add(wrapper);
-            }
+                if (attachmentHost is null)
+                {
+                    break;
+                }
 
-            attachmentHost?.UpdateLayout();
+                attachmentHost.Children.Add(wrapper);
+
+                // Attach and lay out each wrapper individually so a single control that
+                // fails to resolve its template or style is reported as a failure instead
+                // of aborting the whole smoke run. Route the layout pass through the same
+                // Try/failures mechanism used by every other smoke operation.
+                var failureCountBefore = failures.Count;
+                Try($"{wrapper.GetType().Name}.AttachAndLayout", attachmentHost.UpdateLayout, failures);
+                if (failures.Count != failureCountBefore)
+                {
+                    // Remove the offending wrapper so it cannot destabilize later passes.
+                    attachmentHost.Children.Remove(wrapper);
+                }
+            }
 
             foreach (var wrapper in wrappers)
             {

@@ -51,7 +51,12 @@ public partial class RibbonGroupItemsPanel : Panel
             // instead of being squished into a single stacked row.
             RibbonToolBar => ItemKind.Large,
             IScalableRibbonControl { Size: RibbonControlSize.Large } => ItemKind.Large,
-            _ => ItemKind.Stacked,
+            // Medium/Small ribbon controls stack three-per-column, as in WPF.
+            IScalableRibbonControl => ItemKind.Stacked,
+            // Anything else is a raw container (StackPanel/Grid) or decorative element
+            // hosted directly in the group. Stacking it would clamp it to a third of the
+            // group height and clip its contents, so give it a full-height column.
+            _ => ItemKind.Large,
         };
     }
 

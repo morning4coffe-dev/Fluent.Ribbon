@@ -204,9 +204,15 @@ function Get-AutomationElement {
     $automationIdCondition = [System.Windows.Automation.PropertyCondition]::new(
         [System.Windows.Automation.AutomationElement]::AutomationIdProperty,
         $AutomationId)
+    $nameCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty,
+        $AutomationId)
+    $selectorCondition = [System.Windows.Automation.OrCondition]::new(
+        $automationIdCondition,
+        $nameCondition)
     $condition = [System.Windows.Automation.AndCondition]::new(
         $processCondition,
-        $automationIdCondition)
+        $selectorCondition)
     $element = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
         [System.Windows.Automation.TreeScope]::Descendants,
         $condition)
@@ -254,27 +260,33 @@ function Invoke-ShowcaseElement {
         throw "Could not find '$Selector' in process $ProcessId."
     }
 
-    & winapp ui invoke $Selector -a $ProcessId -q 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        return
-    }
-
     $deadline = [DateTime]::UtcNow.AddSeconds(5)
     $lastError = $null
     do {
         try {
             $element = Get-AutomationElement -ProcessId $ProcessId -AutomationId $Selector
-            $element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-            return
-        }
-        catch {
-            $lastError = $_
-        }
+            $patterns = $element.GetSupportedPatterns()
+            if ($patterns -contains [System.Windows.Automation.ExpandCollapsePattern]::Pattern) {
+                $pattern = $element.GetCurrentPattern(
+                    [System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+                if ($pattern.Current.ExpandCollapseState -ne
+                    [System.Windows.Automation.ExpandCollapseState]::Expanded) {
+                    $pattern.Expand()
+                }
+                return
+            }
 
-        try {
-            $element = Get-AutomationElement -ProcessId $ProcessId -AutomationId $Selector
-            $element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
-            return
+            if ($patterns -contains [System.Windows.Automation.InvokePattern]::Pattern) {
+                $element.GetCurrentPattern(
+                    [System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                return
+            }
+
+            if ($patterns -contains [System.Windows.Automation.TogglePattern]::Pattern) {
+                $element.GetCurrentPattern(
+                    [System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+                return
+            }
         }
         catch {
             $lastError = $_
@@ -282,6 +294,11 @@ function Invoke-ShowcaseElement {
 
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
+
+    & winapp ui invoke $Selector -a $ProcessId -q 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
 
     throw "Could not invoke '$Selector' in process $ProcessId. $lastError"
 }
@@ -299,58 +316,61 @@ function Select-ShowcaseItem {
     )
 
     Invoke-ShowcaseElement -ProcessId $ProcessId -Selector $OwnerSelector
-    Start-Sleep -Milliseconds 250
-    $ownerElement = $null
-    try {
-        $ownerElement = Get-AutomationElement -ProcessId $ProcessId -AutomationId $OwnerSelector
-    }
-    catch {
-        # Some selectors are names rather than automation IDs.
-    }
-
-    $processCondition = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
-        $ProcessId)
-    $nameCondition = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::NameProperty,
-        $ItemName)
-    $condition = [System.Windows.Automation.AndCondition]::new(
-        $processCondition,
-        $nameCondition)
-    $candidates = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
-        [System.Windows.Automation.TreeScope]::Descendants,
-        $condition) |
-        Sort-Object { $_.Current.IsOffscreen }
-
-    foreach ($candidate in $candidates) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 100
+        $ownerElement = $null
         try {
-            $patterns = $candidate.GetSupportedPatterns()
-            if ($patterns -contains [System.Windows.Automation.SelectionItemPattern]::Pattern) {
-                $selectionPattern = $candidate.GetCurrentPattern(
-                    [System.Windows.Automation.SelectionItemPattern]::Pattern)
-                $selectionPattern.Select()
-                Close-ShowcaseItemOwner `
-                    -ProcessId $ProcessId `
-                    -OwnerSelector $OwnerSelector `
-                    -OwnerElement $ownerElement
-                return
-            }
-
-            if ($patterns -contains [System.Windows.Automation.InvokePattern]::Pattern) {
-                $invokePattern = $candidate.GetCurrentPattern(
-                    [System.Windows.Automation.InvokePattern]::Pattern)
-                $invokePattern.Invoke()
-                Close-ShowcaseItemOwner `
-                    -ProcessId $ProcessId `
-                    -OwnerSelector $OwnerSelector `
-                    -OwnerElement $ownerElement
-                return
-            }
+            $ownerElement = Get-AutomationElement -ProcessId $ProcessId -AutomationId $OwnerSelector
         }
         catch {
-            # Continue past stale elements recreated by theme changes.
+            # Some selectors are names rather than automation IDs.
         }
-    }
+
+        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $ProcessId)
+        $nameCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::NameProperty,
+            $ItemName)
+        $condition = [System.Windows.Automation.AndCondition]::new(
+            $processCondition,
+            $nameCondition)
+        $candidates = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            $condition) |
+            Sort-Object { $_.Current.IsOffscreen }
+
+        foreach ($candidate in $candidates) {
+            try {
+                $patterns = $candidate.GetSupportedPatterns()
+                if ($patterns -contains [System.Windows.Automation.SelectionItemPattern]::Pattern) {
+                    $selectionPattern = $candidate.GetCurrentPattern(
+                        [System.Windows.Automation.SelectionItemPattern]::Pattern)
+                    $selectionPattern.Select()
+                    Close-ShowcaseItemOwner `
+                        -ProcessId $ProcessId `
+                        -OwnerSelector $OwnerSelector `
+                        -OwnerElement $ownerElement
+                    return
+                }
+
+                if ($patterns -contains [System.Windows.Automation.InvokePattern]::Pattern) {
+                    $invokePattern = $candidate.GetCurrentPattern(
+                        [System.Windows.Automation.InvokePattern]::Pattern)
+                    $invokePattern.Invoke()
+                    Close-ShowcaseItemOwner `
+                        -ProcessId $ProcessId `
+                        -OwnerSelector $OwnerSelector `
+                        -OwnerElement $ownerElement
+                    return
+                }
+            }
+            catch {
+                # Theme changes can recreate the item while it is being queried.
+            }
+        }
+    } while ([DateTime]::UtcNow -lt $deadline)
 
     throw "Could not select '$ItemName' in process $ProcessId."
 }
@@ -493,45 +513,54 @@ function Select-ShowcaseTab {
         [string]$State
     )
 
-    & winapp ui wait-for $State -a $ProcessId -t 10000 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not find '$State' in process $ProcessId."
-    }
+    $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+        $ProcessId)
+    $nameCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty,
+        $State)
+    $tabCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::TabItem)
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        $processCondition,
+        $nameCondition,
+        $tabCondition)
 
-    $searchResult = (& winapp ui search $State -a $ProcessId --json 2>$null | Out-String) | ConvertFrom-Json
-    $tabMatches = @(
-        $searchResult.matches |
-            Where-Object {
-                $_.name -eq $State -and $_.type -in @("Tab", "TabItem")
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $candidates = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            $condition)
+
+        foreach ($candidate in $candidates) {
+            try {
+                $patterns = $candidate.GetSupportedPatterns()
+                if ($patterns -contains [System.Windows.Automation.SelectionItemPattern]::Pattern) {
+                    $pattern = $candidate.GetCurrentPattern(
+                        [System.Windows.Automation.SelectionItemPattern]::Pattern)
+                    if (-not $pattern.Current.IsSelected) {
+                        $pattern.Select()
+                        Start-Sleep -Milliseconds 250
+                    }
+
+                    return
+                }
+                elseif ($patterns -contains [System.Windows.Automation.InvokePattern]::Pattern) {
+                    $candidate.GetCurrentPattern(
+                        [System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                    return
+                }
             }
-    )
-    if ($tabMatches.Count -ne 1) {
-        throw "Expected one '$State' tab in process $ProcessId, found $($tabMatches.Count)."
-    }
+            catch {
+                # Continue past stale tab elements recreated during layout changes.
+            }
+        }
 
-    $selector = $tabMatches[0].selector
-    & winapp ui wait-for $selector -a $ProcessId -t 10000 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not find '$State' in process $ProcessId."
-    }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
 
-    & winapp ui invoke $selector -a $ProcessId | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not select '$State' in process $ProcessId."
-    }
-
-    Start-Sleep -Milliseconds 500
-
-    $propertyJson = (& winapp ui get-property $selector -a $ProcessId -p "IsSelected" --json | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not verify '$State' selection in process $ProcessId."
-    }
-
-    $propertyResult = $propertyJson | ConvertFrom-Json
-    $isSelected = $propertyResult.properties.IsSelected
-    if ($isSelected -notin @($true, "True", "true")) {
-        throw "'$State' did not become selected in process $ProcessId."
-    }
+    throw "Could not find or select '$State' in process $ProcessId."
 }
 
 function Capture-ShowcaseState {

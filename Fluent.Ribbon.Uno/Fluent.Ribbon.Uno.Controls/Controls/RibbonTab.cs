@@ -9,7 +9,12 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
     private readonly StackPanel _groupsPanel;
     private readonly ScrollViewer _scrollViewer;
     private bool _isUpdatingLayout;
-    private bool _updateQueued;
+    private bool _rerunGroupSizing;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _groupSizingDebounceTimer;
+    private const double GroupSizingDebounceMilliseconds = 64;
+    private double _lastGroupSizingWidth = double.NaN;
+    private bool _lastGroupSizingSimplified;
+    private RibbonGroupBoxState[]? _lastGroupSizingStates;
 
     #region Dependency Properties
 
@@ -240,7 +245,9 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         _scrollViewer = new ScrollViewer
         {
             Height = RibbonTabControl.DefaultContentHeight,
+            HorizontalScrollMode = ScrollMode.Enabled,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollMode = ScrollMode.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = _groupsPanel,
@@ -254,6 +261,7 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         // Ensure an initial layout pass runs once the tab is realized, even if
         // no further size change fires afterwards.
         Loaded += (_, _) => ScheduleUpdateGroupSizes();
+        Unloaded += (_, _) => CancelGroupSizingPass();
     }
 
     internal void SetContentHeight(double contentHeight)
@@ -263,6 +271,7 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
             : RibbonTabControl.DefaultContentHeight;
         _groupsPanel.Height = height;
         _scrollViewer.Height = height;
+        InvalidateGroupSizing();
     }
 
     #endregion
@@ -275,45 +284,76 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
     }
 
     /// <summary>
-    /// Coalesces group-size recalculations onto the dispatcher so they run once,
-    /// after the current layout pass has settled. This matters because rescaling
-    /// group children can raise further size changes; running inline would either
-    /// re-enter (and be suppressed by the guard) or act on a stale available width,
-    /// which previously left groups collapsed even when space was available.
+    /// Debounces group-size recalculations so a burst of size changes — an active
+    /// window drag-resize raises <see cref="FrameworkElement.SizeChanged"/> on every
+    /// frame — collapses into a single sizing pass once the width settles. This keeps
+    /// the number of visual-state rewrites low (native WinUI can raise a fatal stowed
+    /// exception when a realized TabView rewrites child visual states repeatedly during
+    /// a resize) while still recomputing after every resize, so groups both reduce under
+    /// space pressure and re-enlarge symmetrically when space becomes available again.
     /// </summary>
     private void ScheduleUpdateGroupSizes()
     {
-        if (_updateQueued)
-        {
-            return;
-        }
-
-        _updateQueued = true;
-
         var dispatcher = DispatcherQueue;
         if (dispatcher is null)
         {
-            _updateQueued = false;
+            // No dispatcher (e.g. design-time / not yet attached): run inline.
             UpdateGroupSizes();
             return;
         }
 
-        dispatcher.TryEnqueue(() =>
+        // The first pass for this tab must not wait out the debounce interval: the tab has
+        // just been realized and is about to paint at its unreduced size, so a 64 ms delay
+        // shows several frames of wrongly-sized groups — the flash seen when switching tabs.
+        // Enqueueing instead runs the pass on the next dispatcher tick, which is still
+        // outside the layout cycle (reduction may reparent realized elements, which is fatal
+        // inside a live measure pass) but lands before the frame is painted.
+        if (double.IsNaN(_lastGroupSizingWidth))
         {
-            _updateQueued = false;
-            UpdateGroupSizes();
-        });
+            if (dispatcher.TryEnqueue(UpdateGroupSizes))
+            {
+                return;
+            }
+        }
+
+        var timer = _groupSizingDebounceTimer;
+        if (timer is null)
+        {
+            timer = dispatcher.CreateTimer();
+            timer.IsRepeating = false;
+            timer.Interval = TimeSpan.FromMilliseconds(GroupSizingDebounceMilliseconds);
+            timer.Tick += OnGroupSizingDebounceTick;
+            _groupSizingDebounceTimer = timer;
+        }
+
+        // Restart on every request so only the final, settled width drives a pass.
+        timer.Stop();
+        timer.Start();
+    }
+
+    private void OnGroupSizingDebounceTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        UpdateGroupSizes();
     }
 
     /// <summary>
     /// Measures available width and progressively reduces group sizes
     /// (Large → Medium → Small → Collapsed) to fit within the available space.
-    /// If a ReduceOrder is specified, groups are reduced in that order;
-    /// otherwise, groups are reduced from right to left (last group reduced first).
+    /// Reduction is opt-in: groups are only reduced when a <see cref="RibbonTabItem.ReduceOrder"/>
+    /// is specified, and then strictly in that order. Without a ReduceOrder no group is
+    /// reduced and any overflow is handled by the horizontal ScrollViewer, matching the
+    /// WPF <c>RibbonGroupsContainer</c>.
     /// </summary>
     private void UpdateGroupSizes()
     {
-        if (_isUpdatingLayout || Groups.Count == 0)
+        if (_isUpdatingLayout)
+        {
+            _rerunGroupSizing = true;
+            return;
+        }
+
+        if (Groups.Count == 0)
         {
             return;
         }
@@ -321,135 +361,287 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         // Read the width at execution time (after layout has settled) so we never
         // act on a transient/too-small width captured when the event fired.
         var availableWidth = _scrollViewer.ActualWidth;
+        var rootWidth = XamlRoot?.Size.Width ?? double.PositiveInfinity;
+        if (double.IsFinite(rootWidth) && rootWidth > 0)
+        {
+            availableWidth = Math.Min(availableWidth, rootWidth);
+        }
+
         if (availableWidth <= 0)
         {
             return;
         }
 
-        _isUpdatingLayout = true;
-
-        try
+        if (IsCurrentGroupSizingValid(availableWidth))
         {
-            // Reset all groups to the largest state supported by the active mode
-            // before applying width-driven reductions.
-            foreach (var group in Groups)
-            {
-                group.State = group.GetInitialStateForMode(IsSimplified);
-            }
-
-            // Build the reduce order
-            var reduceOrderList = BuildReduceOrder();
-
-            // Force a synchronous layout pass so DesiredSize reflects the current
-            // (all-Large) states before we start measuring.
-            _groupsPanel.UpdateLayout();
-
-            // Progressively reduce groups using the reduce order until the content
-            // fits. A synchronous layout pass is required after every state change,
-            // otherwise DesiredSize keeps returning the stale (larger) measurement
-            // and the loop over-reduces, collapsing groups even when space is free.
-            foreach (var (groupIndex, targetState) in reduceOrderList)
-            {
-                if (_groupsPanel.DesiredSize.Width <= availableWidth)
-                {
-                    break;
-                }
-
-                var group = Groups[groupIndex];
-                if (group.State < targetState)
-                {
-                    group.State = targetState;
-                    _groupsPanel.UpdateLayout();
-                }
-            }
+            return;
         }
-        finally
+
+        _isUpdatingLayout = true;
+        _rerunGroupSizing = false;
+
+        var reduceOrder = BuildReduceOrder();
+
+        // Reset all groups to the largest state supported by the active mode and
+        // restore any scalable content (such as InRibbonGallery items-per-row) to its
+        // maximum. Resetting to the maximum every pass is what makes the pipeline
+        // two-way: when the window grows, fewer steps are applied and scalable content
+        // re-enlarges symmetrically.
+        foreach (var group in Groups)
+        {
+            group.State = group.GetInitialStateForMode(IsSimplified);
+        }
+
+        ResetScalableContent(reduceOrder);
+
+        ReduceToFit(availableWidth, reduceOrder);
+
+        CompleteGroupSizingPass(cacheResult: IsLoaded, availableWidth);
+    }
+
+    /// <summary>
+    /// Applies the reduce order until the groups fit, re-measuring synchronously after
+    /// every step. This mirrors the WPF <c>RibbonGroupsContainer</c>, which resolves the
+    /// whole reduction inside a single measure pass. Yielding to the compositor between
+    /// steps instead would paint every intermediate size — the ribbon would visibly
+    /// expand and then collapse step-by-step on each pass.
+    /// </summary>
+    private void ReduceToFit(double availableWidth, IReadOnlyList<GroupSizingStep> reduceOrder)
+    {
+        // Groups are hosted in a horizontally scrolling viewer, so their natural width is
+        // measured against an unconstrained width.
+        var constraint = new Windows.Foundation.Size(
+            double.PositiveInfinity,
+            double.PositiveInfinity);
+
+        MeasureGroupsPanel(constraint);
+
+        var reduceOrderIndex = 0;
+        while (reduceOrderIndex < reduceOrder.Count
+               && Internal.DoubleUtil.GreaterThan(
+                   _groupsPanel.DesiredSize.Width,
+                   availableWidth))
+        {
+            var step = reduceOrder[reduceOrderIndex++];
+            var group = Groups[step.GroupIndex];
+
+            if (step.IsScale)
+            {
+                ReduceScalableContent(group);
+            }
+            else if (group.State >= step.TargetState)
+            {
+                continue;
+            }
+            else
+            {
+                group.State = step.TargetState;
+            }
+
+            MeasureGroupsPanel(constraint);
+        }
+    }
+
+    private void MeasureGroupsPanel(Windows.Foundation.Size constraint)
+    {
+        _groupsPanel.InvalidateMeasure();
+        _groupsPanel.Measure(constraint);
+    }
+
+    private void CompleteGroupSizingPass(bool cacheResult, double availableWidth)
+    {
+        if (cacheResult)
+        {
+            _lastGroupSizingWidth = availableWidth;
+            _lastGroupSizingSimplified = IsSimplified;
+            _lastGroupSizingStates = Groups.Select(group => group.State).ToArray();
+        }
+        else
+        {
+            InvalidateGroupSizing();
+        }
+
+        _isUpdatingLayout = false;
+        if (_rerunGroupSizing)
+        {
+            _rerunGroupSizing = false;
+            ScheduleUpdateGroupSizes();
+        }
+    }
+
+    private void CancelGroupSizingPass()
+    {
+        _groupSizingDebounceTimer?.Stop();
+
+        if (_isUpdatingLayout)
         {
             _isUpdatingLayout = false;
+            InvalidateGroupSizing();
         }
     }
 
     /// <summary>
-    /// Builds the reduce order list — either from the ReduceOrder string or by default right-to-left.
-    /// Returns tuples of (groupIndex, targetState).
+    /// Builds the reduce order list from the <see cref="RibbonTabItem.ReduceOrder"/> string.
+    /// A bare entry (<c>Name</c>) reduces the group's <see cref="RibbonGroupBoxState"/> by one
+    /// step; a parenthesised entry (<c>(Name)</c>) reduces the group's scalable content by one
+    /// step (<see cref="IScalableRibbonControl.Reduce"/>), matching WPF's <c>RibbonGroupsContainer</c>.
     /// </summary>
-    private List<(int GroupIndex, RibbonGroupBoxState TargetState)> BuildReduceOrder()
+    /// <remarks>
+    /// Matching the WPF <c>RibbonGroupsContainer</c> (which returns early when
+    /// <c>reduceOrder.Length == 0</c>), group reduction is strictly opt-in: when no
+    /// <see cref="RibbonTabItem.ReduceOrder"/> is specified the ribbon never reduces
+    /// group states. Content that exceeds the available width overflows into the
+    /// horizontal <see cref="ScrollViewer"/> instead of shrinking groups. Automatically
+    /// inventing a reduce order would drive space-sensitive controls such as an
+    /// <see cref="InRibbonGallery"/> into their collapsed button state at the default
+    /// window size, which is not how the WPF original behaves.
+    /// </remarks>
+    private List<GroupSizingStep> BuildReduceOrder()
     {
-        var result = new List<(int, RibbonGroupBoxState)>();
+        var result = new List<GroupSizingStep>();
 
-        if (!string.IsNullOrEmpty(ReduceOrder))
+        if (string.IsNullOrEmpty(ReduceOrder))
         {
-            // Parse the ReduceOrder string (comma-separated group headers)
-            // Each name maps to the next reduction for that group
-            var names = ReduceOrder.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            var groupStateTracker = new Dictionary<int, RibbonGroupBoxState>();
-
-            foreach (var name in names)
-            {
-                // Find the group by header name
-                var groupIndex = -1;
-                for (int i = 0; i < Groups.Count; i++)
-                {
-                    var candidateGroup = Groups[i];
-
-                    // Match by x:Name first (unambiguous), then by header text.
-                    // Using the name lets developers disambiguate groups that share
-                    // the same header, or that use a non-string header.
-                    if (string.Equals(candidateGroup.Name, name, StringComparison.Ordinal)
-                        || string.Equals(candidateGroup.Header?.ToString(), name, StringComparison.Ordinal))
-                    {
-                        groupIndex = i;
-                        break;
-                    }
-                }
-
-                if (groupIndex == -1) continue;
-
-                var group = Groups[groupIndex];
-                var currentState = groupStateTracker.TryGetValue(groupIndex, out var trackedState)
-                    ? trackedState
-                    : group.GetInitialStateForMode(IsSimplified);
-                var targetState = group
-                    .GetStateDefinitionForMode(IsSimplified)
-                    .ReduceState(currentState);
-                groupStateTracker[groupIndex] = targetState;
-
-                if (targetState != currentState)
-                {
-                    result.Add((groupIndex, targetState));
-                }
-            }
+            return result;
         }
-        else
+
+        var names = ReduceOrder.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var groupStateTracker = new Dictionary<int, RibbonGroupBoxState>();
+
+        foreach (var name in names)
         {
-            // Default: reduce right to left through each group's supported states.
-            var groupStateTracker = Groups
-                .Select(group => group.GetInitialStateForMode(IsSimplified))
-                .ToArray();
+            // A parenthesised entry such as "(FirstGalleryGroup)" reduces the scalable
+            // content of the group; a bare entry reduces the group's own state.
+            var isScale = name.Length >= 2 && name[0] == '(' && name[^1] == ')';
+            var lookup = isScale ? name[1..^1].Trim() : name;
 
-            var hasMoreStates = true;
-            while (hasMoreStates)
+            var groupIndex = FindGroupIndex(lookup);
+            if (groupIndex == -1)
             {
-                hasMoreStates = false;
-                for (int i = Groups.Count - 1; i >= 0; i--)
-                {
-                    var currentState = groupStateTracker[i];
-                    var targetState = Groups[i]
-                        .GetStateDefinitionForMode(IsSimplified)
-                        .ReduceState(currentState);
-                    if (targetState == currentState)
-                    {
-                        continue;
-                    }
+                continue;
+            }
 
-                    groupStateTracker[i] = targetState;
-                    result.Add((i, targetState));
-                    hasMoreStates = true;
-                }
+            if (isScale)
+            {
+                result.Add(GroupSizingStep.Scale(groupIndex));
+                continue;
+            }
+
+            var group = Groups[groupIndex];
+            var currentState = groupStateTracker.TryGetValue(groupIndex, out var trackedState)
+                ? trackedState
+                : group.GetInitialStateForMode(IsSimplified);
+            var targetState = group
+                .GetStateDefinitionForMode(IsSimplified)
+                .ReduceState(currentState);
+            groupStateTracker[groupIndex] = targetState;
+
+            if (targetState != currentState)
+            {
+                result.Add(GroupSizingStep.State(groupIndex, targetState));
             }
         }
 
         return result;
+    }
+
+    // Matches by x:Name first (unambiguous), then by header text, so developers can
+    // disambiguate groups that share a header or use a non-string header.
+    private int FindGroupIndex(string name)
+    {
+        for (var i = 0; i < Groups.Count; i++)
+        {
+            var candidateGroup = Groups[i];
+            if (string.Equals(candidateGroup.Name, name, StringComparison.Ordinal)
+                || string.Equals(candidateGroup.Header?.ToString(), name, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // Restores the scalable content of every group referenced by a scale step to its
+    // maximum. A scale step can only reduce content that a prior scale step enlarged, so
+    // enlarging once per scale step exactly undoes the previous pass; enlarge calls made
+    // past the maximum are harmless no-ops.
+    private void ResetScalableContent(IReadOnlyList<GroupSizingStep> reduceOrder)
+    {
+        Dictionary<int, int>? scaleCounts = null;
+
+        foreach (var step in reduceOrder)
+        {
+            if (!step.IsScale)
+            {
+                continue;
+            }
+
+            scaleCounts ??= new Dictionary<int, int>();
+            scaleCounts[step.GroupIndex] =
+                scaleCounts.TryGetValue(step.GroupIndex, out var existing) ? existing + 1 : 1;
+        }
+
+        if (scaleCounts is null)
+        {
+            return;
+        }
+
+        foreach (var (groupIndex, count) in scaleCounts)
+        {
+            foreach (var scalable in EnumerateScalableControls(Groups[groupIndex]))
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    scalable.Enlarge();
+                }
+            }
+        }
+    }
+
+    private static void ReduceScalableContent(RibbonGroupBox group)
+    {
+        foreach (var scalable in EnumerateScalableControls(group))
+        {
+            scalable.Reduce();
+        }
+    }
+
+    private static IEnumerable<IScalableRibbonControl> EnumerateScalableControls(RibbonGroupBox group)
+    {
+        foreach (var item in group.Items)
+        {
+            if (item is IScalableRibbonControl scalable)
+            {
+                yield return scalable;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A single reduction step: either a group-state reduction or a one-step reduction
+    /// of a group's scalable content (a parenthesised entry in the reduce order).
+    /// </summary>
+    private readonly struct GroupSizingStep
+    {
+        private GroupSizingStep(int groupIndex, bool isScale, RibbonGroupBoxState targetState)
+        {
+            GroupIndex = groupIndex;
+            IsScale = isScale;
+            TargetState = targetState;
+        }
+
+        public int GroupIndex { get; }
+
+        public bool IsScale { get; }
+
+        public RibbonGroupBoxState TargetState { get; }
+
+        public static GroupSizingStep State(int groupIndex, RibbonGroupBoxState targetState)
+            => new(groupIndex, isScale: false, targetState);
+
+        public static GroupSizingStep Scale(int groupIndex)
+            => new(groupIndex, isScale: true, RibbonGroupBoxState.Large);
     }
 
     private static void OnGroupChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -485,6 +677,8 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
     private void OnGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        CancelGroupSizingPass();
+        InvalidateGroupSizing();
         SyncGroups();
     }
 
@@ -498,6 +692,33 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
         // Groups changed — re-evaluate sizing on the next layout pass.
         ScheduleUpdateGroupSizes();
+    }
+
+    private bool IsCurrentGroupSizingValid(double availableWidth)
+    {
+        var states = _lastGroupSizingStates;
+        if (states is null
+            || !Internal.DoubleUtil.AreClose(_lastGroupSizingWidth, availableWidth)
+            || _lastGroupSizingSimplified != IsSimplified
+            || states.Length != Groups.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < Groups.Count; i++)
+        {
+            if (states[i] != Groups[i].State)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void InvalidateGroupSizing()
+    {
+        _lastGroupSizingStates = null;
     }
 
     #endregion

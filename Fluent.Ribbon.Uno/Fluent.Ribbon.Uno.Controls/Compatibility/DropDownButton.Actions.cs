@@ -31,6 +31,7 @@ public partial class DropDownButton
         BindPresentation(IconProperty);
         BindPresentation(LargeIconProperty);
         BindPresentation(MediumIconProperty);
+        BindOneWay(RibbonDropDownButton.IconGlyphProperty);
         BindOneWay(RibbonDropDownButton.MenuHeaderProperty);
         BindOneWay(RibbonDropDownButton.HasTriangleProperty);
         BindOneWay(RibbonDropDownButton.ResizeModeProperty);
@@ -187,7 +188,7 @@ public partial class DropDownButton
         }
     }
 
-    public new virtual KeyTipPressedResult OnKeyTipPressed() =>
+    public override KeyTipPressedResult OnKeyTipPressed() =>
         base.OnKeyTipPressed();
 
     public new void OnKeyTipBack() => base.OnKeyTipBack();

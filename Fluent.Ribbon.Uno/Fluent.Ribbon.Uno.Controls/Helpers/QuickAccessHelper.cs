@@ -127,7 +127,7 @@ internal static class QuickAccessHelper
             flyout.Items.Add(add);
         }
 
-        flyout.ShowAt(element, e.GetPosition(element));
+        FlyoutShowHelper.ShowDeferred(flyout, element, e.GetPosition(element));
         e.Handled = true;
     }
 }

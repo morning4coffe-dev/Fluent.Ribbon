@@ -7,10 +7,11 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="0" />
+        <Setter Property="Padding" Value="{ThemeResource RibbonButtonPadding}" />
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="MinWidth" Value="44" />
+        <Setter Property="MinHeight" Value="{ThemeResource RibbonControlMinHeight}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonDropDownButton">
@@ -91,7 +92,7 @@
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
-                            Padding="4,2">
+                            Padding="{TemplateBinding Padding}">
                             <StackPanel x:Name="ContentPanel" Orientation="Vertical" HorizontalAlignment="Center">
                                 <!-- Glyph Icon -->
                                 <FontIcon
@@ -115,6 +116,8 @@
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     TextAlignment="Center"
                                     TextWrapping="Wrap"
+                                    MaxLines="2"
+                                    TextTrimming="CharacterEllipsis"
                                     MaxWidth="60"
                                     Margin="0,2,0,0"
                                     FontSize="11" />

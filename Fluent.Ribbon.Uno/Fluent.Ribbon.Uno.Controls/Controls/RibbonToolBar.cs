@@ -68,7 +68,7 @@ public partial class RibbonToolBar : RibbonControl
 
     #region Fields
 
-    private Grid? _layoutPanel;
+    private RibbonToolBarPanel? _layoutPanel;
     private bool _templateApplied;
 
     #endregion
@@ -98,6 +98,7 @@ public partial class RibbonToolBar : RibbonControl
     {
         base.OnApplyTemplate();
         _templateApplied = true;
+        _layoutPanel = GetTemplateChild("PART_ContentPanel") as RibbonToolBarPanel;
         RebuildLayout();
     }
 
@@ -126,21 +127,32 @@ public partial class RibbonToolBar : RibbonControl
 
     private void RebuildLayout()
     {
-        // Never build layout before the template is applied. Doing so during XAML
-        // parsing reparents items into a transient Grid, which the strict WinUI3
-        // parser rejects ("Element is already the child of another element").
-        // PART_ContentPanel only exists after OnApplyTemplate, so this is also a no-op there.
-        if (!_templateApplied)
+        // Never build layout before the template is applied. PART_ContentPanel only
+        // exists after OnApplyTemplate, and reparenting items into it during XAML
+        // parsing is rejected by the strict WinUI3 parser.
+        if (!_templateApplied || _layoutPanel is null)
         {
             return;
         }
+
+        // Detach every shared control from its current host WHILE the old layout is still rooted,
+        // before clearing the panel below. On the native WinUI head, detaching a realized element
+        // from a panel that has already been removed from the visual tree corrupts the element's
+        // native peer, so re-adding it to a new host then throws COMException 0x800F1000. Ordering
+        // matters: detach first, then unroot the old groups. See RibbonGallery.SyncItems for the
+        // same rule.
+        foreach (var item in Items)
+        {
+            DetachFromParent(item);
+        }
+
+        _layoutPanel.Children.Clear();
 
         var definition = GetCurrentLayoutDefinition();
 
         if (definition is null)
         {
-            // Fall back to simple horizontal wrap
-            BuildDefaultLayout();
+            BuildWrapLayout();
             return;
         }
 
@@ -194,112 +206,106 @@ public partial class RibbonToolBar : RibbonControl
         return matchingMode[0];
     }
 
-    private void BuildDefaultLayout()
+    private void BuildWrapLayout()
     {
-        _layoutPanel = new Grid();
-        _layoutPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        _layoutPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        _layoutPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var toolBarSize = RibbonProperties.GetSize(this);
 
-        // Arrange items into 3 rows
-        for (var i = 0; i < Items.Count; i++)
+        foreach (var item in Items)
         {
-            var item = Items[i];
             DetachFromParent(item);
-            Grid.SetRow(item, i % 3);
-            Grid.SetColumn(item, i / 3);
-            _layoutPanel.Children.Add(item);
+            RibbonProperties.SetAppropriateSize(item, toolBarSize);
+            _layoutPanel!.Children.Add(item);
         }
 
-        // Ensure enough columns
-        var columnCount = (int)Math.Ceiling(Items.Count / 3.0);
-        for (var c = 0; c < columnCount; c++)
-        {
-            _layoutPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        }
-
-        Content = _layoutPanel;
+        _layoutPanel!.ConfigureWrapLayout();
     }
 
     private void BuildDefinedLayout(RibbonToolBarLayoutDefinition definition)
     {
-        _layoutPanel = new Grid();
+        var rows = new List<IReadOnlyList<FrameworkElement>>(definition.Rows.Count);
+        var separators = new Dictionary<int, FrameworkElement>();
 
-        for (var r = 0; r < definition.RowCount; r++)
-        {
-            _layoutPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        }
+        // A layout definition can declare more rows than RowCount. Those extra rows wrap
+        // into additional side-by-side columns, each separated by a vertical separator.
+        var rowCountInColumn = Math.Max(1, Math.Min(definition.RowCount, definition.Rows.Count));
 
-        var maxColumns = 0;
-
-        for (var rowIndex = 0; rowIndex < definition.Rows.Count && rowIndex < definition.RowCount; rowIndex++)
+        for (var rowIndex = 0; rowIndex < definition.Rows.Count; rowIndex++)
         {
             var row = definition.Rows[rowIndex];
-            var colIndex = 0;
+            var rowElements = new List<FrameworkElement>();
 
-            foreach (var child in row.Children)
+            if (rowIndex != 0 && rowIndex % rowCountInColumn == 0)
             {
-                if (child is RibbonToolBarControlDefinition controlDef)
+                var separator = new RibbonSeparator { Orientation = Orientation.Vertical };
+                if (SeparatorStyle is not null)
                 {
-                    var targetControl = FindItemByName(controlDef.Target);
-                    if (targetControl is not null)
-                    {
-                        DetachFromParent(targetControl);
-
-                        if (targetControl is IScalableRibbonControl scalable)
-                        {
-                            scalable.ScaleTo(controlDef.Size);
-                        }
-
-                        targetControl.Width = controlDef.Width;
-
-                        Grid.SetRow(targetControl, rowIndex);
-                        Grid.SetColumn(targetControl, colIndex);
-                        _layoutPanel.Children.Add(targetControl);
-                        colIndex++;
-                    }
+                    separator.Style = SeparatorStyle;
                 }
-                else if (child is RibbonToolBarControlGroupDefinition groupDef)
+
+                separators[rowIndex] = separator;
+                _layoutPanel!.Children.Add(separator);
+            }
+
+            for (var childIndex = 0; childIndex < row.Children.Count; childIndex++)
+            {
+                var child = row.Children[childIndex];
+
+                if (child is RibbonToolBarControlDefinition controlDefinition)
                 {
-                    var groupPanel = new RibbonToolBarControlGroup
+                    var control = FindItemByName(controlDefinition.Target);
+                    if (control is null)
                     {
-                        IsFirstInRow = colIndex == 0,
-                        IsLastInRow = ReferenceEquals(child, row.Children.LastOrDefault()),
+                        continue;
+                    }
+
+                    DetachFromParent(control);
+
+                    if (control is IScalableRibbonControl scalable)
+                    {
+                        scalable.ScaleTo(controlDefinition.Size);
+                    }
+
+                    control.Width = controlDefinition.Width;
+
+                    _layoutPanel!.Children.Add(control);
+                    rowElements.Add(control);
+                }
+                else if (child is RibbonToolBarControlGroupDefinition groupDefinition)
+                {
+                    var group = new RibbonToolBarControlGroup
+                    {
+                        IsFirstInRow = childIndex == 0,
+                        IsLastInRow = childIndex == row.Children.Count - 1,
                     };
 
-                    foreach (var groupChild in groupDef.Children)
+                    foreach (var groupChild in groupDefinition.Children)
                     {
-                        var targetControl = FindItemByName(groupChild.Target);
-                        if (targetControl is not null)
+                        var control = FindItemByName(groupChild.Target);
+                        if (control is null)
                         {
-                            DetachFromParent(targetControl);
-
-                            if (targetControl is IScalableRibbonControl scalable)
-                            {
-                                scalable.ScaleTo(groupChild.Size);
-                            }
-
-                            targetControl.Width = groupChild.Width;
-                            groupPanel.Items.Add(targetControl);
+                            continue;
                         }
+
+                        DetachFromParent(control);
+
+                        if (control is IScalableRibbonControl scalable)
+                        {
+                            scalable.ScaleTo(groupChild.Size);
+                        }
+
+                        control.Width = groupChild.Width;
+                        group.Items.Add(control);
                     }
 
-                    Grid.SetRow(groupPanel, rowIndex);
-                    Grid.SetColumn(groupPanel, colIndex);
-                    _layoutPanel.Children.Add(groupPanel);
-                    colIndex++;
+                    _layoutPanel!.Children.Add(group);
+                    rowElements.Add(group);
                 }
             }
 
-            maxColumns = Math.Max(maxColumns, colIndex);
+            rows.Add(rowElements);
         }
 
-        for (var c = 0; c < maxColumns; c++)
-        {
-            _layoutPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        }
-
-        Content = _layoutPanel;
+        _layoutPanel!.ConfigureCustomLayout(rows, definition.RowCount, separators);
     }
 
     private FrameworkElement? FindItemByName(string? name)
@@ -314,29 +320,14 @@ public partial class RibbonToolBar : RibbonControl
 
     private static void DetachFromParent(UIElement element)
     {
-        if (element is FrameworkElement fe && fe.Parent is Panel panel)
+        // Resolve the host through the visual parent (the elements are hosted directly in a
+        // Panel's Children, whose logical Parent reads null on the native WinUI head). Callers
+        // must invoke this while that host is still rooted: detaching a realized element from a
+        // panel already removed from the visual tree corrupts its native peer, after which
+        // re-adding it throws COMException 0x800F1000. See QuickAccessToolBar.Compatibility.cs.
+        if (VisualTreeHelper.GetParent(element) is Panel panel)
         {
             panel.Children.Remove(element);
-        }
-    }
-
-    // Internal content holder
-    private object? Content
-    {
-        set
-        {
-            // Clear and set layout panel as visual content via ContentPresenter in template
-            // For simplicity, we use a single-child approach
-            if (value is UIElement element)
-            {
-                // The control template should have a PART_ContentPanel
-                var contentPanel = GetTemplateChild("PART_ContentPanel") as Panel;
-                if (contentPanel is not null)
-                {
-                    contentPanel.Children.Clear();
-                    contentPanel.Children.Add(element);
-                }
-            }
         }
     }
 

@@ -11,6 +11,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="modernControls:RibbonInfoBarHost">
                     <InfoBar
+                        x:Name="PART_InfoBar"
                         IsOpen="{TemplateBinding IsOpen}"
                         IsClosable="{TemplateBinding IsClosable}"
                         Severity="{TemplateBinding Severity}"

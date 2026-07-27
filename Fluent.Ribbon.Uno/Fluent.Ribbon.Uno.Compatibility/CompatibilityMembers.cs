@@ -215,7 +215,7 @@ public partial class CheckBox
         RibbonProperties.CanAddToQuickAccessToolBarProperty;
 
     /// <summary>Gets or sets whether the control may be offered for quick access.</summary>
-    public bool CanAddToQuickAccessToolBar
+    public new bool CanAddToQuickAccessToolBar
     {
         get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
         set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
@@ -339,7 +339,7 @@ public partial class RadioButton
         RibbonProperties.CanAddToQuickAccessToolBarProperty;
 
     /// <summary>Gets or sets whether the control may be offered for quick access.</summary>
-    public bool CanAddToQuickAccessToolBar
+    public new bool CanAddToQuickAccessToolBar
     {
         get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
         set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
@@ -433,7 +433,7 @@ public partial class TextBox
         RibbonProperties.CanAddToQuickAccessToolBarProperty;
 
     /// <summary>Gets or sets whether the control may be offered for quick access.</summary>
-    public bool CanAddToQuickAccessToolBar
+    public new bool CanAddToQuickAccessToolBar
     {
         get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
         set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
@@ -528,7 +528,7 @@ public partial class ComboBox
         RibbonProperties.CanAddToQuickAccessToolBarProperty;
 
     /// <summary>Gets or sets whether the control may be offered for quick access.</summary>
-    public bool CanAddToQuickAccessToolBar
+    public new bool CanAddToQuickAccessToolBar
     {
         get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
         set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);

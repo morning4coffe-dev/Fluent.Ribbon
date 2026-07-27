@@ -1,19 +1,15 @@
 namespace Fluent.Modern
 {
     /// <summary>
-    /// <para><b>Modern extension</b> — declares the input density mode used by modern ribbon helpers.</para>
+    /// <para><b>Modern extension</b> — declares the preferred input density.</para>
     /// </summary>
     [ModernExtension]
     public enum RibbonInputMode
     {
-        /// <summary>
-        /// Uses the default mouse-oriented ribbon density.
-        /// </summary>
+        /// <summary>Uses mouse-oriented ribbon metrics.</summary>
         Mouse,
 
-        /// <summary>
-        /// Uses larger touch-friendly ribbon density resources.
-        /// </summary>
+        /// <summary>Uses touch-oriented ribbon metrics.</summary>
         Touch,
     }
 }
@@ -21,143 +17,116 @@ namespace Fluent.Modern
 namespace Fluent.Modern.Helpers
 {
     /// <summary>
-    /// <para><b>Modern extension</b> — applies modern mouse or touch density resources on demand.</para>
+    /// <para><b>Modern extension</b> — declares mouse or touch input preference.</para>
     /// </summary>
+    /// <remarks>
+    /// Runtime template rewrites are intentionally avoided because WinUI cannot safely
+    /// replace live ribbon metrics. Merge <c>RibbonTouchDensity.xaml</c> before the ribbon
+    /// is realized to apply the supplied touch metrics.
+    /// </remarks>
     [ModernExtension]
     public static class RibbonInputMode
     {
-        /// <summary>The touch target resource key provided by the modern touch density dictionary.</summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+            DependencyObject,
+            InputModeState> InputModes = new();
+
+        /// <summary>The touch target resource key provided by the density dictionary.</summary>
         public const string TouchTargetMinHeightKey = "ModernTouchTargetMinHeight";
 
-        /// <summary>The touch padding resource key provided by the modern touch density dictionary.</summary>
+        /// <summary>The touch padding resource key provided by the density dictionary.</summary>
         public const string TouchRibbonButtonPaddingKey = "RibbonButtonPadding";
 
-        /// <summary>The touch dictionary URI merged when input mode is Touch.</summary>
-        public const string TouchDensityDictionaryUri = "ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/RibbonTouchDensity.xaml";
+        /// <summary>The URI of the opt-in touch density dictionary.</summary>
+        public const string TouchDensityDictionaryUri =
+            "ms-appx:///Fluent.Ribbon.Uno/Themes/Modern/RibbonTouchDensity.xaml";
 
-        #region Dependency Properties
-
-        /// <summary>Identifies the InputMode attached dependency property.</summary>
+        /// <summary>
+        /// Identifies the legacy InputMode attached dependency property.
+        /// </summary>
+        /// <remarks>
+        /// On native WinUI, <see cref="SetInputMode"/> intentionally avoids calling
+        /// <see cref="DependencyObject.SetValue(DependencyProperty, object)"/> because
+        /// mutating this attached property on a realized ribbon can terminate the process.
+        /// The accessor methods are therefore the authoritative runtime state.
+        /// </remarks>
+        [Obsolete(
+            "Use GetInputMode and SetInputMode. Runtime input preference is stored without mutating the WinUI dependency-property system.")]
         public static readonly DependencyProperty InputModeProperty =
             DependencyProperty.RegisterAttached(
                 "InputMode",
                 typeof(global::Fluent.Modern.RibbonInputMode),
                 typeof(RibbonInputMode),
-                new PropertyMetadata(global::Fluent.Modern.RibbonInputMode.Mouse, OnInputModeChanged));
+                new PropertyMetadata(
+                    global::Fluent.Modern.RibbonInputMode.Mouse,
+                    OnLegacyInputModeChanged));
 
-        #endregion
-
-        #region Attached Property Accessors
-
-        /// <summary>
-        /// Gets the input density mode applied to the element.
-        /// </summary>
-        /// <param name="element">The element.</param>
-        /// <returns>The input density mode.</returns>
-        public static global::Fluent.Modern.RibbonInputMode GetInputMode(DependencyObject element)
+        /// <summary>Gets the preferred input mode.</summary>
+        public static global::Fluent.Modern.RibbonInputMode GetInputMode(
+            DependencyObject element)
         {
             ArgumentNullException.ThrowIfNull(element);
-            return (global::Fluent.Modern.RibbonInputMode)element.GetValue(InputModeProperty);
+            if (InputModes.TryGetValue(element, out var state))
+            {
+                return state.Value;
+            }
+
+#pragma warning disable CS0618
+            var legacyValue = element.GetValue(InputModeProperty);
+#pragma warning restore CS0618
+            return legacyValue is global::Fluent.Modern.RibbonInputMode value
+                ? value
+                : global::Fluent.Modern.RibbonInputMode.Mouse;
         }
 
-        /// <summary>
-        /// Sets the input density mode applied to the element.
-        /// </summary>
-        /// <param name="element">The element.</param>
-        /// <param name="value">The input density mode.</param>
-        public static void SetInputMode(DependencyObject element, global::Fluent.Modern.RibbonInputMode value)
+        /// <summary>Sets the preferred input mode.</summary>
+        public static void SetInputMode(
+            DependencyObject element,
+            global::Fluent.Modern.RibbonInputMode value)
         {
             ArgumentNullException.ThrowIfNull(element);
+            if (value is not global::Fluent.Modern.RibbonInputMode.Mouse
+                and not global::Fluent.Modern.RibbonInputMode.Touch)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown input mode.");
+            }
+
+#if WINDOWS
+            InputModes.GetOrCreateValue(element).Value = value;
+#else
+#pragma warning disable CS0618
             element.SetValue(InputModeProperty, value);
+#pragma warning restore CS0618
+#endif
         }
 
-        #endregion
-
-        #region Methods
+        private static void OnLegacyInputModeChanged(
+            DependencyObject sender,
+            DependencyPropertyChangedEventArgs args)
+        {
+            if (args.NewValue is global::Fluent.Modern.RibbonInputMode value)
+            {
+                InputModes.GetOrCreateValue(sender).Value = value;
+            }
+        }
 
         /// <summary>
-        /// Gets whether the modern touch density resource dictionary is currently applied to the element.
+        /// Gets whether touch input is declared or the touch density dictionary is merged.
         /// </summary>
-        /// <param name="element">The element to inspect.</param>
-        /// <returns><c>true</c> when the touch density dictionary is merged; otherwise <c>false</c>.</returns>
         public static bool IsTouchDensityApplied(FrameworkElement element)
         {
             ArgumentNullException.ThrowIfNull(element);
-            return FindTouchDensityDictionary(element) is not null;
+            return GetInputMode(element) == global::Fluent.Modern.RibbonInputMode.Touch
+                   || element.Resources.MergedDictionaries.Any(
+                       dictionary =>
+                           dictionary.Source?.AbsoluteUri.Equals(
+                               TouchDensityDictionaryUri,
+                               StringComparison.OrdinalIgnoreCase) == true);
         }
 
-        #endregion
-
-        #region Property Changed
-
-        private static void OnInputModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private sealed class InputModeState
         {
-            if (d is not FrameworkElement element)
-            {
-                return;
-            }
-
-            try
-            {
-                if (e.NewValue is global::Fluent.Modern.RibbonInputMode.Touch)
-                {
-                    EnsureTouchDensity(element);
-                }
-                else
-                {
-                    RemoveTouchDensity(element);
-                }
-            }
-            catch
-            {
-                // Modern helpers must never throw into app code.
-            }
+            public global::Fluent.Modern.RibbonInputMode Value { get; set; }
         }
-
-        #endregion
-
-        #region Helpers
-
-        private static void EnsureTouchDensity(FrameworkElement element)
-        {
-            if (FindTouchDensityDictionary(element) is not null)
-            {
-                return;
-            }
-
-            element.Resources.MergedDictionaries.Add(new ResourceDictionary
-            {
-                Source = new Uri(TouchDensityDictionaryUri),
-            });
-        }
-
-        private static void RemoveTouchDensity(FrameworkElement element)
-        {
-            var dictionary = FindTouchDensityDictionary(element);
-            if (dictionary is not null)
-            {
-                element.Resources.MergedDictionaries.Remove(dictionary);
-            }
-        }
-
-        private static ResourceDictionary? FindTouchDensityDictionary(FrameworkElement element)
-        {
-            foreach (var dictionary in element.Resources.MergedDictionaries)
-            {
-                if (IsTouchDensityDictionary(dictionary))
-                {
-                    return dictionary;
-                }
-            }
-
-            return null;
-        }
-
-        private static bool IsTouchDensityDictionary(ResourceDictionary dictionary)
-        {
-            return dictionary.Source?.AbsoluteUri.Equals(TouchDensityDictionaryUri, StringComparison.OrdinalIgnoreCase) == true;
-        }
-
-        #endregion
     }
 }

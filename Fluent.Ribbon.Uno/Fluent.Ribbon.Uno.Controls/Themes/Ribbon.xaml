@@ -16,11 +16,9 @@
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="MinimizedStates">
                                 <VisualState x:Name="Normal" />
-                                <VisualState x:Name="Minimized">
-                                    <VisualState.Setters>
-                                        <Setter Target="PART_RibbonTabControl.ContentHeight" Value="0" />
-                                    </VisualState.Setters>
-                                </VisualState>
+                                <!-- The collapse itself is driven from Ribbon.UpdateMinimizedState;
+                                     a Setter here did not restore the height when leaving the state. -->
+                                <VisualState x:Name="Minimized" />
                             </VisualStateGroup>
 
                             <VisualStateGroup x:Name="QATStates">

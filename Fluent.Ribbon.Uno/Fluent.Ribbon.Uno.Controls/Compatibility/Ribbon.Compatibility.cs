@@ -505,10 +505,20 @@ public partial class Ribbon : ILogicalChildSupport
         _quickAccessElements.Clear();
     }
 
-    /// <summary>Moves focus to the selected tab.</summary>
+    /// <summary>Moves focus to the selected tab when the ribbon itself is focused.</summary>
     protected override void OnGotFocus(RoutedEventArgs args)
     {
         base.OnGotFocus(args);
+
+        // GotFocus bubbles, so this fires for every descendant that takes focus. Redirecting
+        // unconditionally would yank focus off the control the user just clicked, which drops
+        // its pointer capture and cancels the click. Only forward when the ribbon itself
+        // received focus (tabbing into the ribbon, or an explicit Ribbon.Focus() call).
+        if (!ReferenceEquals(args.OriginalSource, this))
+        {
+            return;
+        }
+
         SelectedTab?.Focus(FocusState.Programmatic);
     }
 

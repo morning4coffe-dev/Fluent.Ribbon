@@ -7,8 +7,9 @@ using Fluent.Modern.Media;
 using Fluent.Modern.Model;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using System.Reflection;
@@ -21,33 +22,37 @@ namespace FluentRibbon.Uno.Showcase;
 
 public sealed partial class MainPage
 {
+    // The Modern tab carries ten groups — more than fit at any sane window width — so it needs a
+    // reduce order like every other tab, otherwise its groups simply overflow the window and get
+    // clipped with no way to reach them. Least-essential groups collapse first; three passes take
+    // each group Large -> Medium -> Small -> Collapsed. Entries match a group's Name or Header.
+    private const string ModernReduceOrder =
+        "Onboarding,Customization,Data-driven,Fluent Visuals,Accessibility,"
+        + "RTL & Accent,Adaptive & Touch,Keyboard Accelerators,Command Search,Icons,"
+        + "Onboarding,Customization,Data-driven,Fluent Visuals,Accessibility,"
+        + "RTL & Accent,Adaptive & Touch,Keyboard Accelerators,Command Search,Icons,"
+        + "Onboarding,Customization,Data-driven,Fluent Visuals,Accessibility,"
+        + "RTL & Accent,Adaptive & Touch,Keyboard Accelerators,Command Search,Icons";
+
+    private Ribbon? modernGeneratedRibbonPreview;
+
     private void InitializeModernShowcase()
     {
         var tab = new RibbonTab
         {
             Header = "Modern ✨ (beyond WPF)",
+            ReduceOrder = ModernReduceOrder,
         };
+        IdentifyModernElement(tab, "ModernTab", "Modern extensions");
+        AutomationProperties.SetAccessibilityView(tab, AccessibilityView.Control);
         RibbonCustomizationService.SetItemKey(tab, "modern-showcase");
-
-        var group = new RibbonGroupBox
-        {
-            Header = "Modern",
-        };
-
-        group.Items.Add(new RibbonButton
-        {
-            Header = "Modern feature demos are added here by later agents.",
-            Size = RibbonControlSize.Large,
-        });
-
-        tab.Groups.Add(group);
 
         var iconsGroup = new RibbonGroupBox
         {
             Header = "Icons",
         };
 
-        iconsGroup.Items.Add(new ModernRibbonButton
+        iconsGroup.Items.Add(IdentifyModernElement(new ModernRibbonButton
         {
             Header = "Font",
             Size = RibbonControlSize.Large,
@@ -55,27 +60,27 @@ public sealed partial class MainPage
             SmallIconSource = new FontIconSource { Glyph = "\uE734" },
             ScreenTipTitle = "FontIconSource",
             ScreenTipText = "Modern ribbon button icon rendered from a WinUI FontIconSource.",
-        });
+        }, "ModernIconFontButton"));
 
-        iconsGroup.Items.Add(new ModernRibbonButton
+        iconsGroup.Items.Add(IdentifyModernElement(new ModernRibbonButton
         {
             Header = "Path",
             Size = RibbonControlSize.Large,
-            LargeIconSource = new PathIconSource { Data = CreateModernStarGeometry() },
-            SmallIconSource = new PathIconSource { Data = CreateModernStarGeometry() },
+            LargeIconSource = new PathIconSource { Data = CreateModernStarGeometry(32) },
+            SmallIconSource = new PathIconSource { Data = CreateModernStarGeometry(16) },
             ScreenTipTitle = "PathIconSource",
             ScreenTipText = "Modern ribbon button icon rendered from vector path geometry.",
-        });
+        }, "ModernIconPathButton"));
 
-        iconsGroup.Items.Add(new ModernRibbonButton
+        iconsGroup.Items.Add(IdentifyModernElement(new ModernRibbonButton
         {
             Header = "SVG",
             Size = RibbonControlSize.Large,
             LargeIconSource = CreateModernSvgIconSource(),
             SmallIconSource = CreateModernSvgIconSource(),
-            ScreenTipTitle = "ImageIconSource + SVG",
-            ScreenTipText = "Modern ribbon button icon rendered from an SvgImageSource asset.",
-        });
+            ScreenTipTitle = "BitmapIconSource + SVG asset",
+            ScreenTipText = "Modern ribbon button icon rendered from an SVG source asset processed by Uno Resizetizer.",
+        }, "ModernIconSvgButton"));
 
         tab.Groups.Add(iconsGroup);
 
@@ -104,18 +109,25 @@ public sealed partial class MainPage
         {
             Text = "Accelerator log",
             TextWrapping = TextWrapping.Wrap,
-            Width = 180,
         };
+        IdentifyModernElement(acceleratorLog, "ModernAcceleratorLog");
 
-        var saveButton = CreateAcceleratorButton("Save", "Ctrl+S", "Save command", acceleratorLog);
-        var copyButton = CreateAcceleratorButton("Copy", "Ctrl+C", "Copy command", acceleratorLog);
-        var paletteButton = CreateAcceleratorButton("Palette", "Ctrl+Shift+P", "Command palette", acceleratorLog);
+        var saveButton = CreateAcceleratorButton("Save", "Ctrl+S", "Save command", acceleratorLog, "ModernAcceleratorSaveButton");
+        var copyButton = CreateAcceleratorButton("Copy", "Ctrl+C", "Copy command", acceleratorLog, "ModernAcceleratorCopyButton");
+        var paletteButton = CreateAcceleratorButton("Palette", "Ctrl+Shift+P", "Command palette", acceleratorLog, "ModernAcceleratorPaletteButton");
         RibbonAccelerator.SetShowInScreenTip(paletteButton, false);
 
-        acceleratorGroup.Items.Add(saveButton);
-        acceleratorGroup.Items.Add(copyButton);
-        acceleratorGroup.Items.Add(paletteButton);
-        acceleratorGroup.Items.Add(acceleratorLog);
+        var acceleratorPanel = CreateModernFlyoutPanel(
+            "ModernAcceleratorPanel",
+            "Keyboard accelerator examples",
+            340);
+        var acceleratorButtons = CreateModernFlyoutRow();
+        acceleratorButtons.Children.Add(saveButton);
+        acceleratorButtons.Children.Add(copyButton);
+        acceleratorButtons.Children.Add(paletteButton);
+        acceleratorPanel.Children.Add(acceleratorButtons);
+        acceleratorPanel.Children.Add(acceleratorLog);
+        acceleratorGroup.Items.Add(acceleratorPanel);
 
         tab.Groups.Add(acceleratorGroup);
 
@@ -128,24 +140,32 @@ public sealed partial class MainPage
         {
             Content = "Adaptive layout",
         };
+        IdentifyModernElement(adaptiveToggle, "ModernAdaptiveToggle");
         adaptiveToggle.Checked += (_, _) => RibbonAdaptiveBehavior.SetIsEnabled(MainRibbon, true);
         adaptiveToggle.Unchecked += (_, _) => RibbonAdaptiveBehavior.SetIsEnabled(MainRibbon, false);
 
         var touchToggle = new ToggleButton
         {
-            Content = "Touch density",
+            Content = "Touch input",
         };
+        IdentifyModernElement(touchToggle, "ModernTouchDensityToggle");
         touchToggle.Checked += (_, _) => RibbonInputModeHelper.SetInputMode(MainRibbon, RibbonInputDensity.Touch);
         touchToggle.Unchecked += (_, _) => RibbonInputModeHelper.SetInputMode(MainRibbon, RibbonInputDensity.Mouse);
 
-        adaptiveGroup.Items.Add(adaptiveToggle);
-        adaptiveGroup.Items.Add(touchToggle);
-        adaptiveGroup.Items.Add(new TextBlock
+        var adaptivePanel = CreateModernFlyoutPanel(
+            "ModernAdaptivePanel",
+            "Adaptive layout and touch input",
+            360);
+        var adaptiveButtons = CreateModernFlyoutRow();
+        adaptiveButtons.Children.Add(adaptiveToggle);
+        adaptiveButtons.Children.Add(touchToggle);
+        adaptivePanel.Children.Add(adaptiveButtons);
+        adaptivePanel.Children.Add(new TextBlock
         {
-            Text = "Adaptive reacts to window width; touch density is applied on demand.",
+            Text = "Adaptive reacts to width. Touch declares input preference; merge the supplied density dictionary before realization for touch metrics.",
             TextWrapping = TextWrapping.Wrap,
-            Width = 180,
         });
+        adaptiveGroup.Items.Add(adaptivePanel);
 
         tab.Groups.Add(adaptiveGroup);
 
@@ -158,6 +178,7 @@ public sealed partial class MainPage
         {
             Content = "Right-to-left",
         };
+        IdentifyModernElement(rtlToggle, "ModernRtlToggle");
         rtlToggle.Checked += (_, _) => RibbonFlow.SetIsRightToLeft(tab, true);
         rtlToggle.Unchecked += (_, _) => RibbonFlow.SetIsRightToLeft(tab, false);
 
@@ -176,15 +197,22 @@ public sealed partial class MainPage
                 Margin = new Thickness(10, 4, 10, 4),
             },
         };
+        IdentifyModernElement(accentSwatch, "ModernAccentSwatch");
 
-        rtlAccentGroup.Items.Add(rtlToggle);
-        rtlAccentGroup.Items.Add(accentSwatch);
-        rtlAccentGroup.Items.Add(new TextBlock
+        var rtlAccentPanel = CreateModernFlyoutPanel(
+            "ModernRtlAccentPanel",
+            "Right-to-left layout and system accent",
+            360);
+        var rtlAccentControls = CreateModernFlyoutRow();
+        rtlAccentControls.Children.Add(rtlToggle);
+        rtlAccentControls.Children.Add(accentSwatch);
+        rtlAccentPanel.Children.Add(rtlAccentControls);
+        rtlAccentPanel.Children.Add(new TextBlock
         {
             Text = "FlowDirection and accent brushes are opt-in modern resources.",
             TextWrapping = TextWrapping.Wrap,
-            Width = 180,
         });
+        rtlAccentGroup.Items.Add(rtlAccentPanel);
 
         tab.Groups.Add(rtlAccentGroup);
 
@@ -193,15 +221,20 @@ public sealed partial class MainPage
             Header = "Accessibility",
         };
 
-        var accessibilityPanel = new StackPanel
-        {
-            Spacing = 4,
-            Width = 190,
-        };
+        var accessibilityPanel = CreateModernFlyoutPanel(
+            "ModernAccessibilityPanel",
+            "Accessibility and directional focus",
+            240);
         RibbonFocus.SetEnableXYFocus(accessibilityPanel, true);
-        accessibilityPanel.Children.Add(new Button { Content = "Navigate up" });
-        accessibilityPanel.Children.Add(new Button { Content = "Navigate down" });
-        accessibilityPanel.Children.Add(new Button { Content = "Navigate right" });
+        accessibilityPanel.Children.Add(IdentifyModernElement(
+            new Button { Content = "Navigate up" },
+            "ModernNavigateUpButton"));
+        accessibilityPanel.Children.Add(IdentifyModernElement(
+            new Button { Content = "Navigate down" },
+            "ModernNavigateDownButton"));
+        accessibilityPanel.Children.Add(IdentifyModernElement(
+            new Button { Content = "Navigate right" },
+            "ModernNavigateRightButton"));
         accessibilityPanel.Children.Add(new TextBlock
         {
             Text = "XYFocus enables gamepad/arrow navigation. Modern controls expose Narrator-friendly automation peers.",
@@ -220,34 +253,47 @@ public sealed partial class MainPage
         {
             Text = "Backdrop: choose a material",
             TextWrapping = TextWrapping.Wrap,
-            Width = 180,
         };
+        IdentifyModernElement(backdropStatus, "ModernBackdropStatus");
 
-        visualsGroup.Items.Add(CreateBackdropButton("Mica", RibbonBackdropKind.Mica, backdropStatus));
-        visualsGroup.Items.Add(CreateBackdropButton("Acrylic", RibbonBackdropKind.Acrylic, backdropStatus));
-        visualsGroup.Items.Add(CreateBackdropButton("None", RibbonBackdropKind.None, backdropStatus));
-        visualsGroup.Items.Add(backdropStatus);
+        var visualsPanel = CreateModernFlyoutPanel(
+            "ModernVisualsPanel",
+            "Fluent visual effects",
+            420);
+        var backdropButtons = CreateModernFlyoutRow();
+        backdropButtons.Children.Add(CreateBackdropButton("Mica", RibbonBackdropKind.Mica, backdropStatus, "ModernBackdropMicaButton"));
+        backdropButtons.Children.Add(CreateBackdropButton("Acrylic", RibbonBackdropKind.Acrylic, backdropStatus, "ModernBackdropAcrylicButton"));
+        backdropButtons.Children.Add(CreateBackdropButton("None", RibbonBackdropKind.None, backdropStatus, "ModernBackdropNoneButton"));
+        visualsPanel.Children.Add(backdropButtons);
+        visualsPanel.Children.Add(backdropStatus);
 
         var elevatedCard = new Border
         {
-            Width = 160,
-            Height = 54,
+            Width = 190,
+            Height = 64,
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 245, 247, 250)),
+            Background = ResolveModernBrush(
+                "CardBackgroundFillColorDefaultBrush",
+                ResolveModernBrush(
+                    "RibbonContentBrush",
+                    new SolidColorBrush(Windows.UI.Color.FromArgb(255, 245, 247, 250)))),
             Child = new TextBlock
             {
                 Text = "ThemeShadow depth 16",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(10),
+                Foreground = ResolveModernBrush(
+                    "RibbonTextBrush",
+                    new SolidColorBrush(Windows.UI.Color.FromArgb(255, 31, 31, 31))),
             },
         };
+        IdentifyModernElement(elevatedCard, "ModernElevationCard");
         RibbonElevation.SetDepth(elevatedCard, 16);
-        visualsGroup.Items.Add(elevatedCard);
 
         var animationPanel = new StackPanel
         {
             Spacing = 4,
-            Width = 170,
+            Width = 200,
         };
         var animatedChip = new Border
         {
@@ -261,25 +307,33 @@ public sealed partial class MainPage
                 Margin = new Thickness(10, 4, 10, 4),
             },
         };
+        IdentifyModernElement(animatedChip, "ModernAnimatedChip");
         var animationToggle = new ToggleButton
         {
             Content = "Animate panel",
         };
+        IdentifyModernElement(animationToggle, "ModernAnimationToggle");
         animationToggle.Checked += (_, _) =>
         {
-            RibbonAnimations.SetEnableImplicitTransitions(animationPanel, true);
-            animatedChip.Opacity = 0.72;
-            animatedChip.Translation = new System.Numerics.Vector3(12f, 0f, 0f);
+            RibbonAnimations.SetEnableImplicitTransitions(animatedChip, true);
+            var visual = ElementCompositionPreview.GetElementVisual(animatedChip);
+            visual.Opacity = 0.72f;
+            visual.Offset = new System.Numerics.Vector3(12f, visual.Offset.Y, visual.Offset.Z);
         };
         animationToggle.Unchecked += (_, _) =>
         {
-            RibbonAnimations.SetEnableImplicitTransitions(animationPanel, false);
-            animatedChip.Opacity = 1d;
-            animatedChip.Translation = default;
+            var visual = ElementCompositionPreview.GetElementVisual(animatedChip);
+            visual.Opacity = 1f;
+            visual.Offset = new System.Numerics.Vector3(0f, visual.Offset.Y, visual.Offset.Z);
+            RibbonAnimations.SetEnableImplicitTransitions(animatedChip, false);
         };
         animationPanel.Children.Add(animationToggle);
         animationPanel.Children.Add(animatedChip);
-        visualsGroup.Items.Add(animationPanel);
+        var visualDetails = CreateModernFlyoutRow();
+        visualDetails.Children.Add(elevatedCard);
+        visualDetails.Children.Add(animationPanel);
+        visualsPanel.Children.Add(visualDetails);
+        visualsGroup.Items.Add(visualsPanel);
 
         tab.Groups.Add(visualsGroup);
 
@@ -290,41 +344,43 @@ public sealed partial class MainPage
 
         var builderLog = new TextBlock
         {
-            Text = "Build a generated ribbon tab from a RibbonModel.",
+            Text = "Build and inspect a generated ribbon without mutating the live TabView.",
             TextWrapping = TextWrapping.Wrap,
-            Width = 190,
         };
+        IdentifyModernElement(builderLog, "ModernBuilderLog");
 
-        builderGroup.Items.Add(new ModernRibbonButton
+        var builderPanel = CreateModernFlyoutPanel(
+            "ModernBuilderPanel",
+            "Data-driven ribbon builder",
+            300);
+        builderPanel.Children.Add(IdentifyModernElement(new ModernRibbonButton
         {
             Header = "Build model",
             Size = RibbonControlSize.Large,
             LargeIconSource = new FontIconSource { Glyph = "\uE8A5" },
             SmallIconSource = new FontIconSource { Glyph = "\uE8A5" },
             ScreenTipTitle = "Data-driven RibbonBuilder",
-            ScreenTipText = "Builds a real Fluent ribbon tab from a lightweight command model.",
+            ScreenTipText = "Builds and validates a real Fluent ribbon control tree from a lightweight command model.",
             Command = new ModernShowcaseCommand(() =>
             {
-                var generated = Fluent.Modern.RibbonBuilder.Build(CreateBuilderShowcaseModel(builderLog));
-                var generatedTab = generated.Tabs.FirstOrDefault();
+                modernGeneratedRibbonPreview ??= Fluent.Modern.RibbonBuilder.Build(
+                    CreateBuilderShowcaseModel(builderLog));
+                var generatedTab = modernGeneratedRibbonPreview.Tabs.FirstOrDefault();
                 if (generatedTab is null)
                 {
                     builderLog.Text = "RibbonBuilder returned no tabs.";
                     return;
                 }
 
-                var existing = MainRibbon.Tabs.FirstOrDefault(item => string.Equals(item.Header?.ToString(), generatedTab.Header?.ToString(), StringComparison.Ordinal));
-                if (existing is not null)
-                {
-                    MainRibbon.Tabs.Remove(existing);
-                }
-
-                MainRibbon.Tabs.Add(generatedTab);
-                MainRibbon.SelectedTab = generatedTab;
-                builderLog.Text = "Generated tab appended from RibbonModel.";
+                IdentifyGeneratedRibbon(generatedTab);
+                var itemCount = generatedTab.Groups.Sum(group => group.Items.Count);
+                builderLog.Text =
+                    $"Built '{generatedTab.Header}' with {generatedTab.Groups.Count} groups "
+                    + $"and {itemCount} controls.";
             }),
-        });
-        builderGroup.Items.Add(builderLog);
+        }, "ModernBuildModelButton"));
+        builderPanel.Children.Add(builderLog);
+        builderGroup.Items.Add(builderPanel);
 
         tab.Groups.Add(builderGroup);
 
@@ -337,43 +393,67 @@ public sealed partial class MainPage
         {
             Text = "Save, load, or preview JSON layout customization.",
             TextWrapping = TextWrapping.Wrap,
-            Width = 230,
         };
+        IdentifyModernElement(customizationLog, "ModernCustomizationLog");
 
-        customizationGroup.Items.Add(new RibbonButton
+        var customizationPanel = CreateModernFlyoutPanel(
+            "ModernCustomizationPanel",
+            "Ribbon layout customization",
+            420);
+        var customizationButtons = CreateModernFlyoutRow();
+        customizationButtons.Children.Add(IdentifyModernElement(new RibbonButton
         {
             Header = "Save layout",
             Size = RibbonControlSize.Large,
             Command = new ModernShowcaseCommand(async () =>
             {
-                await RibbonCustomizationService.SaveAsync(RibbonCustomizationService.Capture(MainRibbon));
-                customizationLog.Text = "Ribbon layout saved to ApplicationData LocalSettings.";
+                var capture = RibbonCustomizationService.CaptureResult(MainRibbon);
+                if (!capture.Succeeded || capture.Value is null)
+                {
+                    customizationLog.Text = DescribeCustomizationIssues("Save failed", capture.Issues);
+                    return;
+                }
+
+                var saved = await RibbonCustomizationService.SaveResultAsync(capture.Value);
+                customizationLog.Text = saved.Succeeded
+                    ? $"Ribbon layout saved to {saved.Value}."
+                    : DescribeCustomizationIssues("Save failed", saved.Issues);
             }),
-        });
-        customizationGroup.Items.Add(new RibbonButton
+        }, "ModernSaveLayoutButton"));
+        customizationButtons.Children.Add(IdentifyModernElement(new RibbonButton
         {
             Header = "Load layout",
             Size = RibbonControlSize.Large,
             Command = new ModernShowcaseCommand(async () =>
             {
-                var layout = await RibbonCustomizationService.LoadAsync();
-                if (layout is null)
+                var loaded = await RibbonCustomizationService.LoadResultAsync();
+                if (!loaded.Succeeded)
+                {
+                    customizationLog.Text = DescribeCustomizationIssues("Load failed", loaded.Issues);
+                    return;
+                }
+
+                if (loaded.Value is null)
                 {
                     customizationLog.Text = "No saved ribbon layout found.";
                     return;
                 }
 
-                RibbonCustomizationService.Apply(MainRibbon, layout);
-                customizationLog.Text = "Ribbon layout loaded and applied.";
+                var applied = RibbonCustomizationService.ApplyResult(MainRibbon, loaded.Value);
+                customizationLog.Text = applied.Succeeded
+                    ? "Ribbon layout loaded and applied."
+                    : DescribeCustomizationIssues("Apply failed", applied.Issues);
             }),
-        });
-        customizationGroup.Items.Add(new RibbonButton
+        }, "ModernLoadLayoutButton"));
+        customizationButtons.Children.Add(IdentifyModernElement(new RibbonButton
         {
             Header = "Preview JSON",
             Size = RibbonControlSize.Large,
             Command = new ModernShowcaseCommand(() => PreviewCustomizationLayout(customizationLog)),
-        });
-        customizationGroup.Items.Add(customizationLog);
+        }, "ModernPreviewJsonButton"));
+        customizationPanel.Children.Add(customizationButtons);
+        customizationPanel.Children.Add(customizationLog);
+        customizationGroup.Items.Add(customizationPanel);
 
         tab.Groups.Add(customizationGroup);
 
@@ -391,15 +471,22 @@ public sealed partial class MainPage
             ScreenTipTitle = "Modern coach mark target",
             ScreenTipText = "The coach mark points at this modern ribbon button.",
         };
+        IdentifyModernElement(coachTarget, "ModernCoachTarget");
 
         var infoBarHost = new RibbonInfoBarHost
         {
-            Width = 260,
+            Width = 400,
             IsClosable = true,
         };
+        IdentifyModernElement(infoBarHost, "ModernInfoBarHost");
 
-        onboardingGroup.Items.Add(coachTarget);
-        onboardingGroup.Items.Add(new RibbonButton
+        var onboardingPanel = CreateModernFlyoutPanel(
+            "ModernOnboardingPanel",
+            "Onboarding tips and notifications",
+            420);
+        var onboardingButtons = CreateModernFlyoutRow();
+        onboardingButtons.Children.Add(coachTarget);
+        onboardingButtons.Children.Add(IdentifyModernElement(new RibbonButton
         {
             Header = "Show coach mark",
             Size = RibbonControlSize.Large,
@@ -407,8 +494,8 @@ public sealed partial class MainPage
                 coachTarget,
                 "Tip",
                 "This button is a modern extension.")),
-        });
-        onboardingGroup.Items.Add(new RibbonButton
+        }, "ModernShowCoachMarkButton"));
+        onboardingButtons.Children.Add(IdentifyModernElement(new RibbonButton
         {
             Header = "Notify",
             Size = RibbonControlSize.Large,
@@ -416,28 +503,35 @@ public sealed partial class MainPage
                 InfoBarSeverity.Success,
                 "Saved",
                 "Your document was saved.")),
-        });
-        onboardingGroup.Items.Add(infoBarHost);
+        }, "ModernNotifyButton"));
+        onboardingPanel.Children.Add(onboardingButtons);
+        onboardingPanel.Children.Add(infoBarHost);
+        onboardingGroup.Items.Add(onboardingPanel);
 
         tab.Groups.Add(onboardingGroup);
-        MainRibbon.Tabs.Add(tab);
+        var modernTabIndex = Math.Min(5, MainRibbon.Tabs.Count);
+        MainRibbon.Tabs.Insert(modernTabIndex, tab);
     }
 
     private void PreviewCustomizationLayout(TextBlock log)
     {
-        var layout = RibbonCustomizationService.Capture(MainRibbon);
-        var modified = RibbonCustomizationService.Deserialize(RibbonCustomizationService.Serialize(layout));
-        var firstTab = modified?.Tabs.OrderBy(item => item.Order).FirstOrDefault();
-        if (modified is null || firstTab is null)
+        var capture = RibbonCustomizationService.CaptureResult(MainRibbon);
+        if (!capture.Succeeded || capture.Value is null)
         {
-            log.Text = "No ribbon tabs available to customize.";
+            log.Text = DescribeCustomizationIssues("Preview failed", capture.Issues);
             return;
         }
 
-        firstTab.IsVisible = false;
-        firstTab.Order = modified.Tabs.Count + 10;
-        RibbonCustomizationService.Apply(MainRibbon, modified);
-        log.Text = RibbonCustomizationService.Serialize(modified);
+        var serialized = RibbonCustomizationService.SerializeResult(capture.Value);
+        if (!serialized.Succeeded || string.IsNullOrWhiteSpace(serialized.Value))
+        {
+            log.Text = DescribeCustomizationIssues("Preview failed", serialized.Issues);
+            return;
+        }
+
+        log.Text =
+            $"JSON preview: {capture.Value.Tabs.Count} tabs, {serialized.Value.Length} characters.";
+        ToolTipService.SetToolTip(log, serialized.Value);
     }
 
     private static RibbonModel CreateBuilderShowcaseModel(TextBlock log)
@@ -486,9 +580,13 @@ public sealed partial class MainPage
         return model;
     }
 
-    private static RibbonButton CreateBackdropButton(string header, RibbonBackdropKind kind, TextBlock status)
+    private static RibbonButton CreateBackdropButton(
+        string header,
+        RibbonBackdropKind kind,
+        TextBlock status,
+        string automationId)
     {
-        return new RibbonButton
+        return IdentifyModernElement(new RibbonButton
         {
             Header = header,
             Size = RibbonControlSize.Large,
@@ -500,7 +598,7 @@ public sealed partial class MainPage
                     ? $"Backdrop: {kind} applied"
                     : $"Backdrop: {kind} not supported on this platform";
             }),
-        };
+        }, automationId);
     }
 
     private static Window? GetShowcaseMainWindow()
@@ -519,9 +617,14 @@ public sealed partial class MainPage
         }
     }
 
-    private static RibbonButton CreateAcceleratorButton(string header, string gesture, string description, TextBlock log)
+    private static RibbonButton CreateAcceleratorButton(
+        string header,
+        string gesture,
+        string description,
+        TextBlock log,
+        string automationId)
     {
-        var button = new RibbonButton
+        var button = IdentifyModernElement(new RibbonButton
         {
             Header = header,
             Size = RibbonControlSize.Large,
@@ -531,10 +634,89 @@ public sealed partial class MainPage
             {
                 log.Text = $"{gesture} pressed";
             }),
-        };
+        }, automationId);
 
         RibbonAccelerator.SetGesture(button, gesture);
         return button;
+    }
+
+    private static T IdentifyModernElement<T>(
+        T element,
+        string automationId,
+        string? automationName = null)
+        where T : FrameworkElement
+    {
+        AutomationProperties.SetAutomationId(element, automationId);
+        if (!string.IsNullOrWhiteSpace(automationName))
+        {
+            AutomationProperties.SetName(element, automationName);
+        }
+
+        return element;
+    }
+
+    private static StackPanel CreateModernFlyoutPanel(
+        string automationId,
+        string automationName,
+        double width)
+    {
+        var panel = IdentifyModernElement(
+            new StackPanel
+            {
+                Spacing = 8,
+                Width = width,
+            },
+            automationId,
+            automationName);
+        AutomationProperties.SetAccessibilityView(panel, AccessibilityView.Control);
+        return panel;
+    }
+
+    private static StackPanel CreateModernFlyoutRow()
+    {
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+        };
+    }
+
+    private static void IdentifyGeneratedRibbon(RibbonTabItem tab)
+    {
+        IdentifyModernElement(tab, "ModernGeneratedTab", "Generated ribbon tab");
+        RibbonCustomizationService.SetItemKey(tab, "modern-generated-tab");
+        for (var groupIndex = 0; groupIndex < tab.Groups.Count; groupIndex++)
+        {
+            var group = tab.Groups[groupIndex];
+            IdentifyModernElement(group, $"ModernGeneratedGroup{groupIndex}");
+            RibbonCustomizationService.SetItemKey(
+                group,
+                $"modern-generated-group-{groupIndex}");
+            for (var itemIndex = 0; itemIndex < group.Items.Count; itemIndex++)
+            {
+                if (group.Items[itemIndex] is FrameworkElement element)
+                {
+                    IdentifyModernElement(
+                        element,
+                        $"ModernGeneratedItem{groupIndex}_{itemIndex}");
+                    RibbonCustomizationService.SetItemKey(
+                        element,
+                        $"modern-generated-item-{groupIndex}-{itemIndex}");
+                }
+            }
+        }
+    }
+
+    private static string DescribeCustomizationIssues(
+        string prefix,
+        IEnumerable<RibbonCustomizationIssue> issues)
+    {
+        var details = issues
+            .Select(issue => $"{issue.Code}: {issue.Message}")
+            .ToArray();
+        return details.Length == 0
+            ? prefix
+            : $"{prefix}: {string.Join(" | ", details)}";
     }
 
     private static Brush ResolveModernBrush(string key, Brush fallback)
@@ -551,43 +733,51 @@ public sealed partial class MainPage
         }
     }
 
-    private static ImageIconSource CreateModernSvgIconSource()
+    private static BitmapIconSource CreateModernSvgIconSource()
     {
-        return new ImageIconSource
+        return new BitmapIconSource
         {
-            ImageSource = new SvgImageSource(new Uri("ms-appx:///Fluent.Ribbon.Uno.Showcase/Assets/Modern/star.svg")),
+            UriSource = new Uri("ms-appx:///Assets/Modern/star.png"),
+            ShowAsMonochrome = true,
         };
     }
 
-    private static Geometry CreateModernStarGeometry()
+    private static Geometry CreateModernStarGeometry(double dimension = 32)
     {
+        var scale = dimension / 32;
         var figure = new PathFigure
         {
-            StartPoint = new Point(16, 3),
+            StartPoint = ScalePoint(16, 3, scale),
             IsClosed = true,
             IsFilled = true,
         };
 
-        foreach (var point in new[]
+        foreach (var point in new (double X, double Y)[]
         {
-            new Point(20, 11),
-            new Point(29, 12),
-            new Point(22.5, 18.5),
-            new Point(24, 28),
-            new Point(16, 23.5),
-            new Point(8, 28),
-            new Point(9.5, 18.5),
-            new Point(3, 12),
-            new Point(12, 11),
+            (20, 11),
+            (29, 12),
+            (22.5, 18.5),
+            (24, 28),
+            (16, 23.5),
+            (8, 28),
+            (9.5, 18.5),
+            (3, 12),
+            (12, 11),
         })
         {
-            figure.Segments.Add(new LineSegment { Point = point });
+            figure.Segments.Add(new LineSegment
+            {
+                Point = ScalePoint(point.X, point.Y, scale),
+            });
         }
 
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         return geometry;
     }
+
+    private static Point ScalePoint(double x, double y, double scale)
+        => new(x * scale, y * scale);
 
     private sealed class ModernShowcaseCommand : ICommand
     {

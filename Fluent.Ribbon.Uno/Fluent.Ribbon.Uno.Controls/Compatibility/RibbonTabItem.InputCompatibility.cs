@@ -25,8 +25,27 @@ public partial class RibbonTabItem
     /// <inheritdoc />
     protected override void OnPointerPressed(PointerRoutedEventArgs e)
     {
-        base.OnPointerPressed(e);
+        if (!IsPointerFromTabContent(e.OriginalSource as DependencyObject))
+        {
+            base.OnPointerPressed(e);
+        }
+
         OnMouseLeftButtonDown(e);
+    }
+
+    private bool IsPointerFromTabContent(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, Content))
+            {
+                return true;
+            }
+
+            source = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     /// <summary>Gets logical children retained for WPF source compatibility.</summary>

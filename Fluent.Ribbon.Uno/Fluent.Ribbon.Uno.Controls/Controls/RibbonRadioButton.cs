@@ -4,7 +4,7 @@ namespace Fluent;
 /// Represents a RadioButton control within a Ribbon.
 /// </summary>
 [ContentProperty(Name = nameof(Header))]
-public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IHeaderedControl, IMediumIconProvider
+public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IHeaderedControl, IMediumIconProvider, IQuickAccessItemProvider
 {
     #region Dependency Properties
 
@@ -82,7 +82,7 @@ public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IH
             nameof(GroupName),
             typeof(string),
             typeof(RibbonRadioButton),
-            new PropertyMetadata(string.Empty));
+            new PropertyMetadata(string.Empty, OnGroupNameChanged));
 
     /// <summary>
     /// Gets or sets the name of the radio button group.
@@ -103,6 +103,7 @@ public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IH
     public RibbonRadioButton()
     {
         DefaultStyleKey = typeof(RibbonRadioButton);
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -127,6 +128,17 @@ public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IH
         }
     }
 
+    private static void OnGroupNameChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        if (sender is RibbonRadioButton radioButton)
+        {
+            ((Microsoft.UI.Xaml.Controls.RadioButton)radioButton).GroupName =
+                (string)args.NewValue;
+        }
+    }
+
     private void UpdateVisualState()
     {
         var stateName = Size switch
@@ -138,6 +150,90 @@ public partial class RibbonRadioButton : RadioButton, IScalableRibbonControl, IH
         };
 
         VisualStateManager.GoToState(this, stateName, true);
+    }
+
+    #endregion
+
+    #region IQuickAccessItemProvider
+
+    /// <inheritdoc />
+    public bool CanAddToQuickAccessToolBar
+    {
+        get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
+        set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
+    }
+
+    /// <inheritdoc />
+    public virtual FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonRadioButton
+        {
+            Header = QuickAccessHelper.ClonePresentationValue(Header),
+            MediumIcon = MediumIcon,
+            Size = RibbonControlSize.Small,
+            GroupName = GroupName,
+            CanAddToQuickAccessToolBar = false,
+        };
+        ((Microsoft.UI.Xaml.Controls.RadioButton)clone).GroupName =
+            string.IsNullOrWhiteSpace(GroupName)
+                ? $"FluentQat.{Guid.NewGuid():N}"
+                : $"FluentQat.{GroupName}";
+
+        RibbonControl.BindQuickAccessItem(this, clone);
+        var synchronizing = false;
+        var weakSource = new WeakReference<RibbonRadioButton>(this);
+        var weakClone = new WeakReference<RibbonRadioButton>(clone);
+        RoutedEventHandler? sourceChecked = null;
+        RoutedEventHandler? sourceUnchecked = null;
+
+        clone.IsChecked = IsChecked;
+        sourceChecked = (_, _) => SynchronizeClone(true, sourceChecked);
+        sourceUnchecked = (_, _) => SynchronizeClone(false, sourceUnchecked);
+        Checked += sourceChecked;
+        Unchecked += sourceUnchecked;
+        clone.Checked += (_, _) => SynchronizeSource(true);
+        clone.Unchecked += (_, _) => SynchronizeSource(false);
+        return clone;
+
+        void SynchronizeClone(bool value, RoutedEventHandler? handler)
+        {
+            if (!weakClone.TryGetTarget(out var liveClone))
+            {
+                if (value)
+                {
+                    Checked -= handler;
+                }
+                else
+                {
+                    Unchecked -= handler;
+                }
+
+                return;
+            }
+
+            if (synchronizing || liveClone.IsChecked == value)
+            {
+                return;
+            }
+
+            synchronizing = true;
+            liveClone.IsChecked = value;
+            synchronizing = false;
+        }
+
+        void SynchronizeSource(bool value)
+        {
+            if (!weakSource.TryGetTarget(out var liveSource)
+                || synchronizing
+                || liveSource.IsChecked == value)
+            {
+                return;
+            }
+
+            synchronizing = true;
+            liveSource.IsChecked = value;
+            synchronizing = false;
+        }
     }
 
     #endregion

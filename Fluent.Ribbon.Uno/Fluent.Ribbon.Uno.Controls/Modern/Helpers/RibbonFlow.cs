@@ -6,6 +6,20 @@ namespace Fluent.Modern.Helpers;
 [ModernExtension]
 public static class RibbonFlow
 {
+    private static readonly DependencyProperty OriginalFlowDirectionProperty =
+        DependencyProperty.RegisterAttached(
+            "OriginalFlowDirection",
+            typeof(FlowDirection),
+            typeof(RibbonFlow),
+            new PropertyMetadata(FlowDirection.LeftToRight));
+
+    private static readonly DependencyProperty OriginalFlowDirectionCapturedProperty =
+        DependencyProperty.RegisterAttached(
+            "OriginalFlowDirectionCaptured",
+            typeof(bool),
+            typeof(RibbonFlow),
+            new PropertyMetadata(false));
+
     #region Dependency Properties
 
     /// <summary>Identifies the IsRightToLeft attached dependency property.</summary>
@@ -67,9 +81,23 @@ public static class RibbonFlow
 
         try
         {
-            element.FlowDirection = e.NewValue is bool isRightToLeft && isRightToLeft
-                ? FlowDirection.RightToLeft
-                : FlowDirection.LeftToRight;
+            if (e.NewValue is bool isRightToLeft && isRightToLeft)
+            {
+                if (!(bool)element.GetValue(OriginalFlowDirectionCapturedProperty))
+                {
+                    element.SetValue(OriginalFlowDirectionProperty, element.FlowDirection);
+                    element.SetValue(OriginalFlowDirectionCapturedProperty, true);
+                }
+
+                element.FlowDirection = FlowDirection.RightToLeft;
+            }
+            else if ((bool)element.GetValue(OriginalFlowDirectionCapturedProperty))
+            {
+                element.FlowDirection =
+                    (FlowDirection)element.GetValue(OriginalFlowDirectionProperty);
+                element.ClearValue(OriginalFlowDirectionProperty);
+                element.ClearValue(OriginalFlowDirectionCapturedProperty);
+            }
         }
         catch
         {

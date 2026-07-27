@@ -30,6 +30,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private ScrollViewer? _popupScroller;
     private StackPanel? _popupPanel;
     private bool _isPopupOpen;
+    private bool _suppressPopupRebuild;
     private bool _isChangingIsCollapsedInternally;
     private bool _isCollapsedExplicitlySet;
     private int _currentItemsInRow = -1;
@@ -364,6 +365,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         Items = new ObservableCollection<UIElement>();
         MenuItems = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
+        QuickAccessHelper.AttachContextMenu(this);
         InitializeCompatibility();
     }
 
@@ -519,6 +521,23 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     // Hosts the live gallery UIElements directly as panel children (non-virtualizing). While the
     // popup is open the items live in the popup panel, so inline syncing is skipped until it closes.
+    // It is also skipped while _suppressPopupRebuild is set: that flag brackets the bulk item
+    // transfers between a Quick Access clone and its owner, during which the shared elements must
+    // stay parented in the owner's panel and must not be reparented here (reparenting a realized
+    // element out of an unrooted panel corrupts its native peer -> COMException 0x800F1000).
+    //
+    // NOTE: this reconcile is deliberately SYNCHRONOUS. RibbonGroupItemsPanel force-measures this
+    // gallery, so OnApplyTemplate runs inside a live measure pass and the Children.Add below can
+    // throw COMException 0x800F1000 when an item's native peer was corrupted by an earlier detach
+    // from an unrooted panel. Synchronously that throw is caught by the layout system, which retries
+    // the measure once the element is re-rooted, so the gallery self-heals and populates. Deferring
+    // the mutation to the dispatcher (as RibbonToolBarControlGroup does) does NOT help here: the
+    // Add itself throws regardless of timing, and on the dispatcher the throw is uncaught, escalating
+    // the benign first-chance to a fatal stowed 0xC000027B. Keep it synchronous.
+    //
+    // An idempotent guard (InlineHostMatchesItems) skips the reparent whenever the panel already
+    // holds the current items in order, so the caught first-chance is limited to a genuine first
+    // population / membership change instead of firing on every redundant re-apply or re-measure.
     private void SyncInlineChildren()
     {
         if (_galleryPanel is null)
@@ -533,19 +552,53 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             MinItemsInRow,
             GetCurrentItemsInRow());
 
-        if (_isPopupOpen)
+        if (_isPopupOpen || _suppressPopupRebuild)
         {
             return;
         }
 
-        _galleryPanel.Children.Clear();
-        foreach (var item in Items)
+        // Idempotent fast-path: when the panel already hosts exactly the current items in order there
+        // is nothing to reparent, so skip the Clear()+re-add entirely. This avoids the throwing
+        // reparent (COMException 0x800F1000) on every redundant re-apply/re-measure - the panel keeps
+        // the already-realized children and only the filter visibility is refreshed below.
+        if (!InlineHostMatchesItems())
         {
-            DetachFromParent(item);
-            _galleryPanel.Children.Add(item);
+            _galleryPanel.Children.Clear();
+            foreach (var item in Items)
+            {
+                DetachFromParent(item);
+                _galleryPanel.Children.Add(item);
+            }
         }
 
         ApplyCurrentFilter();
+    }
+
+    // True when _galleryPanel already holds exactly the current Items in the same order, so the
+    // inline reconcile can skip the reparent. Read-only reference comparison - never mutates the
+    // tree, so it cannot itself trigger the native reparent hazard.
+    private bool InlineHostMatchesItems()
+    {
+        if (_galleryPanel is null)
+        {
+            return false;
+        }
+
+        var children = _galleryPanel.Children;
+        if (children.Count != Items.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < children.Count; i++)
+        {
+            if (!ReferenceEquals(children[i], Items[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // Keeps the old method name as a thin wrapper so callers (OnApplyTemplate) stay unchanged.
@@ -637,12 +690,20 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     }
 
     // A UIElement can only have a single parent; moving items between the inline and popup panels
-    // requires first detaching from whichever panel currently owns them.
+    // requires first detaching from whichever panel currently owns them. On the native WinUI head the
+    // logical Parent reads null for elements hosted directly in a Panel's Children, so the host is
+    // resolved through the visual tree as well — otherwise this silently no-ops and the subsequent
+    // re-add throws COMException 0x800F1000.
     private static void DetachFromParent(UIElement element)
     {
-        if (element is FrameworkElement fe && fe.Parent is Panel panel)
+        if (VisualTreeHelper.GetParent(element) is Panel visualParent)
         {
-            panel.Children.Remove(element);
+            visualParent.Children.Remove(element);
+        }
+
+        if (element is FrameworkElement { Parent: Panel logicalParent })
+        {
+            logicalParent.Children.Remove(element);
         }
     }
 
@@ -716,7 +777,11 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         // corrupting the items' native peers on the WinUI3 head so that re-adding them throws
         // COMException (0x800F1000). Moving one container into a Popup (whose child stays alive)
         // avoids that entirely and behaves the same on the Skia head.
-        _scrollViewer.Content = null;
+        //
+        // PreparePopupContent performs the actual re-home. It must run while _galleryPanel is
+        // still rooted in the inline ScrollViewer so that, for the grouped popup, the shared item
+        // elements are detached from a live panel (detaching them from an already-unrooted panel
+        // is exactly what corrupts their native peers). Do NOT null out _scrollViewer.Content here.
         PreparePopupContent();
         RebuildPopupSupplementalContent();
         ApplyDropDownDimensions();
@@ -744,7 +809,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
                 }
             }
 
-            _popup.IsOpen = true;
+            FlyoutShowHelper.OpenDeferred(_popup);
         }
 
     }
@@ -837,7 +902,19 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     private void UpdateVisualState()
     {
-        VisualStateManager.GoToState(this, IsCollapsed ? "CollapsedToButton" : "Inline", true);
+        if (!IsCollapsed)
+        {
+            VisualStateManager.GoToState(this, "Inline", true);
+            return;
+        }
+
+        // A Small collapsed gallery (e.g. the Quick Access Toolbar clone) uses a compact
+        // horizontal icon+chevron button; larger collapsed galleries keep the tall icon/header
+        // button. This mirrors WPF's size-driven Small gallery presentation.
+        VisualStateManager.GoToState(
+            this,
+            Size == RibbonControlSize.Small ? "CollapsedToButtonCompact" : "CollapsedToButton",
+            true);
     }
 
     private static void OnSelectedItemChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

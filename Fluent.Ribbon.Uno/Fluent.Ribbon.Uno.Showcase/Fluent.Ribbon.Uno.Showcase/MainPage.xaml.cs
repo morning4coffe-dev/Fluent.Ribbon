@@ -73,6 +73,7 @@ public sealed partial class MainPage : Page
         InitializeShowcaseTabs();
         InitializeModernShowcase(); // Modern extensions (beyond WPF) — see Modern\README.md
         InitializeDiagnostics();
+        InitializePointerDiagnostics();
         App.LogAutoTestStartup("MAIN PAGE CONSTRUCTOR END");
     }
 
@@ -367,14 +368,19 @@ public sealed partial class MainPage : Page
     private void OnColorGallerySelectionChanged(object sender, RoutedEventArgs args)
     {
         var color = (sender as ColorGallery)?.SelectedColor;
-        if (color.HasValue)
+        if (color is not { } c)
         {
-            var c = color.Value;
-            SelectedColorText.Text = $"Selected: #{c.R:X2}{c.G:X2}{c.B:X2} (R:{c.R} G:{c.G} B:{c.B})";
+            SelectedColorText.Text = "Selected: (none)";
+        }
+        else if (c.A == 0)
+        {
+            // "No Color" selects Transparent, matching WPF Fluent.Ribbon. Reporting only RGB
+            // would render it as #FFFFFF and look identical to white.
+            SelectedColorText.Text = "Selected: (no color / transparent)";
         }
         else
         {
-            SelectedColorText.Text = "Selected: (none)";
+            SelectedColorText.Text = $"Selected: #{c.R:X2}{c.G:X2}{c.B:X2} (R:{c.R} G:{c.G} B:{c.B})";
         }
     }
 

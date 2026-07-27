@@ -30,9 +30,17 @@ public static class ItemsControlHelper
     /// <param name="child">The child element to detach.</param>
     public static void DetachFromParent(UIElement child)
     {
-        if (child is FrameworkElement fe && fe.Parent is Panel parentPanel)
+        // On the native WinUI head the logical Parent reads null for elements hosted directly in a
+        // Panel's Children, so the host must also be resolved through the visual tree. Missing it
+        // makes this a silent no-op and the subsequent re-add throws COMException 0x800F1000.
+        if (VisualTreeHelper.GetParent(child) is Panel visualParent)
         {
-            parentPanel.Children.Remove(child);
+            visualParent.Children.Remove(child);
+        }
+
+        if (child is FrameworkElement { Parent: Panel logicalParent })
+        {
+            logicalParent.Children.Remove(child);
         }
     }
 }

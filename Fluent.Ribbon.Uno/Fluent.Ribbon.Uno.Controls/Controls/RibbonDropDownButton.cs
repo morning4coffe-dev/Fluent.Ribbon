@@ -12,7 +12,10 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     private const string PART_Button = "PART_Button";
 
     private WinUIButton? _button;
+    private ButtonPointerClickFallback? _buttonClickFallback;
     private Flyout? _flyout;
+    private bool _isPointerOver;
+    private bool _isPressed;
 
     /// <summary>Gets the template part used to open the drop-down.</summary>
     protected virtual string DropDownButtonTemplatePartName => PART_Button;
@@ -157,7 +160,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
             nameof(IsDropDownOpen),
             typeof(bool),
             typeof(RibbonDropDownButton),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnIsDropDownOpenChanged));
 
     /// <summary>
     /// Gets or sets whether the dropdown is open.
@@ -399,6 +402,19 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
             ItemsControl.ItemsSourceProperty,
             static (sender, _) => ((RibbonDropDownButton)sender).ResetFlyout());
         QuickAccessHelper.AttachContextMenu(this);
+
+        // RibbonDropDownButton derives from ItemsControl, which — unlike ButtonBase —
+        // never drives the CommonStates group (Normal/PointerOver/Pressed/Disabled)
+        // declared on RootBorder in the template, so the control could never show a
+        // hover or pressed highlight. Drive those states here. Pointer enter/exit reach
+        // the control through the normal virtual overrides, but the inner PART_Button
+        // marks the pointer press/release handled, so those are observed with
+        // handledEventsToo handlers.
+        IsEnabledChanged += OnIsEnabledChangedForVisualState;
+        AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPointerPressedForVisualState), handledEventsToo: true);
+        AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleasedForVisualState), handledEventsToo: true);
+        AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnPointerCanceledForVisualState), handledEventsToo: true);
+        AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnPointerCaptureLostForVisualState), handledEventsToo: true);
     }
 
     #endregion
@@ -413,6 +429,8 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         if (_button is not null)
         {
             _button.Click -= OnButtonClick;
+            _buttonClickFallback?.Dispose();
+            _buttonClickFallback = null;
         }
 
         _button = UsesDefaultDropDownButtonTemplateBehavior
@@ -422,9 +440,12 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         if (_button is not null)
         {
             _button.Click += OnButtonClick;
+            _buttonClickFallback = ButtonPointerClickFallback.Attach(_button, ShowDropDown);
         }
 
+
         UpdateVisualState();
+        UpdateCommonVisualState();
     }
 
     #endregion
@@ -443,6 +464,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
     {
+        PopupDiag.Log($"RibbonDropDownButton PART_Button Click (Header={Header})");
         ShowDropDown();
     }
 
@@ -533,18 +555,21 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
 
             _flyout.Opened += (s, e) =>
             {
+                PopupDiag.Log($"RibbonDropDownButton Flyout Opened (Header={Header})");
                 IsDropDownOpen = true;
                 RaiseDropDownOpened();
             };
 
             _flyout.Closed += (s, e) =>
             {
+                PopupDiag.Log($"RibbonDropDownButton Flyout Closed (Header={Header})");
                 IsDropDownOpen = false;
                 RaiseDropDownClosed();
             };
         }
 
-        _flyout.ShowAt((FrameworkElement?)_button ?? this);
+        PopupDiag.Log($"RibbonDropDownButton.ShowDropDown -> ShowDeferred (Header={Header})");
+        FlyoutShowHelper.ShowDeferred(_flyout, (FrameworkElement?)_button ?? this);
     }
 
     internal void OpenDropDownForAutomation() => ShowDropDown();
@@ -566,6 +591,34 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         {
             _flyout.Hide();
         }
+    }
+
+    private static void OnIsDropDownOpenChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var button = (RibbonDropDownButton)sender;
+        if ((bool)args.NewValue)
+        {
+            PopupService.RegisterOpenDropDown(button);
+        }
+        else
+        {
+            PopupService.UnregisterOpenDropDown(button);
+
+            // Unlike WPF, IsDropDownOpen is not bound to the popup here, so a dismissal
+            // that sets it to false must also hide the flyout that backs this control.
+            button.HideDropDownPopup();
+        }
+    }
+
+    /// <summary>
+    /// Hides the popup surface that backs this drop-down.
+    /// Overridden by controls that host their own flyout instead of the base flyout.
+    /// </summary>
+    private protected virtual void HideDropDownPopup()
+    {
+        _flyout?.Hide();
     }
 
     private void ResetFlyout()
@@ -602,6 +655,81 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
 
         VisualStateManager.GoToState(this, stateName, true);
         UpdateCurrentIcon();
+    }
+
+    /// <summary>
+    /// Drives the CommonStates group (Normal/PointerOver/Pressed/Disabled) declared on
+    /// the template's RootBorder. ItemsControl offers no button-like state handling, so
+    /// without this the control could never show a hover or pressed highlight.
+    /// </summary>
+    private void UpdateCommonVisualState()
+    {
+        string state;
+        if (!IsEnabled)
+        {
+            state = "Disabled";
+        }
+        else if (_isPressed)
+        {
+            state = "Pressed";
+        }
+        else if (_isPointerOver)
+        {
+            state = "PointerOver";
+        }
+        else
+        {
+            state = "Normal";
+        }
+
+        VisualStateManager.GoToState(this, state, true);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerEntered(PointerRoutedEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        _isPointerOver = true;
+        UpdateCommonVisualState();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerExited(PointerRoutedEventArgs e)
+    {
+        base.OnPointerExited(e);
+        _isPointerOver = false;
+        _isPressed = false;
+        UpdateCommonVisualState();
+    }
+
+    private void OnPointerPressedForVisualState(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = true;
+        UpdateCommonVisualState();
+    }
+
+    private void OnPointerReleasedForVisualState(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = false;
+        UpdateCommonVisualState();
+    }
+
+    private void OnPointerCanceledForVisualState(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = false;
+        _isPointerOver = false;
+        UpdateCommonVisualState();
+    }
+
+    private void OnPointerCaptureLostForVisualState(object sender, PointerRoutedEventArgs e)
+    {
+        _isPressed = false;
+        UpdateCommonVisualState();
+    }
+
+    private void OnIsEnabledChangedForVisualState(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateCommonVisualState();
     }
 
     private void UpdateCurrentIcon()

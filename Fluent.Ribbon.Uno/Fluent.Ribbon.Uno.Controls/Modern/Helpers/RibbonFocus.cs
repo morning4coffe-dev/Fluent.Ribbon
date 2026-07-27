@@ -6,6 +6,20 @@ namespace Fluent.Modern.Helpers;
 [ModernExtension]
 public static class RibbonFocus
 {
+    private sealed record OriginalFocusSettings(
+        XYFocusKeyboardNavigationMode KeyboardNavigation,
+        XYFocusNavigationStrategy Up,
+        XYFocusNavigationStrategy Down,
+        XYFocusNavigationStrategy Left,
+        XYFocusNavigationStrategy Right);
+
+    private static readonly DependencyProperty OriginalFocusSettingsProperty =
+        DependencyProperty.RegisterAttached(
+            "OriginalFocusSettings",
+            typeof(OriginalFocusSettings),
+            typeof(RibbonFocus),
+            new PropertyMetadata(null));
+
     #region Dependency Properties
 
     /// <summary>Identifies the EnableXYFocus attached dependency property.</summary>
@@ -69,19 +83,29 @@ public static class RibbonFocus
         {
             if (e.NewValue is bool enabled && enabled)
             {
+                element.SetValue(
+                    OriginalFocusSettingsProperty,
+                    new OriginalFocusSettings(
+                        element.XYFocusKeyboardNavigation,
+                        element.XYFocusUpNavigationStrategy,
+                        element.XYFocusDownNavigationStrategy,
+                        element.XYFocusLeftNavigationStrategy,
+                        element.XYFocusRightNavigationStrategy));
                 element.XYFocusKeyboardNavigation = XYFocusKeyboardNavigationMode.Enabled;
                 element.XYFocusUpNavigationStrategy = XYFocusNavigationStrategy.NavigationDirectionDistance;
                 element.XYFocusDownNavigationStrategy = XYFocusNavigationStrategy.NavigationDirectionDistance;
                 element.XYFocusLeftNavigationStrategy = XYFocusNavigationStrategy.NavigationDirectionDistance;
                 element.XYFocusRightNavigationStrategy = XYFocusNavigationStrategy.NavigationDirectionDistance;
             }
-            else
+            else if (element.GetValue(OriginalFocusSettingsProperty)
+                     is OriginalFocusSettings original)
             {
-                element.XYFocusKeyboardNavigation = XYFocusKeyboardNavigationMode.Auto;
-                element.XYFocusUpNavigationStrategy = XYFocusNavigationStrategy.Auto;
-                element.XYFocusDownNavigationStrategy = XYFocusNavigationStrategy.Auto;
-                element.XYFocusLeftNavigationStrategy = XYFocusNavigationStrategy.Auto;
-                element.XYFocusRightNavigationStrategy = XYFocusNavigationStrategy.Auto;
+                element.XYFocusKeyboardNavigation = original.KeyboardNavigation;
+                element.XYFocusUpNavigationStrategy = original.Up;
+                element.XYFocusDownNavigationStrategy = original.Down;
+                element.XYFocusLeftNavigationStrategy = original.Left;
+                element.XYFocusRightNavigationStrategy = original.Right;
+                element.ClearValue(OriginalFocusSettingsProperty);
             }
         }
         catch

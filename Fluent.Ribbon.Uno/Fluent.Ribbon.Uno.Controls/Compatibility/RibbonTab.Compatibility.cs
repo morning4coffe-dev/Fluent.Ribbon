@@ -225,6 +225,8 @@ public partial class RibbonTabItem
     /// <inheritdoc />
     public void UpdateSimplifiedState(bool isSimplified)
     {
+        CancelGroupSizingPass();
+        InvalidateGroupSizing();
         IsSimplified = isSimplified;
         foreach (var group in Groups)
         {

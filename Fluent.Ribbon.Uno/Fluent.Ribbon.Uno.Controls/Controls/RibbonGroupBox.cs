@@ -27,6 +27,12 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     private StackPanel? _popupItemsPanel;
     private TextBlock? _popupHeaderText;
 
+    // Header alignment (WPF SharedSizeGroup emulation). See AlignInputHeaders.
+    private bool _headerAlignmentPending;
+    private bool _headerLayoutHooked;
+    private bool _isAligningHeaders;
+    private int _headerAlignmentAttempts;
+
     /// <summary>
     /// Stores the authored (preferred) size of each scalable item, captured before any
     /// group-driven scaling occurs. This lets a group honor per-control sizes
@@ -298,6 +304,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
             groupBox.UpdateVisualState();
             groupBox.UpdateItemSizes();
+            groupBox.InvalidateHeaderAlignment();
         }
     }
 
@@ -442,6 +449,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
         SyncItems();
         UpdateVisualState();
+        InvalidateHeaderAlignment();
     }
     
     private void OnLauncherButtonClick(object sender, RoutedEventArgs e)
@@ -481,6 +489,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         CapturePreferredSizes();
         SyncItems();
         UpdateItemSizes();
+        InvalidateHeaderAlignment();
     }
 
     /// <summary>Handles the WPF-compatible primary-pointer hook.</summary>
@@ -520,12 +529,35 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     private void SyncItems()
     {
-        if (_itemsPanel is null) return;
+        // While the collapsed drop-down is open the items legitimately live in the popup panel.
+        // Pulling them back into the in-ribbon panel here would reparent elements out from under
+        // an open popup, so sync whichever panel currently owns them.
+        var target = _collapsedPopup?.IsOpen == true ? _popupItemsPanel : _itemsPanel;
+        if (target is null) return;
 
-        _itemsPanel.Children.Clear();
+        target.Children.Clear();
         foreach (var item in Items)
         {
-            _itemsPanel.Children.Add(item);
+            DetachFromParent(item);
+            target.Children.Add(item);
+        }
+    }
+
+    /// <summary>
+    /// Collapsed groups move their items between the in-ribbon panel and the drop-down panel.
+    /// Adding an element that still has a parent throws inside the XAML framework and fail-fasts
+    /// the process, so always detach before re-adding.
+    /// </summary>
+    private static void DetachFromParent(UIElement element)
+    {
+        // Resolve the host through the visual parent (the elements are hosted directly in a
+        // Panel's Children, whose logical Parent reads null on the native WinUI head). Callers
+        // must invoke this while that host is still rooted: detaching a realized element from a
+        // panel already removed from the visual tree corrupts its native peer, after which
+        // re-adding it throws COMException 0x800F1000.
+        if (VisualTreeHelper.GetParent(element) is Panel panel)
+        {
+            panel.Children.Remove(element);
         }
     }
 
@@ -536,6 +568,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             groupBox.IsCollapsed = (RibbonGroupBoxState)e.NewValue == RibbonGroupBoxState.Collapsed;
             groupBox.UpdateVisualState();
             groupBox.UpdateItemSizes();
+            groupBox.InvalidateHeaderAlignment();
         }
     }
 
@@ -557,6 +590,9 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         if (_collapsedPopup is null || _popupItemsPanel is null) return;
         if (_collapsedPopup.IsOpen) return; // Prevent double-click
 
+        // Only one collapsed group may be expanded at a time, matching WPF. Without this the
+        // panels stack up and overlap each other and the page body.
+        CloseOtherCollapsedPopup(this);
         // Set header text
         if (_popupHeaderText is not null)
         {
@@ -565,6 +601,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
         // Move items from main panel to popup panel at Large size
         _itemsPanel?.Children.Clear();
+        _popupItemsPanel.Children.Clear();
 
         foreach (var item in Items)
         {
@@ -574,6 +611,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
                 scalable.ScaleTo(RibbonControlSize.Large);
             }
 
+            DetachFromParent(item);
             _popupItemsPanel.Children.Add(item);
         }
 
@@ -582,10 +620,40 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         {
             try
             {
-                var transform = _collapsedButton.TransformToVisual(this);
-                var buttonPos = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                _collapsedPopup.HorizontalOffset = buttonPos.X;
-                _collapsedPopup.VerticalOffset = buttonPos.Y + _collapsedButton.ActualHeight;
+                var rootContent = XamlRoot?.Content;
+                var rootWidth = XamlRoot?.Size.Width ?? 0;
+                if (rootContent is not null && rootWidth > 0)
+                {
+                    var groupPosition = TransformToVisual(rootContent)
+                        .TransformPoint(new Windows.Foundation.Point(0, 0));
+                    var buttonPosition = _collapsedButton.TransformToVisual(rootContent)
+                        .TransformPoint(new Windows.Foundation.Point(0, 0));
+
+                    var popupWidth = 0.0;
+                    if (_collapsedPopup.Child is FrameworkElement popupChild)
+                    {
+                        popupChild.Measure(
+                            new Windows.Foundation.Size(
+                                rootWidth,
+                                double.PositiveInfinity));
+                        popupWidth = Math.Min(popupChild.DesiredSize.Width, rootWidth);
+                    }
+
+                    var popupLeft = Math.Clamp(
+                        buttonPosition.X,
+                        0,
+                        Math.Max(0, rootWidth - popupWidth));
+                    _collapsedPopup.HorizontalOffset = popupLeft - groupPosition.X;
+                    _collapsedPopup.VerticalOffset =
+                        buttonPosition.Y - groupPosition.Y + _collapsedButton.ActualHeight;
+                }
+                else
+                {
+                    var transform = _collapsedButton.TransformToVisual(this);
+                    var buttonPos = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                    _collapsedPopup.HorizontalOffset = buttonPos.X;
+                    _collapsedPopup.VerticalOffset = buttonPos.Y + _collapsedButton.ActualHeight;
+                }
             }
             catch
             {
@@ -593,11 +661,31 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             }
         }
 
-        _collapsedPopup.IsOpen = true;
+        FlyoutShowHelper.OpenDeferred(_collapsedPopup);
+        _openCollapsedGroup = new WeakReference<RibbonGroupBox>(this);
         if (!IsDropDownOpen)
         {
             IsDropDownOpen = true;
         }
+    }
+
+    /// <summary>
+    /// Tracks the collapsed group whose drop-down is currently open so a newly opened group can
+    /// close it. A weak reference keeps this from rooting group boxes for the app's lifetime.
+    /// </summary>
+    private static WeakReference<RibbonGroupBox>? _openCollapsedGroup;
+
+    private static void CloseOtherCollapsedPopup(RibbonGroupBox opening)
+    {
+        if (_openCollapsedGroup is null
+            || !_openCollapsedGroup.TryGetTarget(out var previous)
+            || ReferenceEquals(previous, opening))
+        {
+            return;
+        }
+
+        _openCollapsedGroup = null;
+        previous.CollapseForAutomation();
     }
 
     internal void CollapseForAutomation()
@@ -610,6 +698,13 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     private void OnCollapsedPopupClosed(object? sender, object e)
     {
+        if (_openCollapsedGroup is not null
+            && _openCollapsedGroup.TryGetTarget(out var open)
+            && ReferenceEquals(open, this))
+        {
+            _openCollapsedGroup = null;
+        }
+
         if (IsDropDownOpen)
         {
             IsDropDownOpen = false;
@@ -623,6 +718,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         // Re-sync items back to the main panel and restore sizes
         SyncItems();
         UpdateItemSizes();
+        InvalidateHeaderAlignment();
     }
 
     private void UpdateVisualState()
@@ -663,6 +759,198 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
                 // whichever is the smaller control (the higher enum value).
                 var effective = (RibbonControlSize)System.Math.Max((int)preferred, (int)cap);
                 scalable.ScaleTo(effective);
+            }
+            else if (item is DependencyObject container)
+            {
+                // Items can also be plain layout panels (StackPanel/Grid) that host ribbon
+                // controls. WPF's RibbonGroupBox recurses into such panels and sizes every
+                // nested control from its SizeDefinition; mirror that so controls hosted in
+                // raw panels are not left in their default (Small) visual state.
+                ApplyNestedItemSizes(container);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Recursively sizes ribbon controls nested inside a non-scalable layout panel item.
+    /// Each nested <see cref="IScalableRibbonControl"/> is scaled from its
+    /// <c>SizeDefinition</c> resolved against the current group state, matching the way the
+    /// WPF <c>RibbonGroupBox</c> propagates sizes into panel children.
+    /// </summary>
+    private void ApplyNestedItemSizes(DependencyObject element)
+    {
+        if (element is not Panel panel)
+        {
+            return;
+        }
+
+        foreach (var child in panel.Children)
+        {
+            if (child is IScalableRibbonControl scalable)
+            {
+                var resolved = RibbonProperties.GetSizeDefinition(child).GetSize(State);
+                scalable.ScaleTo(resolved);
+            }
+            else
+            {
+                ApplyNestedItemSizes(child);
+            }
+        }
+    }
+
+    // WPF aligns the header/label of every input control in a group by placing the header column
+    // of Spinner/TextBox/ComboBox into a Grid.IsSharedSizeScope with a shared SharedSizeGroup, so
+    // all inputs start at the same x regardless of individual header text length. WinUI / Uno has
+    // no Grid.IsSharedSizeScope, so the group emulates it here: it measures the natural width of
+    // every input header and imposes the widest one on all of them.
+    private const int MaxHeaderAlignmentAttempts = 16;
+
+    /// <summary>
+    /// Requests a header-alignment pass (see <see cref="AlignInputHeaders"/>). The pass is deferred
+    /// until after the next layout via <see cref="FrameworkElement.LayoutUpdated"/> so it never
+    /// mutates element sizes during a measure pass — this codebase has repeatedly hit
+    /// <c>COMException 0x800F1000</c> when the visual tree is touched mid-measure.
+    /// </summary>
+    private void InvalidateHeaderAlignment()
+    {
+        _headerAlignmentPending = true;
+        _headerAlignmentAttempts = 0;
+
+        if (!_headerLayoutHooked)
+        {
+            LayoutUpdated += OnHeaderAlignmentLayoutUpdated;
+            _headerLayoutHooked = true;
+        }
+    }
+
+    private void OnHeaderAlignmentLayoutUpdated(object? sender, object e)
+    {
+        if (!_headerAlignmentPending)
+        {
+            UnhookHeaderAlignmentLayout();
+            return;
+        }
+
+        _headerAlignmentAttempts++;
+        var completed = AlignInputHeaders();
+
+        // Stop once the widths are aligned, or give up after a bounded number of retries (a later
+        // items/size/simplified change will re-request the pass). This keeps the LayoutUpdated hook
+        // attached only briefly, during convergence.
+        if (completed || _headerAlignmentAttempts >= MaxHeaderAlignmentAttempts)
+        {
+            _headerAlignmentPending = false;
+            UnhookHeaderAlignmentLayout();
+        }
+    }
+
+    private void UnhookHeaderAlignmentLayout()
+    {
+        if (_headerLayoutHooked)
+        {
+            LayoutUpdated -= OnHeaderAlignmentLayoutUpdated;
+            _headerLayoutHooked = false;
+        }
+    }
+
+    /// <summary>
+    /// Sizes the header of every <see cref="IRibbonHeaderAlignable"/> item in this group to the
+    /// widest natural header width, so all inputs start at the same x. This is a no-op for groups
+    /// with fewer than two visible header-bearing controls. It only assigns a width when the value
+    /// actually changes and only reads/writes element widths (never the visual tree), so it is safe
+    /// to run after layout. Returns <see langword="true"/> when every alignable item's template was
+    /// resolved (nothing left to retry).
+    /// </summary>
+    private bool AlignInputHeaders()
+    {
+        if (_isAligningHeaders)
+        {
+            return false;
+        }
+
+        List<FrameworkElement>? headers = null;
+        var allResolved = true;
+
+        foreach (var item in Items)
+        {
+            if (item is not IRibbonHeaderAlignable alignable)
+            {
+                continue;
+            }
+
+            var header = alignable.HeaderPresenter;
+            if (header is null)
+            {
+                // Template not applied yet; retry after the next layout pass.
+                allResolved = false;
+                continue;
+            }
+
+            if (header.Visibility != Visibility.Visible)
+            {
+                continue;
+            }
+
+            (headers ??= new List<FrameworkElement>()).Add(header);
+        }
+
+        // Fewer than two visible headers: release any width previously imposed so a lone control
+        // sizes to its own content again.
+        if (headers is null || headers.Count < 2)
+        {
+            ResetImposedHeaderWidths();
+            return allResolved;
+        }
+
+        _isAligningHeaders = true;
+        try
+        {
+            var max = 0.0;
+            foreach (var header in headers)
+            {
+                // Drop any previously imposed width so the header reports its natural (content) width.
+                if (!double.IsNaN(header.Width))
+                {
+                    header.Width = double.NaN;
+                }
+
+                header.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+
+                var natural = header.DesiredSize.Width - header.Margin.Left - header.Margin.Right;
+                if (natural > max)
+                {
+                    max = natural;
+                }
+            }
+
+            if (max > 0)
+            {
+                foreach (var header in headers)
+                {
+                    if (header.Width != max)
+                    {
+                        header.Width = max;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _isAligningHeaders = false;
+        }
+
+        return allResolved;
+    }
+
+    private void ResetImposedHeaderWidths()
+    {
+        foreach (var item in Items)
+        {
+            if (item is IRibbonHeaderAlignable alignable
+                && alignable.HeaderPresenter is { } header
+                && !double.IsNaN(header.Width))
+            {
+                header.Width = double.NaN;
             }
         }
     }

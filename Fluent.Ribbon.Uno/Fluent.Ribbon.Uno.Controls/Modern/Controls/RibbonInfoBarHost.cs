@@ -7,8 +7,12 @@ using Microsoft.UI.Xaml.Automation.Peers;
 /// <para><b>Modern extension</b> — hosts a WinUI InfoBar for contextual ribbon notifications.</para>
 /// </summary>
 [ModernExtension]
+[TemplatePart(Name = InfoBarPartName, Type = typeof(InfoBar))]
 public partial class RibbonInfoBarHost : Control
 {
+    private const string InfoBarPartName = "PART_InfoBar";
+    private InfoBar? infoBar;
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
@@ -41,7 +45,7 @@ public partial class RibbonInfoBarHost : Control
             nameof(IsOpen),
             typeof(bool),
             typeof(RibbonInfoBarHost),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnIsOpenChanged));
 
     /// <summary>Identifies the <see cref="IsClosable"/> dependency property.</summary>
     public static readonly DependencyProperty IsClosableProperty =
@@ -111,6 +115,44 @@ public partial class RibbonInfoBarHost : Control
     {
         DefaultStyleKey = typeof(RibbonInfoBarHost);
     }
+
+    #endregion
+
+    #region Template
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        if (infoBar is not null)
+        {
+            infoBar.Closed -= OnInfoBarClosed;
+        }
+
+        base.OnApplyTemplate();
+        infoBar = GetTemplateChild(InfoBarPartName) as InfoBar;
+        if (infoBar is not null)
+        {
+            infoBar.Closed += OnInfoBarClosed;
+            infoBar.IsOpen = IsOpen;
+        }
+    }
+
+    private static void OnIsOpenChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        if (sender is RibbonInfoBarHost host && host.infoBar is not null)
+        {
+            host.infoBar.IsOpen = (bool)args.NewValue;
+        }
+    }
+
+    private void OnInfoBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        IsOpen = false;
+    }
+
+    internal InfoBar? InfoBarForTesting => infoBar;
 
     #endregion
 

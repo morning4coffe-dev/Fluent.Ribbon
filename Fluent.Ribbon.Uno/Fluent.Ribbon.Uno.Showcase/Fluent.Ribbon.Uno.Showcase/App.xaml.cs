@@ -56,12 +56,12 @@ public partial class App : Application
                 var ex = e.Exception;
                 // ex.StackTrace is empty at first-chance time; capture the LIVE stack instead.
                 if (ex is System.Runtime.InteropServices.COMException com &&
-                    (uint)com.HResult == 0x80004005)
+                    ((uint)com.HResult == 0x80004005 || (uint)com.HResult == 0x800F1000))
                 {
                     var live = Environment.StackTrace;
                     if (live.Contains("Fluent."))
                     {
-                        LogCrash($"FirstChance COMException E_FAIL: {ex.Message}\nLIVE STACK:\n{live}");
+                        LogCrash($"FirstChance COMException 0x{(uint)com.HResult:X8}: {ex.Message}\nLIVE STACK:\n{live}");
                     }
                 }
             };
@@ -133,6 +133,9 @@ public partial class App : Application
 #endif
 
         MainWindow.SetWindowIcon();
+#if WINDOWS
+        SizeMainWindow(MainWindow);
+#endif
         // Ensure the current window is active
         MainWindow.Activate();
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHOWCASE_AUTOTEST"))
@@ -143,6 +146,70 @@ public partial class App : Application
 
         LogAutoTestStartup("APP LAUNCHED END");
     }
+
+#if WINDOWS
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// WinUI 3 has no SizeToContent, so an unsized window falls back to the Windows default of
+    /// roughly 1024x768. That is narrow enough that the ribbon immediately reduces its groups,
+    /// so the Showcase would open already collapsed. Size it to fit a full-width ribbon instead.
+    /// </summary>
+    private static void SizeMainWindow(Window window)
+    {
+        const double DefaultWidthDip = 1360;
+        const double DefaultHeightDip = 900;
+
+        // Env overrides exist so the responsive-layout harness can start the app at a given
+        // width; WinUI windows ignore external SetWindowPos, so this is the reliable path.
+        var widthDip = ReadDipOverride("SHOWCASE_WIDTH", DefaultWidthDip);
+        var heightDip = ReadDipOverride("SHOWCASE_HEIGHT", DefaultHeightDip);
+
+        try
+        {
+            var appWindow = window.AppWindow;
+            var hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(appWindow.Id);
+
+            // AppWindow.Resize takes physical pixels, and XamlRoot.RasterizationScale is not
+            // available this early, so read the DPI straight from the HWND.
+            var scale = GetDpiForWindow(hwnd) / 96.0;
+            if (scale <= 0)
+            {
+                scale = 1.0;
+            }
+
+            var width = (int)(widthDip * scale);
+            var height = (int)(heightDip * scale);
+
+            // Never open larger than the monitor's work area.
+            var workArea = Microsoft.UI.Windowing.DisplayArea
+                .GetFromWindowId(appWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary)
+                ?.WorkArea;
+            if (workArea is { Width: > 0, Height: > 0 } area)
+            {
+                width = Math.Min(width, area.Width);
+                height = Math.Min(height, area.Height);
+            }
+
+            appWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
+        }
+        catch
+        {
+            // Sizing is a presentation nicety; never block startup on it.
+        }
+    }
+
+    private static double ReadDipOverride(string variable, double fallback)
+        => double.TryParse(
+               Environment.GetEnvironmentVariable(variable),
+               System.Globalization.NumberStyles.Float,
+               System.Globalization.CultureInfo.InvariantCulture,
+               out var value)
+           && value > 0
+            ? value
+            : fallback;
+#endif
 
     internal static void LogAutoTestStartup(string message)
     {

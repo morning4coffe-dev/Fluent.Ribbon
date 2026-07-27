@@ -5,8 +5,8 @@
 
     <Style TargetType="fluent:RibbonCheckBox">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Padding" Value="4,2" />
-        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="Padding" Value="{ThemeResource RibbonButtonPadding}" />
+        <Setter Property="MinHeight" Value="{ThemeResource RibbonControlMinHeight}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>

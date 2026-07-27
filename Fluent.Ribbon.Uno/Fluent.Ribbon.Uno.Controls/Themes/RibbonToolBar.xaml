@@ -15,7 +15,7 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             Padding="{TemplateBinding Padding}">
-                        <Grid x:Name="PART_ContentPanel" />
+                        <fluent:RibbonToolBarPanel x:Name="PART_ContentPanel" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>

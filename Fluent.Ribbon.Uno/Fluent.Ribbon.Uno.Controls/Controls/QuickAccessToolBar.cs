@@ -336,7 +336,7 @@ public partial class QuickAccessToolBar : Control
         }
 
         _overflowFlyout.Content = panel;
-        _overflowFlyout.ShowAt(_overflowButton!);
+        FlyoutShowHelper.ShowDeferred(_overflowFlyout, _overflowButton!);
     }
 
     private void OnMenuButtonClick(object sender, RoutedEventArgs e)
@@ -384,7 +384,7 @@ public partial class QuickAccessToolBar : Control
         }
 
         _menuFlyout.Content = panel;
-        _menuFlyout.ShowAt(_menuButton!);
+        FlyoutShowHelper.ShowDeferred(_menuFlyout, _menuButton!);
     }
 
     private static void InvokeOverflowItem(FrameworkElement original)

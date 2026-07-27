@@ -4,7 +4,7 @@ namespace Fluent;
 /// Represents a CheckBox control within a Ribbon.
 /// </summary>
 [ContentProperty(Name = nameof(Header))]
-public partial class RibbonCheckBox : CheckBox, IScalableRibbonControl, IHeaderedControl, IMediumIconProvider
+public partial class RibbonCheckBox : CheckBox, IScalableRibbonControl, IHeaderedControl, IMediumIconProvider, IQuickAccessItemProvider
 {
     #region Dependency Properties
 
@@ -86,6 +86,7 @@ public partial class RibbonCheckBox : CheckBox, IScalableRibbonControl, IHeadere
     public RibbonCheckBox()
     {
         DefaultStyleKey = typeof(RibbonCheckBox);
+        QuickAccessHelper.AttachContextMenu(this);
     }
 
     #endregion
@@ -121,6 +122,40 @@ public partial class RibbonCheckBox : CheckBox, IScalableRibbonControl, IHeadere
         };
 
         VisualStateManager.GoToState(this, stateName, true);
+    }
+
+    #endregion
+
+    #region IQuickAccessItemProvider
+
+    /// <inheritdoc />
+    public bool CanAddToQuickAccessToolBar
+    {
+        get => RibbonProperties.GetCanAddToQuickAccessToolBar(this);
+        set => RibbonProperties.SetCanAddToQuickAccessToolBar(this, value);
+    }
+
+    /// <inheritdoc />
+    public virtual FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new RibbonCheckBox
+        {
+            Header = QuickAccessHelper.ClonePresentationValue(Header),
+            MediumIcon = MediumIcon,
+            Size = RibbonControlSize.Small,
+            IsThreeState = IsThreeState,
+            CanAddToQuickAccessToolBar = false,
+        };
+
+        RibbonControl.BindQuickAccessItem(this, clone);
+        BindTwoWay(IsCheckedProperty);
+        return clone;
+
+        void BindTwoWay(DependencyProperty property)
+        {
+            RibbonControl.Synchronize(this, property, clone, property);
+            RibbonControl.Synchronize(clone, property, this, property);
+        }
     }
 
     #endregion

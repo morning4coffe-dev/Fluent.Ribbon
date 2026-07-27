@@ -5,9 +5,9 @@
 
     <Style TargetType="fluent:RibbonTextBox">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="Padding" Value="{ThemeResource RibbonButtonPadding}" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="MinHeight" Value="{ThemeResource RibbonControlMinHeight}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonTextBox">
@@ -38,51 +38,60 @@
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <!-- Glyph Icon -->
-                            <FontIcon
-                                x:Name="GlyphIcon"
-                                Glyph="{TemplateBinding IconGlyph}"
-                                FontSize="16"
-                                Foreground="{ThemeResource RibbonIconBrush}"
-                                Margin="0,0,4,0"
-                                VerticalAlignment="Center"
-                                Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
+                        <Grid VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                            <!-- Image Icon -->
-                            <Image
-                                Source="{TemplateBinding MediumIcon}"
-                                Width="16"
-                                Height="16"
-                                Stretch="Uniform"
-                                Margin="0,0,4,0"
-                                VerticalAlignment="Center"
-                                Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Glyph Icon -->
+                                <FontIcon
+                                    x:Name="GlyphIcon"
+                                    Glyph="{TemplateBinding IconGlyph}"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource RibbonIconBrush}"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
 
-                            <!-- Header -->
-                            <TextBlock
-                                x:Name="HeaderText"
-                                Text="{TemplateBinding Header}"
-                                Foreground="{ThemeResource RibbonTextBrush}"
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Margin="0,0,6,0"
-                                Visibility="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+                                <!-- Image Icon -->
+                                <Image
+                                    Source="{TemplateBinding MediumIcon}"
+                                    Width="16"
+                                    Height="16"
+                                    Stretch="Uniform"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+
+                                <!-- Header -->
+                                <TextBlock
+                                    x:Name="HeaderText"
+                                    Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                    Foreground="{ThemeResource RibbonTextBrush}"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Margin="0,0,6,0"
+                                    Visibility="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
+                            </StackPanel>
 
                             <!-- TextBox input area -->
                             <TextBox
                                 x:Name="PART_TextBox"
-                                Width="{TemplateBinding InputWidth}"
+                                Grid.Column="1"
+                                MinWidth="{TemplateBinding InputWidth}"
+                                HorizontalAlignment="Stretch"
                                 VerticalAlignment="Center"
-                                Padding="4,2"
+                                Padding="{ThemeResource RibbonButtonPadding}"
                                 FontSize="12"
-                                MinHeight="24"
+                                MinHeight="{ThemeResource RibbonControlMinHeight}"
                                 Background="{ThemeResource TextControlBackground}"
                                 BorderBrush="{ThemeResource TextControlBorderBrush}"
                                 BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
                                 CornerRadius="{ThemeResource ControlCornerRadius}"
                                 Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
-                        </StackPanel>
+                        </Grid>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>

@@ -203,6 +203,7 @@ allows deterministic browser baselines without UI automation, for example:
 http://localhost:5000/?showcase-tab=0&showcase-state=dark
 http://localhost:5000/?showcase-tab=0&showcase-state=rtl
 http://localhost:5000/?showcase-tab=0&showcase-state=simplified
+http://localhost:5000/?showcase-tab=5&showcase-state=touch
 ```
 
 The GitHub Actions matrix builds the controls, compatibility facade, WPF-style
@@ -218,8 +219,8 @@ are present, but several advanced behaviours are intentionally simplified:
 | Feature | WPF Version | Uno Version |
 |---------|-------------|-------------|
 | Window Chrome | ControlzEx WindowChrome | Not supported (use platform windowing) |
-| Quick Access Toolbar | Add/remove from controls, customization menu, state persistence (`IQuickAccessItemProvider`) | Provider-backed add/remove, overflow, customization, and checked-item persistence |
-| Backstage / App Menu | Adorner overlay with open/close animations | Implemented, simplified (no adorner/animation) |
+| Quick Access Toolbar | Add/remove from controls, customization menu, state persistence (`IQuickAccessItemProvider`) | Provider-backed add/remove, overflow, customization, checked-item persistence, and WPF-compatible provider clones |
+| Backstage / App Menu | Adorner overlay with open/close animations | Portable overlay with opt-out fade transitions; no WPF `AdornerLayer` dependency |
 | KeyTips | Full Alt-key navigation tree | Alt/F10 navigation, focus restoration, and nested Backstage scopes implemented |
 | Galleries | Grouping, filtering, live hover preview | Implemented for `RibbonGallery` and `InRibbonGallery`; Uno uses a custom control instead of WPF `Selector` inheritance |
 | ComboBox popup | WPF-sized long list with optional `TopPopupContent` | Long-list sizing, top content, selection/item automation, and editable value automation are implemented; placement and open/close animation remain platform-native |
@@ -236,7 +237,7 @@ Modern extensions are additive Fluent.Ribbon.Uno features that go beyond the ori
 
 Implemented (functional, some simplified — see the table above):
 
-- [x] Ribbon, tabs, groups with size reduction (Large/Medium/Small/Collapsed)
+- [x] Ribbon, tabs, groups with size reduction (Large/Medium/Small/Collapsed). All heads reduce groups under space pressure and re-enlarge them symmetrically when the window grows again, following the `ReduceOrder`; resize is debounced so groups resize once the width settles.
 - [x] Buttons: Button, ToggleButton, SplitButton, DropDownButton, Check/Radio
 - [x] Quick Access Toolbar (visual toolbar, overflow, add/remove provider controls)
 - [x] Backstage / Application Menu (simplified)
@@ -253,11 +254,9 @@ Implemented (functional, some simplified — see the table above):
 - [x] Theming (Light / Dark / High Contrast)
 - [x] Localization (20 languages)
 
-Planned enhancements (parity with WPF):
-
-- [ ] Quick Access Toolbar state persistence and broader provider coverage
-- [ ] KeyTip focus restore and complete Backstage/ApplicationMenu/StartScreen scope routing
-- [ ] Backstage open/close animations
+No known portable WPF parity gaps remain. The intentional framework-specific
+exceptions are listed above and enforced by
+`ApiCompatibility\exceptions.wpf-only.json`.
 
 ## Contributing
 

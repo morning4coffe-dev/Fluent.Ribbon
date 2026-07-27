@@ -31,6 +31,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj" />
     <ProjectReference Include="..\..\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj" />
+    <Content Include="Assets\Modern\star.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--

@@ -41,7 +41,7 @@ public partial class RibbonScrollViewer : ScrollViewer
             nameof(Content),
             typeof(UIElement),
             typeof(RibbonScrollViewer),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnContentChanged));
 
     /// <summary>
     /// Gets or sets the scrollable content.
@@ -107,6 +107,8 @@ public partial class RibbonScrollViewer : ScrollViewer
         if (_scrollViewer is not null)
         {
             _scrollViewer.ViewChanged -= OnScrollViewerViewChanged;
+            _scrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
+            _scrollViewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
         }
 
         _scrollViewer = GetTemplateChild(PART_ScrollViewer) as ScrollViewer;
@@ -126,14 +128,36 @@ public partial class RibbonScrollViewer : ScrollViewer
         if (_scrollViewer is not null)
         {
             _scrollViewer.ViewChanged += OnScrollViewerViewChanged;
+            _scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
+            _scrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
         }
 
+        ApplyContent();
         UpdateButtonVisibility();
     }
 
     #endregion
 
     #region Methods
+
+    private static void OnContentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RibbonScrollViewer viewer)
+        {
+            viewer.ApplyContent();
+        }
+    }
+
+    // The shadowing Content property is not reliably picked up by the template binding on every
+    // head, so the hosted scroll viewer is populated explicitly.
+    private void ApplyContent()
+    {
+        if (_scrollViewer is not null
+            && !ReferenceEquals(_scrollViewer.Content, Content))
+        {
+            _scrollViewer.Content = Content;
+        }
+    }
 
     private void OnLeftButtonClick(object sender, RoutedEventArgs e)
     {
@@ -162,6 +186,18 @@ public partial class RibbonScrollViewer : ScrollViewer
         UpdateButtonVisibility();
     }
 
+    private void OnScrollViewerSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateButtonVisibility();
+    }
+
+    // ScrollableWidth only becomes accurate after layout, and no view change is raised when the
+    // content grows or the viewport shrinks, so the affordances are refreshed on every layout pass.
+    private void OnScrollViewerLayoutUpdated(object? sender, object e)
+    {
+        UpdateButtonVisibility();
+    }
+
     private void UpdateButtonVisibility()
     {
         if (_scrollViewer is null)
@@ -169,19 +205,29 @@ public partial class RibbonScrollViewer : ScrollViewer
             return;
         }
 
+        // Assign only on change: this runs from LayoutUpdated, and an unconditional write would
+        // invalidate layout again and spin.
         if (_leftButton is not null)
         {
-            _leftButton.Visibility = _scrollViewer.HorizontalOffset > 0
+            var leftVisibility = _scrollViewer.HorizontalOffset > 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            if (_leftButton.Visibility != leftVisibility)
+            {
+                _leftButton.Visibility = leftVisibility;
+            }
         }
 
         if (_rightButton is not null)
         {
             var maxOffset = _scrollViewer.ScrollableWidth;
-            _rightButton.Visibility = _scrollViewer.HorizontalOffset < maxOffset - 1
+            var rightVisibility = _scrollViewer.HorizontalOffset < maxOffset - 1
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            if (_rightButton.Visibility != rightVisibility)
+            {
+                _rightButton.Visibility = rightVisibility;
+            }
         }
     }
 

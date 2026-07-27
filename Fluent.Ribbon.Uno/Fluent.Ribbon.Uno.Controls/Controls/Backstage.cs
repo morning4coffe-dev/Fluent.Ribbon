@@ -1,6 +1,7 @@
 namespace Fluent;
 
 using System.Collections;
+using Microsoft.UI.Dispatching;
 
 /// <summary>
 /// Represents the full-page backstage surface.
@@ -15,6 +16,8 @@ public partial class Backstage : RibbonControl
     private Ribbon? parentRibbon;
     private bool? originalHideContextTabs;
     private bool effectiveIsOpen;
+    private bool isShown;
+    private DispatcherQueueTimer? closingAnimationTimer;
 
     /// <summary>
     /// Occurs when <see cref="IsOpen"/> changes.
@@ -149,6 +152,11 @@ public partial class Backstage : RibbonControl
 
         AdornerLayer = GetTemplateChild(PART_AdornerLayer) as FrameworkElement;
         UpdateVisualState();
+
+        if (AdornerLayer is not null)
+        {
+            AdornerLayer.Visibility = isShown ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     /// <summary>
@@ -181,10 +189,19 @@ public partial class Backstage : RibbonControl
             return false;
         }
 
+        CancelClosingAnimation();
         focusBackup = FocusRoutingHelper.CaptureFocusedElement(this, onlyWhenOutsideOwner: true);
         ResolveParentRibbon();
         ApplyParentRibbonOpenState();
+        isShown = true;
         UpdateVisualState();
+
+        // Make the surface visible immediately instead of waiting for the Open transition
+        // to apply its setters, so the backstage never has an invisible first frame.
+        if (AdornerLayer is not null)
+        {
+            AdornerLayer.Visibility = Visibility.Visible;
+        }
 
         DispatcherQueue?.TryEnqueue(
             () =>
@@ -201,9 +218,85 @@ public partial class Backstage : RibbonControl
     /// <summary>Hides the backstage content.</summary>
     protected virtual void Hide()
     {
-        UpdateVisualState();
+        // Decide from our own shown-state rather than from AdornerLayer.Visibility: that
+        // property is driven by VisualState setters which are gated behind the OpenStates
+        // VisualTransition (180 ms), so a close that happens sooner would still observe the
+        // stale Collapsed value and skip the closing animation entirely.
+        if (AreAnimationsEnabled && isShown && AdornerLayer is not null)
+        {
+            StartClosingAnimation();
+            return;
+        }
+
+        CompleteHide();
+    }
+
+    private void StartClosingAnimation()
+    {
+        CancelClosingAnimation();
+        VisualStateManager.GoToState(this, "Closing", true);
+
+        // The closing surface must be on screen for the whole fade-out. VisualState setters
+        // alone cannot guarantee that (see Hide), so drive the visibility directly.
+        if (AdornerLayer is not null)
+        {
+            AdornerLayer.Visibility = Visibility.Visible;
+        }
+
+        if (DispatcherQueue is null)
+        {
+            CompleteHide();
+            return;
+        }
+
+        closingAnimationTimer = DispatcherQueue.CreateTimer();
+        closingAnimationTimer.Interval = TimeSpan.FromMilliseconds(120);
+        closingAnimationTimer.IsRepeating = false;
+        closingAnimationTimer.Tick += OnClosingAnimationTimerTick;
+        closingAnimationTimer.Start();
+    }
+
+    private void OnClosingAnimationTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        sender.Tick -= OnClosingAnimationTimerTick;
+        if (!ReferenceEquals(sender, closingAnimationTimer))
+        {
+            return;
+        }
+
+        closingAnimationTimer = null;
+        if (!effectiveIsOpen)
+        {
+            CompleteHide();
+        }
+    }
+
+    private void CompleteHide()
+    {
+        CancelClosingAnimation();
+        isShown = false;
+        VisualStateManager.GoToState(this, "Closed", false);
+
+        if (AdornerLayer is not null)
+        {
+            AdornerLayer.Visibility = Visibility.Collapsed;
+        }
+
         RestoreParentRibbonState();
         FocusRoutingHelper.RestoreFocus(ref focusBackup);
+    }
+
+    private void CancelClosingAnimation()
+    {
+        if (closingAnimationTimer is null)
+        {
+            return;
+        }
+
+        closingAnimationTimer.Stop();
+        closingAnimationTimer.Tick -= OnClosingAnimationTimerTick;
+        closingAnimationTimer = null;
     }
 
     /// <inheritdoc />
@@ -390,8 +483,10 @@ public partial class Backstage : RibbonControl
     private void OnBackstageUnloaded(object sender, RoutedEventArgs args)
     {
         PopupService.DismissPopup -= OnDismissPopup;
+        CancelClosingAnimation();
         RestoreParentRibbonState();
         focusBackup = null;
+        isShown = false;
         AdornerLayer = null;
     }
 

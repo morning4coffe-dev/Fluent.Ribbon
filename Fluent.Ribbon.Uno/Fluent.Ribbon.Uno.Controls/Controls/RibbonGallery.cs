@@ -350,6 +350,16 @@ public partial class RibbonGallery : ListBox
 
     #endregion
 
+    #region Item Container
+
+    /// <summary>Creates a gallery item container for data items.</summary>
+    protected override DependencyObject GetContainerForItemOverride() => new RibbonGalleryItem();
+
+    /// <summary>Returns whether an item is already a gallery item container.</summary>
+    protected override bool IsItemItsOwnContainerOverride(object item) => item is RibbonGalleryItem;
+
+    #endregion
+
     #region Template
 
     private ScrollViewer? _scrollViewer;
@@ -465,12 +475,20 @@ public partial class RibbonGallery : ListBox
     }
 
     // A UIElement can only have a single parent; moving items between the flat and group panels
-    // requires first detaching from whichever panel currently owns them.
+    // requires first detaching from whichever panel currently owns them. On the native WinUI head the
+    // logical Parent reads null for elements hosted directly in a Panel's Children, so the host is
+    // resolved through the visual tree as well — otherwise this silently no-ops and the subsequent
+    // re-add throws COMException 0x800F1000.
     private static void DetachFromParent(UIElement element)
     {
-        if (element is FrameworkElement fe && fe.Parent is Panel panel)
+        if (VisualTreeHelper.GetParent(element) is Panel visualParent)
         {
-            panel.Children.Remove(element);
+            visualParent.Children.Remove(element);
+        }
+
+        if (element is FrameworkElement { Parent: Panel logicalParent })
+        {
+            logicalParent.Children.Remove(element);
         }
     }
 

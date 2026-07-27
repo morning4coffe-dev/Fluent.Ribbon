@@ -148,6 +148,7 @@ public static class RibbonAnimations
     private static Vector3KeyFrameAnimation CreateOffsetAnimation(Compositor compositor)
     {
         var animation = compositor.CreateVector3KeyFrameAnimation();
+        animation.Target = "Offset";
         animation.InsertExpressionKeyFrame(1f, "this.FinalValue");
         animation.Duration = TimeSpan.FromMilliseconds(180);
         return animation;
@@ -156,6 +157,7 @@ public static class RibbonAnimations
     private static ScalarKeyFrameAnimation CreateOpacityAnimation(Compositor compositor)
     {
         var animation = compositor.CreateScalarKeyFrameAnimation();
+        animation.Target = "Opacity";
         animation.InsertExpressionKeyFrame(1f, "this.FinalValue");
         animation.Duration = TimeSpan.FromMilliseconds(120);
         return animation;

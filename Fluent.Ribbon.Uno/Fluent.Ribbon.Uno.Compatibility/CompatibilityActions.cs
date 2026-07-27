@@ -57,7 +57,7 @@ public partial class ToggleButton
 public partial class CheckBox
 {
     /// <inheritdoc />
-    public virtual FrameworkElement? CreateQuickAccessItem()
+    public override FrameworkElement? CreateQuickAccessItem()
     {
         var clone = new CheckBox
         {
@@ -122,7 +122,7 @@ public partial class CheckBox
 public partial class RadioButton
 {
     /// <inheritdoc />
-    public virtual FrameworkElement? CreateQuickAccessItem()
+    public override FrameworkElement? CreateQuickAccessItem()
     {
         var clone = new RadioButton
         {
@@ -187,7 +187,7 @@ public partial class RadioButton
 public partial class TextBox
 {
     /// <inheritdoc />
-    public virtual FrameworkElement? CreateQuickAccessItem()
+    public override FrameworkElement? CreateQuickAccessItem()
     {
         var clone = new TextBox
         {
@@ -246,7 +246,7 @@ public partial class TextBox
 public partial class ComboBox
 {
     /// <inheritdoc />
-    public virtual FrameworkElement? CreateQuickAccessItem()
+    public override FrameworkElement? CreateQuickAccessItem()
     {
         var clone = new ComboBox
         {

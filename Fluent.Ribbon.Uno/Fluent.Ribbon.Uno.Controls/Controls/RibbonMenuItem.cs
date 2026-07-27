@@ -227,6 +227,10 @@ public partial class MenuItem : InteractiveMenuItemBase
 
     internal void InvokeFromQuickAccess() => OnClick();
 
+    // Automation must take the same path as pointer/keyboard input, otherwise invoking a menu
+    // item with a screen reader skips check toggling, sub-menu opening and popup dismissal.
+    internal void InvokeFromAutomation() => OnClick();
+
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         HasSubItems = Items.Count > 0;

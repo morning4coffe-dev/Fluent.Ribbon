@@ -2,6 +2,7 @@ namespace Fluent.Modern.Controls;
 
 using Fluent;
 using Fluent.Modern.Automation;
+using Fluent.Modern.Commands;
 using Microsoft.UI.Xaml.Automation.Peers;
 
 /// <summary>
@@ -112,6 +113,36 @@ public partial class ModernRibbonButton : RibbonButton
     #endregion
 
     #region Methods
+
+    /// <inheritdoc/>
+    public override FrameworkElement? CreateQuickAccessItem()
+    {
+        var clone = new ModernRibbonButton
+        {
+            Size = RibbonControlSize.Small,
+            Header = QuickAccessHelper.ClonePresentationValue(Header),
+            LargeIconSource = LargeIconSource,
+            SmallIconSource = SmallIconSource,
+            IconGlyph = IconGlyph,
+            ScreenTipTitle = ScreenTipTitle,
+            ScreenTipText = ScreenTipText,
+            CanAddToQuickAccessToolBar = false,
+        };
+
+        RibbonControl.BindQuickAccessItem(this, clone);
+        RibbonControl.Synchronize(
+            this,
+            LargeIconSourceProperty,
+            clone,
+            LargeIconSourceProperty);
+        RibbonControl.Synchronize(
+            this,
+            SmallIconSourceProperty,
+            clone,
+            SmallIconSourceProperty);
+        clone.Click += (_, _) => RibbonInvoker.Invoke(this);
+        return clone;
+    }
 
     private static void OnIconSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

@@ -1,5 +1,7 @@
 namespace Fluent;
 
+using System.Globalization;
+using System.Text;
 using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 
 /// <summary>
@@ -9,7 +11,7 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 [TemplatePart(Name = PART_TextBox, Type = typeof(TextBox))]
 [TemplatePart(Name = PART_UpButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_DownButton, Type = typeof(WinUIButton))]
-public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMediumIconProvider
+public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMediumIconProvider, IRibbonHeaderAlignable
 {
     private const string PART_TextBox = "PART_TextBox";
     private const string PART_UpButton = "PART_UpButton";
@@ -18,6 +20,7 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     private TextBox? _textBox;
     private WinUIButton? _upButton;
     private WinUIButton? _downButton;
+    private FrameworkElement? _headerText;
     private DispatcherTimer? _repeatTimer;
     private bool _isIncrementing;
 
@@ -351,6 +354,7 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         _textBox = GetTemplateChild(PART_TextBox) as TextBox;
         _upButton = GetTemplateChild(PART_UpButton) as WinUIButton;
         _downButton = GetTemplateChild(PART_DownButton) as WinUIButton;
+        _headerText = GetTemplateChild("HeaderText") as FrameworkElement;
 
         if (_upButton is not null)
         {
@@ -390,6 +394,9 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     }
 
     #endregion
+
+    /// <inheritdoc />
+    FrameworkElement? IRibbonHeaderAlignable.HeaderPresenter => _headerText;
 
     /// <inheritdoc />
     public override FrameworkElement? CreateQuickAccessItem()
@@ -518,6 +525,7 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         if (e.Key == Windows.System.VirtualKey.Enter)
         {
             ApplyTextBoxValue();
+            MoveFocusOffTextBox();
             e.Handled = true;
         }
         else if (e.Key == Windows.System.VirtualKey.Up)
@@ -533,25 +541,101 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         else if (e.Key == Windows.System.VirtualKey.Escape)
         {
             UpdateTextBox(); // Revert text to current value
+            MoveFocusOffTextBox();
             e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Mirrors WPF's Spinner, which moves focus off the text box after Enter/Escape so the commit
+    /// is final and the next Tab continues from the spinner.
+    /// </summary>
+    private void MoveFocusOffTextBox()
+    {
+        if (IsTabStop)
+        {
+            Focus(FocusState.Programmatic);
         }
     }
 
     private void ApplyTextBoxValue()
     {
-        if (_textBox is not null && double.TryParse(_textBox.Text, out var newValue))
+        if (_textBox is not null && TryParseValue(_textBox.Text, out var newValue))
         {
             Value = CoerceValue(newValue);
         }
-        else
+
+        // Always rewrite the text box from Value: on success this re-applies Format (so "42"
+        // becomes "42 px"), and on failure it reverts whatever invalid text the user typed.
+        UpdateTextBox();
+    }
+
+    /// <summary>
+    /// Parses user input leniently, mirroring WPF's <c>SpinnerTextToValueConverter</c>:
+    /// everything except digits, decimal/group separators and a leading sign is stripped, then the
+    /// remainder must parse as a finite number. Anything else is rejected so the caller reverts.
+    /// <see cref="Format"/> decorates the displayed value (for example "0 px"), so the text the
+    /// user edits is not a bare number and a plain double.Parse would reject every edit.
+    /// </summary>
+    private static bool TryParseValue(string? text, out double value)
+    {
+        value = 0;
+
+        if (string.IsNullOrWhiteSpace(text))
         {
-            UpdateTextBox();
+            return false;
         }
+
+        // Keep only the numeric portion, dropping any format decoration around it.
+        var builder = new StringBuilder(text.Length);
+        foreach (var character in text)
+        {
+            if (char.IsDigit(character)
+                || character == '.'
+                || character == ','
+                || (character == '-' && builder.Length == 0))
+            {
+                builder.Append(character);
+            }
+        }
+
+        var stripped = builder.ToString();
+        if (stripped.Length == 0)
+        {
+            return false;
+        }
+
+        if (!double.TryParse(stripped, NumberStyles.Any, CultureInfo.CurrentCulture, out value)
+            && !double.TryParse(stripped, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+        {
+            return false;
+        }
+
+        // "NaN"/"Infinity" survive TryParse on modern .NET and would otherwise be stored verbatim.
+        if (!double.IsFinite(value))
+        {
+            value = 0;
+            return false;
+        }
+
+        return true;
     }
 
     private double CoerceValue(double value)
     {
-        return Math.Max(Minimum, Math.Min(Maximum, value));
+        if (!double.IsFinite(value))
+        {
+            return Minimum;
+        }
+
+        var min = Minimum;
+        var max = Maximum;
+        if (max < min)
+        {
+            (min, max) = (max, min);
+        }
+
+        return Math.Max(min, Math.Min(max, value));
     }
 
     private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

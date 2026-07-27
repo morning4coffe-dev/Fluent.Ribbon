@@ -227,7 +227,7 @@ public partial class MenuItem :
             .TransformPoint(new Windows.Foundation.Point(ActualWidth, 0));
         DropDownPopup.HorizontalOffset = origin.X;
         DropDownPopup.VerticalOffset = origin.Y;
-        DropDownPopup.IsOpen = true;
+        FlyoutShowHelper.OpenDeferred(DropDownPopup);
     }
 
     private void HideCompatibilitySubmenu()
