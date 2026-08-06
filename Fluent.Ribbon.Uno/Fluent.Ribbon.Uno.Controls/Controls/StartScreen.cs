@@ -197,6 +197,12 @@ public partial class StartScreen : Backstage, IKeyTipedControl
             {
                 FocusRoutingHelper.RestoreFocus(ref screen._focusBackup);
             }
+
+            if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(screen)
+                is Fluent.Automation.Peers.RibbonStartScreenAutomationPeer peer)
+            {
+                peer.RaiseIsOpenChanged((bool)e.OldValue, isOpen);
+            }
         }
     }
 
@@ -312,6 +318,10 @@ public partial class StartScreen : Backstage, IKeyTipedControl
     {
         IsOpen = false;
     }
+
+    /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonStartScreenAutomationPeer(this);
 
     #endregion
 }

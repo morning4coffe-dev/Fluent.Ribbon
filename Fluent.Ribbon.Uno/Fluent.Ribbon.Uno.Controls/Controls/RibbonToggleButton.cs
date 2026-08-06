@@ -428,16 +428,13 @@ public partial class RibbonToggleButton : ToggleButton, IRibbonControl, IScalabl
     /// <inheritdoc />
     public KeyTipPressedResult OnKeyTipPressed()
     {
-        if (Microsoft.UI.Xaml.Automation.Peers.AutomationPeer.ListenerExists(Microsoft.UI.Xaml.Automation.Peers.AutomationEvents.InvokePatternOnInvoked))
+        if (IsEnabled)
         {
-            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this) ?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(this);
-            var invokeProv = peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
-            invokeProv?.Invoke();
-        }
-        else
-        {
-            IsChecked = !IsChecked;
-            Command?.Execute(CommandParameter);
+            OnToggle();
+            if (Command?.CanExecute(CommandParameter) == true)
+            {
+                Command.Execute(CommandParameter);
+            }
         }
 
         return KeyTipPressedResult.Empty;

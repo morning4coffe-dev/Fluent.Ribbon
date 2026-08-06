@@ -277,6 +277,10 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
     /// <summary>Handles selection changes.</summary>
     protected virtual void OnSelectionChanged(SelectionChangedEventArgs e)
     {
+        var oldItem = e.RemovedItems.FirstOrDefault();
+        var newItem = e.AddedItems.FirstOrDefault();
+        var wasDropDownOpen = IsDropDownOpen;
+
         UpdateSelectedContent();
 
         if (SelectedItem is RibbonTabItem selectedTab)
@@ -290,6 +294,12 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
         else if (IsDropDownOpen)
         {
             IsDropDownOpen = false;
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonTabControlAutomationPeer peer)
+        {
+            peer.RaiseSelectionChanged(oldItem, newItem, wasDropDownOpen);
         }
     }
 
@@ -367,6 +377,18 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
         {
             PopupService.UnregisterOpenDropDown(tabControl);
             tabControl.DropDownClosed?.Invoke(tabControl, EventArgs.Empty);
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(tabControl)
+            is Fluent.Automation.Peers.RibbonTabControlAutomationPeer peer)
+        {
+            var oldState = RibbonTabControl.GetSelectedTabExpandCollapseState(
+                tabControl.IsMinimized,
+                (bool)args.OldValue);
+            var newState = RibbonTabControl.GetSelectedTabExpandCollapseState(
+                tabControl.IsMinimized,
+                (bool)args.NewValue);
+            peer.RaiseSelectedTabExpandCollapseChanged(oldState, newState);
         }
     }
 

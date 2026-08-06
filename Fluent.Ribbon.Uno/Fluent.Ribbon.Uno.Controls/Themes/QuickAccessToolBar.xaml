@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:QuickAccessToolBar">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
@@ -19,34 +20,32 @@
                         <Button
                             x:Name="PART_OverflowButton"
                             AutomationProperties.AutomationId="QuickAccessOverflowButton"
-                            AutomationProperties.Name="More Quick Access commands"
                             Visibility="Collapsed"
                             Background="Transparent"
+                            Foreground="{ThemeResource RibbonIconBrush}"
                             BorderThickness="0"
                             Padding="4,2"
-                            MinWidth="16"
-                            MinHeight="20"
+                            MinWidth="{ThemeResource RibbonCompactTargetSize}"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             VerticalAlignment="Center"
-                            CornerRadius="4"
-                            ToolTipService.ToolTip="More commands">
-                            <FontIcon Glyph="&#xE70D;" FontSize="9" Foreground="{ThemeResource RibbonIconBrush}" />
+                            CornerRadius="4">
+                            <FontIcon Glyph="&#xE70D;" FontSize="9" />
                         </Button>
 
                         <!-- Menu dropdown button -->
                         <Button
                             x:Name="PART_MenuButton"
                             AutomationProperties.AutomationId="QuickAccessCustomizationButton"
-                            AutomationProperties.Name="Customize Quick Access Toolbar"
                             Visibility="{Binding IsMenuDropDownVisible, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"
                             Background="Transparent"
+                            Foreground="{ThemeResource RibbonIconBrush}"
                             BorderThickness="0"
                             Padding="4,2"
-                            MinWidth="16"
-                            MinHeight="20"
+                            MinWidth="{ThemeResource RibbonCompactTargetSize}"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             VerticalAlignment="Center"
-                            CornerRadius="4"
-                            ToolTipService.ToolTip="Customize Quick Access Toolbar">
-                            <FontIcon Glyph="&#xE712;" FontSize="9" Foreground="{ThemeResource RibbonIconBrush}" />
+                            CornerRadius="4">
+                            <FontIcon Glyph="&#xE712;" FontSize="9" />
                         </Button>
                     </StackPanel>
                 </ControlTemplate>

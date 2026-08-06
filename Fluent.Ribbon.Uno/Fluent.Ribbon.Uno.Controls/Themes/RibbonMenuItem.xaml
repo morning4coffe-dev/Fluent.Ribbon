@@ -4,9 +4,13 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:MenuItem">
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
         <Setter Property="Padding" Value="8,6" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:MenuItem">
@@ -15,11 +19,20 @@
                         Background="{TemplateBinding Background}"
                         CornerRadius="4"
                         Margin="2,1"
-                        Padding="{TemplateBinding Padding}">
+                        Padding="{TemplateBinding Padding}"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="IconGlyph.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="PART_Icon.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="DescriptionText.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="InputGestureText.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="SubMenuIndicator.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonHoverBrush}" />
@@ -27,6 +40,14 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="IconGlyph.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="PART_Icon.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="DescriptionText.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="InputGestureText.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="SubMenuIndicator.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonPressedBrush}" />
@@ -34,13 +55,14 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
-                                    <Storyboard>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="ContentGrid"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0.5"
-                                            Duration="0" />
-                                    </Storyboard>
+                                    <VisualState.Setters>
+                                        <Setter Target="IconGlyph.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_Icon.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="DescriptionText.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="InputGestureText.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="SubMenuIndicator.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                    </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
@@ -55,6 +77,7 @@
 
                             <!-- Icon (FontIcon glyph) -->
                             <FontIcon
+                                x:Name="IconGlyph"
                                 Glyph="{TemplateBinding IconGlyph}"
                                 FontSize="16"
                                 Foreground="{ThemeResource RibbonIconBrush}"
@@ -68,6 +91,7 @@
                                 Width="16"
                                 Height="16"
                                 IconSize="Small"
+                                Foreground="{TemplateBinding Foreground}"
                                 SmallIcon="{TemplateBinding Icon}"
                                 Margin="0,0,8,0"
                                 VerticalAlignment="Center"
@@ -76,9 +100,12 @@
                             <!-- Header and Description -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <ContentPresenter
+                                    x:Name="HeaderPresenter"
                                     Content="{TemplateBinding Header}"
+                                    Foreground="{TemplateBinding Foreground}"
                                     FontSize="12" />
                                 <TextBlock
+                                    x:Name="DescriptionText"
                                     Text="{TemplateBinding Description}"
                                     FontSize="11"
                                     Foreground="{ThemeResource RibbonSecondaryTextBrush}"
@@ -89,6 +116,7 @@
 
                             <!-- Input Gesture Text -->
                             <TextBlock
+                                x:Name="InputGestureText"
                                 Grid.Column="2"
                                 Text="{TemplateBinding InputGestureText}"
                                 FontSize="11"
@@ -98,8 +126,10 @@
 
                             <!-- Sub-menu indicator -->
                             <FontIcon
+                                x:Name="SubMenuIndicator"
                                 Grid.Column="3"
                                 Glyph="&#xE76C;"
+                                Foreground="{TemplateBinding Foreground}"
                                 FontSize="10"
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center"

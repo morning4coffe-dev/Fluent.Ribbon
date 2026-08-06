@@ -18,6 +18,7 @@ public partial class Backstage : RibbonControl
     private bool effectiveIsOpen;
     private bool isShown;
     private DispatcherQueueTimer? closingAnimationTimer;
+    private string? localizedAutomationName;
 
     /// <summary>
     /// Occurs when <see cref="IsOpen"/> changes.
@@ -143,6 +144,10 @@ public partial class Backstage : RibbonControl
         CanAddToQuickAccessToolBar = false;
         Loaded += OnBackstageLoaded;
         Unloaded += OnBackstageUnloaded;
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedAutomationName);
+        RegisterPropertyChangedCallback(
+            HeaderProperty,
+            static (sender, _) => ((Backstage)sender).RefreshLocalizedAutomationName());
     }
 
     /// <inheritdoc />
@@ -400,14 +405,15 @@ public partial class Backstage : RibbonControl
         DependencyPropertyChangedEventArgs args)
     {
         var backstage = (Backstage)sender;
-        var newValue = (bool)args.NewValue;
+        var oldValue = backstage.effectiveIsOpen;
+        var requestedValue = (bool)args.NewValue;
 
         if (backstage.CanChangeIsOpen is false)
         {
             return;
         }
 
-        if (newValue)
+        if (requestedValue)
         {
             backstage.effectiveIsOpen = true;
             if (backstage.Show() is false)
@@ -424,6 +430,37 @@ public partial class Backstage : RibbonControl
         }
 
         backstage.IsOpenChanged?.Invoke(backstage, args);
+        backstage.RaiseIsOpenAutomationEvent(
+            oldValue,
+            backstage.effectiveIsOpen);
+    }
+
+    private void RaiseIsOpenAutomationEvent(bool oldValue, bool newValue)
+    {
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonBackstageAutomationPeer peer)
+        {
+            peer.RaiseIsOpenChanged(oldValue, newValue);
+        }
+    }
+
+    private void RefreshLocalizedAutomationName()
+    {
+        var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = RibbonLocalization.Current.Localization.ApplicationMenuName;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.UpdatePeerName(
+            this,
+            ref localizedAutomationName,
+            name);
     }
 
     private static void OnCanChangeIsOpenChanged(
@@ -438,6 +475,7 @@ public partial class Backstage : RibbonControl
             return;
         }
 
+        var oldValue = backstage.effectiveIsOpen;
         if ((bool)backstage.GetValue(IsOpenProperty))
         {
             backstage.effectiveIsOpen = true;
@@ -452,6 +490,10 @@ public partial class Backstage : RibbonControl
             backstage.effectiveIsOpen = false;
             backstage.Hide();
         }
+
+        backstage.RaiseIsOpenAutomationEvent(
+            oldValue,
+            backstage.effectiveIsOpen);
     }
 
     private static void OnContentChanged(
@@ -461,8 +503,12 @@ public partial class Backstage : RibbonControl
         var backstage = (Backstage)sender;
         if (args.NewValue is null && backstage.effectiveIsOpen)
         {
+            var oldValue = backstage.effectiveIsOpen;
             backstage.effectiveIsOpen = false;
             backstage.Hide();
+            backstage.RaiseIsOpenAutomationEvent(
+                oldValue,
+                backstage.effectiveIsOpen);
         }
     }
 

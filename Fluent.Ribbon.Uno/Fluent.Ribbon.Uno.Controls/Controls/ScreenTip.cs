@@ -247,6 +247,14 @@ public partial class ScreenTip : ToolTip, ILogicalChildSupport
         screenTip.SetValue(
             Microsoft.UI.Xaml.Automation.AutomationProperties.AcceleratorKeyProperty,
             e.NewValue is null ? string.Empty : "F1");
+#else
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(screenTip)
+            is Fluent.Automation.Peers.RibbonScreenTipAutomationPeer peer)
+        {
+            peer.RaiseAcceleratorKeyChanged(
+                e.OldValue is not null,
+                e.NewValue is not null);
+        }
 #endif
         screenTip.UpdateKeyboardSubscription();
     }

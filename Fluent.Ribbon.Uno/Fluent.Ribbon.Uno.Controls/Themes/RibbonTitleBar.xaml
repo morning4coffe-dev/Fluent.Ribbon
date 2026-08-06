@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:RibbonTitleBar">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="{ThemeResource RibbonBackgroundBrush}" />
         <Setter Property="MinHeight" Value="30" />
         <Setter Property="Template">

@@ -83,6 +83,7 @@ public partial class RibbonScrollViewer : ScrollViewer
     public RibbonScrollViewer()
     {
         DefaultStyleKey = typeof(RibbonScrollViewer);
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
     #endregion
@@ -118,11 +119,17 @@ public partial class RibbonScrollViewer : ScrollViewer
         if (_leftButton is not null)
         {
             _leftButton.Click += OnLeftButtonClick;
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                _leftButton,
+                RibbonLocalization.Current.Localization.ScrollRibbonLeft);
         }
 
         if (_rightButton is not null)
         {
             _rightButton.Click += OnRightButtonClick;
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                _rightButton,
+                RibbonLocalization.Current.Localization.ScrollRibbonRight);
         }
 
         if (_scrollViewer is not null)
@@ -132,6 +139,7 @@ public partial class RibbonScrollViewer : ScrollViewer
             _scrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
         }
 
+        RefreshLocalizedTemplateMetadata();
         ApplyContent();
         UpdateButtonVisibility();
     }
@@ -139,6 +147,24 @@ public partial class RibbonScrollViewer : ScrollViewer
     #endregion
 
     #region Methods
+
+    private void RefreshLocalizedTemplateMetadata()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        SetLocalizedAction(_leftButton, localization.ScrollRibbonLeft);
+        SetLocalizedAction(_rightButton, localization.ScrollRibbonRight);
+    }
+
+    private static void SetLocalizedAction(DependencyObject? action, string name)
+    {
+        if (action is null)
+        {
+            return;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(action, name);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(action, name);
+    }
 
     private static void OnContentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:BackstageTabControl">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="ItemsPanelBackground" Value="{ThemeResource RibbonBackstageBackgroundBrush}" />
         <Setter Property="ItemsPanel">
             <Setter.Value>
@@ -32,16 +33,53 @@
 
                             <Button
                                 x:Name="PART_BackButton"
-                                Height="44"
+                                MinHeight="{ThemeResource RibbonCompactTargetSize}"
                                 Padding="16,0"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
                                 Background="Transparent"
+                                Foreground="{ThemeResource RibbonBackstageForegroundBrush}"
                                 BorderThickness="0"
                                 Visibility="{Binding IsBackButtonVisible, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border
+                                            x:Name="BackButtonRoot"
+                                            Background="{TemplateBinding Background}"
+                                            Padding="{TemplateBinding Padding}">
+                                            <VisualStateManager.VisualStateGroups>
+                                                <VisualStateGroup x:Name="CommonStates">
+                                                    <VisualState x:Name="Normal" />
+                                                    <VisualState x:Name="PointerOver">
+                                                        <VisualState.Setters>
+                                                            <Setter Target="BackButtonRoot.Background" Value="{ThemeResource RibbonBackstageBackgroundHoverBrush}" />
+                                                            <Setter Target="BackButtonContent.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
+                                                        </VisualState.Setters>
+                                                    </VisualState>
+                                                    <VisualState x:Name="Pressed">
+                                                        <VisualState.Setters>
+                                                            <Setter Target="BackButtonRoot.Background" Value="{ThemeResource RibbonBackstageBackgroundPressedBrush}" />
+                                                            <Setter Target="BackButtonContent.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
+                                                        </VisualState.Setters>
+                                                    </VisualState>
+                                                    <VisualState x:Name="Disabled">
+                                                        <VisualState.Setters>
+                                                            <Setter Target="BackButtonContent.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                                        </VisualState.Setters>
+                                                    </VisualState>
+                                                </VisualStateGroup>
+                                            </VisualStateManager.VisualStateGroups>
+                                            <ContentPresenter
+                                                x:Name="BackButtonContent"
+                                                Content="{TemplateBinding Content}"
+                                                Foreground="{TemplateBinding Foreground}"
+                                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
                                 <FontIcon
                                     FontSize="16"
-                                    Foreground="{ThemeResource RibbonBackstageForegroundBrush}"
                                     Glyph="&#xE72B;" />
                             </Button>
 

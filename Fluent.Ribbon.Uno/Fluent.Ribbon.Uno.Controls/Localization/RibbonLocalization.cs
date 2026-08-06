@@ -67,7 +67,8 @@ public class RibbonLocalization : INotifyPropertyChanged
         get => _localization;
         set
         {
-            if (!Equals(_localization, value))
+            ArgumentNullException.ThrowIfNull(value);
+            if (!ReferenceEquals(_localization, value))
             {
                 _localization = value;
                 RaisePropertyChanged();

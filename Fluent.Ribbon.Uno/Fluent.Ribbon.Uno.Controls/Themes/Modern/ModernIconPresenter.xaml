@@ -4,6 +4,7 @@
     xmlns:modernControls="using:Fluent.Modern.Controls">
 
     <Style TargetType="modernControls:ModernIconPresenter">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="modernControls:ModernIconPresenter">

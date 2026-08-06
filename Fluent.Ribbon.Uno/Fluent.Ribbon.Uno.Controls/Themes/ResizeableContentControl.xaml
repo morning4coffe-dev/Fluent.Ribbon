@@ -3,7 +3,44 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:fluent="using:Fluent">
 
+    <ControlTemplate x:Key="ResizeVerticalHandleTemplate"
+                     TargetType="fluent:ResizeHandle">
+        <Grid Background="Transparent">
+            <Border
+                BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+                BorderThickness="0"
+                Control.IsTemplateFocusTarget="True" />
+            <Rectangle
+                Width="24"
+                Height="2"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Fill="{ThemeResource RibbonSecondaryTextBrush}"
+                RadiusX="1"
+                RadiusY="1" />
+        </Grid>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="ResizeBothHandleTemplate"
+                     TargetType="fluent:ResizeHandle">
+        <Grid Background="Transparent">
+            <Border
+                BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+                BorderThickness="0"
+                Control.IsTemplateFocusTarget="True" />
+            <Path
+                Width="8"
+                Height="8"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Data="M 8,0 L 8,8 L 0,8 Z"
+                Fill="{ThemeResource RibbonSecondaryTextBrush}"
+                Stretch="Fill" />
+        </Grid>
+    </ControlTemplate>
+
     <Style TargetType="fluent:ResizeableContentControl">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
         <Setter Property="Template">
@@ -15,31 +52,32 @@
                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                             VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
 
-                        <!-- Bottom-edge handle: vertical-only resize -->
-                        <Border
+                        <fluent:ResizeHandle
                             x:Name="PART_ResizeVerticalThumb"
-                            Height="6"
-                            Margin="0,0,12,0"
-                            HorizontalAlignment="Stretch"
+                            Width="{ThemeResource RibbonCompactTargetSize}"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
+                            MinWidth="{ThemeResource RibbonCompactTargetSize}"
+                            HorizontalAlignment="Center"
                             VerticalAlignment="Bottom"
-                            Background="Transparent"
-                            Visibility="{Binding CanResizeVertical, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}" />
+                            AutomationProperties.AutomationId="ResizeVerticalHandle"
+                            FocusVisualMargin="-2"
+                            IsTabStop="True"
+                            Template="{StaticResource ResizeVerticalHandleTemplate}"
+                            UseSystemFocusVisuals="True"
+                            Visibility="Collapsed" />
 
-                        <!-- Bottom-right corner handle: resize in both directions -->
-                        <Border
+                        <fluent:ResizeHandle
                             x:Name="PART_ResizeBothThumb"
-                            Width="14"
-                            Height="14"
+                            Width="{ThemeResource RibbonCompactTargetSize}"
+                            Height="{ThemeResource RibbonCompactTargetSize}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Bottom"
-                            Background="Transparent"
-                            Visibility="{Binding CanResizeBothDirections, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}">
-                            <Path
-                                Margin="3"
-                                Stretch="Fill"
-                                Fill="{ThemeResource RibbonSecondaryTextBrush}"
-                                Data="M 8,0 L 8,8 L 0,8 Z" />
-                        </Border>
+                            AutomationProperties.AutomationId="ResizeBothHandle"
+                            FocusVisualMargin="-2"
+                            IsTabStop="True"
+                            Template="{StaticResource ResizeBothHandleTemplate}"
+                            UseSystemFocusVisuals="True"
+                            Visibility="Collapsed" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

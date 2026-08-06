@@ -11,6 +11,11 @@ public partial class RibbonProperties
 {
     private static readonly RibbonControlSizeDefinition DefaultSizeDefinition =
         new(RibbonControlSize.Large, RibbonControlSize.Middle, RibbonControlSize.Small);
+    private static readonly RibbonControlSizeDefinition UnsetSizeDefinition =
+        new(
+            (RibbonControlSize)(-1),
+            (RibbonControlSize)(-1),
+            (RibbonControlSize)(-1));
 
     /// <summary>Identifies the SimplifiedSizeDefinition attached property.</summary>
     public static readonly DependencyProperty SimplifiedSizeDefinitionProperty =
@@ -18,7 +23,7 @@ public partial class RibbonProperties
             "SimplifiedSizeDefinition",
             typeof(RibbonControlSizeDefinition),
             typeof(RibbonProperties),
-            new PropertyMetadata(DefaultSizeDefinition, OnSimplifiedSizeDefinitionChanged));
+            new PropertyMetadata(UnsetSizeDefinition, OnSimplifiedSizeDefinitionChanged));
 
     /// <summary>Identifies the MouseOverBackground attached property.</summary>
     public static readonly DependencyProperty MouseOverBackgroundProperty =
@@ -101,14 +106,35 @@ public partial class RibbonProperties
             new PropertyMetadata(default(CornerRadius)));
 
     /// <summary>Gets the simplified size definition.</summary>
-    public static RibbonControlSizeDefinition GetSimplifiedSizeDefinition(DependencyObject element) =>
-        (RibbonControlSizeDefinition)element.GetValue(SimplifiedSizeDefinitionProperty);
+    public static RibbonControlSizeDefinition GetSimplifiedSizeDefinition(DependencyObject element)
+    {
+        var definition =
+            (RibbonControlSizeDefinition)element.GetValue(SimplifiedSizeDefinitionProperty);
+        return RibbonControl.IsUnsetSizeDefinition(definition)
+            ? DefaultSizeDefinition
+            : definition;
+    }
 
     /// <summary>Sets the simplified size definition.</summary>
     public static void SetSimplifiedSizeDefinition(
         DependencyObject element,
         RibbonControlSizeDefinition value) =>
         element.SetValue(SimplifiedSizeDefinitionProperty, value);
+
+    internal static bool TryGetEffectiveSimplifiedSizeDefinition(
+        DependencyObject element,
+        out RibbonControlSizeDefinition definition)
+    {
+        definition =
+            (RibbonControlSizeDefinition)element.GetValue(SimplifiedSizeDefinitionProperty);
+        if (!RibbonControl.IsUnsetSizeDefinition(definition))
+        {
+            return true;
+        }
+
+        definition = default;
+        return false;
+    }
 
     /// <summary>Gets the pointer-over background.</summary>
     public static Brush? GetMouseOverBackground(DependencyObject element) =>

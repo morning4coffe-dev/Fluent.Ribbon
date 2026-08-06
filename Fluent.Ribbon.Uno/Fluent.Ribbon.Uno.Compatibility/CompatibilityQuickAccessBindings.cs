@@ -87,8 +87,7 @@ internal static class CompatibilityQuickAccessBindings
         OneWay(nameof(DropDownButton.MaxDropDownHeight), static () => RibbonDropDownButton.MaxDropDownHeightProperty),
         OneWay(nameof(DropDownButton.DropDownHeight), static () => RibbonDropDownButton.DropDownHeightProperty),
         OneWay(nameof(DropDownButton.ClosePopupOnMouseDown), static () => RibbonDropDownButton.ClosePopupOnMouseDownProperty),
-        OneWay(nameof(DropDownButton.ClosePopupOnMouseDownDelay), static () => RibbonDropDownButton.ClosePopupOnMouseDownDelayProperty),
-        TwoWay(nameof(DropDownButton.IsDropDownOpen), static () => RibbonDropDownButton.IsDropDownOpenProperty)
+        OneWay(nameof(DropDownButton.ClosePopupOnMouseDownDelay), static () => RibbonDropDownButton.ClosePopupOnMouseDownDelayProperty)
     ];
 
     private static readonly IReadOnlyList<QuickAccessBindingContract> SplitButtonContracts =

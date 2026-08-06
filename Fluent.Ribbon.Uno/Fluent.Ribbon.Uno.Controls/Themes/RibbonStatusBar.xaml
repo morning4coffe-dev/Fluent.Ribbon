@@ -4,7 +4,9 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:RibbonStatusBar">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="{ThemeResource RibbonStatusBarBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonStatusBarTextBrush}" />
         <Setter Property="MinHeight" Value="22" />
         <Setter Property="Template">
             <Setter.Value>
@@ -40,8 +42,9 @@
     </Style>
 
     <Style TargetType="fluent:StatusBarItem">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Padding" Value="8,2" />
-        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonStatusBarTextBrush}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Template">

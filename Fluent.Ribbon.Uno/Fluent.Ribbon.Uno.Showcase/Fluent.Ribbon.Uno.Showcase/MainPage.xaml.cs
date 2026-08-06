@@ -34,6 +34,21 @@ public sealed partial class MainPage : Page
         App.LogAutoTestStartup("MAIN PAGE CONSTRUCTOR BEGIN");
         this.InitializeComponent();
         App.LogAutoTestStartup("MAIN PAGE XAML INITIALIZED");
+#if !WINDOWS
+        SaveAsSeparator.Visibility = Visibility.Collapsed;
+#endif
+#if __WASM__
+        // Uno 6.6 uses AutomationId as the fallback aria-label for generic semantic nodes.
+        // Keep the IDs on native heads, but let the authored accessible names label WASM groups.
+        AutomationProperties.SetAutomationId(MainRibbon, string.Empty);
+        AutomationProperties.SetAutomationId(ClipboardGroup, string.Empty);
+        AutomationProperties.SetAutomationId(SpinnersGroup, string.Empty);
+        AutomationProperties.SetAutomationId(groupLL, string.Empty);
+        AutomationProperties.SetAutomationId(GroupedSplitGroup, string.Empty);
+        AutomationProperties.SetAutomationId(GroupedToggleGroup, string.Empty);
+        AutomationProperties.SetAutomationId(SharedSizeGroup, string.Empty);
+        AutomationProperties.SetAutomationId(GalleriesLauncherGroup, string.Empty);
+#endif
         qatPink.Target = pinkButton;
         qatPaste.Target = pasteButton;
         qatCut.Target = cutButton;

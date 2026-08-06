@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:Backstage">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="Template">
@@ -60,8 +61,11 @@
     </Style>
 
     <Style TargetType="fluent:BackstageTabItem">
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{ThemeResource RibbonBackstageForegroundBrush}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="MinHeight" Value="36" />
@@ -72,7 +76,8 @@
                     <Border
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
-                        Padding="{TemplateBinding Padding}">
+                        Padding="{TemplateBinding Padding}"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -81,6 +86,9 @@
                                         <Setter
                                             Target="RootBorder.Background"
                                             Value="{ThemeResource RibbonBackstageBackgroundHoverBrush}" />
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
+                                        <Setter Target="PART_Header.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
@@ -88,11 +96,23 @@
                                         <Setter
                                             Target="RootBorder.Background"
                                             Value="{ThemeResource RibbonBackstageBackgroundPressedBrush}" />
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
+                                        <Setter Target="PART_Header.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
                                     <VisualState.Setters>
-                                        <Setter Target="RootBorder.Opacity" Value="0.5" />
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_Header.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="DisabledPortable">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonBackstageForegroundDisabledBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundDisabledBrush}" />
+                                        <Setter Target="PART_Header.Foreground" Value="{ThemeResource RibbonBackstageForegroundDisabledBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -102,7 +122,11 @@
                                     <VisualState.Setters>
                                         <Setter
                                             Target="RootBorder.Background"
-                                            Value="{ThemeResource RibbonBackstageBackgroundPressedBrush}" />
+                                            Value="{ThemeResource RibbonBackstageBackgroundSelectedBrush}" />
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonBackstageForegroundSelectedBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundSelectedBrush}" />
+                                        <Setter Target="PART_Header.Foreground" Value="{ThemeResource RibbonBackstageForegroundSelectedBrush}" />
+                                        <Setter Target="SelectionIndicator.Fill" Value="{ThemeResource RibbonBackstageForegroundSelectedBrush}" />
                                         <Setter Target="SelectionIndicator.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -127,12 +151,15 @@
 
                             <Grid Grid.Column="1" Margin="8,0">
                                 <FontIcon
+                                    x:Name="GlyphIcon"
                                     FontSize="16"
                                     Foreground="{TemplateBinding Foreground}"
                                     Glyph="{TemplateBinding IconGlyph}"
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}, FallbackValue=Collapsed}" />
                                 <fluent:IconPresenter
+                                    x:Name="IconPresenter"
                                     IconSize="Small"
+                                    Foreground="{TemplateBinding Foreground}"
                                     SmallIcon="{TemplateBinding Icon}"
                                     Visibility="{Binding Icon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
                             </Grid>
@@ -141,6 +168,7 @@
                                 x:Name="PART_Header"
                                 Grid.Column="2"
                                 Content="{TemplateBinding Header}"
+                                Foreground="{TemplateBinding Foreground}"
                                 ContentTemplate="{TemplateBinding HeaderTemplate}"
                                 ContentTemplateSelector="{TemplateBinding HeaderTemplateSelector}"
                                 HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"

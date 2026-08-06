@@ -4,6 +4,7 @@
     xmlns:modernControls="using:Fluent.Modern.Controls">
 
     <Style TargetType="modernControls:RibbonInfoBarHost">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="MinWidth" Value="240" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Center" />

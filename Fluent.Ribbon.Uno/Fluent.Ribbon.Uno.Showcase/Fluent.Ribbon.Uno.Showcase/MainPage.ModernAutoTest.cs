@@ -446,19 +446,56 @@ public sealed partial class MainPage
                 return;
             }
 
+            var popupHeader = new Border();
+            var popupMenu = new Grid();
             var comboBox = new RibbonComboBox
             {
                 Header = "Combo",
                 SelectedIndex = 1,
+                ResizeMode = ContextMenuResizeMode.Both,
+                DropDownHeight = 240,
+                TopPopupContent = popupHeader,
+                Menu = popupMenu,
             };
             comboBox.Items.Add("One");
             comboBox.Items.Add("Two");
             var comboClone = comboBox.CreateQuickAccessItem() as RibbonComboBox;
             if (comboClone is null
                 || comboClone.Items.Count != 2
-                || comboClone.SelectedIndex != 1)
+                || comboClone.SelectedIndex != 1
+                || comboClone.ResizeMode != ContextMenuResizeMode.Both
+                || comboClone.DropDownHeight != 240
+                || comboClone.TopPopupContent is not null
+                || comboClone.Menu is not null)
             {
                 AutoLog("MODERN-QAT FAIL: combo clone was invalid");
+                return;
+            }
+
+            var comboType = typeof(RibbonComboBox);
+            comboType.GetMethod(
+                    "OnQuickAccessDropDownOpened",
+                    BindingFlags.Static | BindingFlags.NonPublic)!
+                .Invoke(null, [comboClone, EventArgs.Empty]);
+            if (!ReferenceEquals(comboClone.TopPopupContent, popupHeader)
+                || !ReferenceEquals(comboClone.Menu, popupMenu)
+                || comboBox.TopPopupContent is not null
+                || comboBox.Menu is not null)
+            {
+                AutoLog("MODERN-QAT FAIL: combo popup adornments were not transferred");
+                return;
+            }
+
+            comboType.GetMethod(
+                    "OnQuickAccessDropDownClosed",
+                    BindingFlags.Static | BindingFlags.NonPublic)!
+                .Invoke(null, [comboClone, EventArgs.Empty]);
+            if (!ReferenceEquals(comboBox.TopPopupContent, popupHeader)
+                || !ReferenceEquals(comboBox.Menu, popupMenu)
+                || comboClone.TopPopupContent is not null
+                || comboClone.Menu is not null)
+            {
+                AutoLog("MODERN-QAT FAIL: combo popup adornments were not restored");
                 return;
             }
 
@@ -588,6 +625,13 @@ public sealed partial class MainPage
                 || valueProvider.Value != "Initial value")
             {
                 AutoLog($"MODERN-A11Y FAIL: search peer metadata/value pattern was invalid ({searchPeer?.GetType().Name ?? "null"} / {searchPeer?.GetAutomationControlType()} / '{searchPeer?.GetName()}')");
+                return;
+            }
+
+            searchBox.ClearValue(AutomationProperties.NameProperty);
+            if (searchPeer.GetName() != searchBox.PlaceholderText)
+            {
+                AutoLog("MODERN-A11Y FAIL: search peer did not fall back to PlaceholderText");
                 return;
             }
 

@@ -21,16 +21,20 @@ public partial class RibbonToolBarPanel : Panel
     private IReadOnlyDictionary<int, FrameworkElement>? _separators;
     private int _rowCount;
     private double _measuredRowHeight;
+    private bool _useSingleRow;
+    private bool _centerCustomRowItems;
 
     /// <summary>
     /// Switches the panel to the wrap layout used when no layout definition matches.
     /// The panel then arranges its own children directly.
     /// </summary>
-    internal void ConfigureWrapLayout()
+    internal void ConfigureWrapLayout(bool useSingleRow = false)
     {
         _rows = null;
         _separators = null;
         _rowCount = 0;
+        _useSingleRow = useSingleRow;
+        _centerCustomRowItems = false;
         InvalidateMeasure();
         InvalidateArrange();
     }
@@ -44,11 +48,14 @@ public partial class RibbonToolBarPanel : Panel
     internal void ConfigureCustomLayout(
         IReadOnlyList<IReadOnlyList<FrameworkElement>> rows,
         int rowCount,
-        IReadOnlyDictionary<int, FrameworkElement> separators)
+        IReadOnlyDictionary<int, FrameworkElement> separators,
+        bool centerRowItems = false)
     {
         _rows = rows;
         _rowCount = rowCount;
         _separators = separators;
+        _useSingleRow = false;
+        _centerCustomRowItems = centerRowItems;
         InvalidateMeasure();
         InvalidateArrange();
     }
@@ -67,6 +74,11 @@ public partial class RibbonToolBarPanel : Panel
 
     private Size WrapPanelLayout(Size availableSize, bool measure)
     {
+        if (_useSingleRow)
+        {
+            return SingleRowLayout(availableSize, measure);
+        }
+
         var arrange = !measure;
         var availableHeight = double.IsPositiveInfinity(availableSize.Height)
             ? 0
@@ -108,6 +120,63 @@ public partial class RibbonToolBarPanel : Panel
         }
 
         return new Size(resultWidth + columnWidth, resultHeight);
+    }
+
+    private Size SingleRowLayout(Size availableSize, bool measure)
+    {
+        var arrange = !measure;
+        var availableHeight = double.IsPositiveInfinity(availableSize.Height)
+            ? 0
+            : availableSize.Height;
+        var desiredSizes = new List<Size>(Children.Count);
+        var maxHeight = 0.0;
+
+        foreach (var child in Children)
+        {
+            if (measure)
+            {
+                child.Measure(SizeConstants.Infinite);
+            }
+
+            desiredSizes.Add(child.DesiredSize);
+            maxHeight = Math.Max(maxHeight, child.DesiredSize.Height);
+        }
+
+        var rects = BuildSingleRowRects(desiredSizes, availableHeight);
+        if (arrange)
+        {
+            for (var index = 0; index < Children.Count; index++)
+            {
+                Children[index].Arrange(rects[index]);
+            }
+        }
+
+        var width = rects.Count > 0
+            ? rects[^1].Right
+            : 0;
+        return arrange
+            ? availableSize
+            : new Size(width, maxHeight);
+    }
+
+    internal static IReadOnlyList<Rect> BuildSingleRowRects(
+        IReadOnlyList<Size> desiredSizes,
+        double availableHeight)
+    {
+        var rects = new List<Rect>(desiredSizes.Count);
+        var x = 0.0;
+
+        foreach (var desiredSize in desiredSizes)
+        {
+            var childHeight = availableHeight > 0
+                ? Math.Min(desiredSize.Height, availableHeight)
+                : desiredSize.Height;
+            var y = Math.Max(0, (availableHeight - childHeight) / 2);
+            rects.Add(new Rect(x, y, desiredSize.Width, childHeight));
+            x += desiredSize.Width;
+        }
+
+        return rects;
     }
 
     private Size CustomLayout(Size availableSize, bool measure)
@@ -188,7 +257,15 @@ public partial class RibbonToolBarPanel : Panel
 
                 if (arrange)
                 {
-                    child.Arrange(new Rect(x, y, child.DesiredSize.Width, child.DesiredSize.Height));
+                    var childY = y + (_centerCustomRowItems
+                        ? GetCenteredRowOffset(rowHeight, child.DesiredSize.Height)
+                        : 0);
+                    child.Arrange(
+                        new Rect(
+                            x,
+                            childY,
+                            child.DesiredSize.Width,
+                            child.DesiredSize.Height));
                 }
 
                 x += child.DesiredSize.Width;
@@ -214,6 +291,9 @@ public partial class RibbonToolBarPanel : Panel
 
         return new Size(currentMaxX, Math.Max(maxY + whitespace, 0));
     }
+
+    internal static double GetCenteredRowOffset(double rowHeight, double childHeight)
+        => Math.Max(0, (rowHeight - childHeight) / 2);
 
     private static double GetRowHeight(IReadOnlyList<IReadOnlyList<FrameworkElement>> rows)
     {

@@ -6,6 +6,13 @@ namespace Fluent;
 public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider, IDropDownControl, IQuickAccessItemProvider, IRibbonHeaderAlignable
 {
     private FrameworkElement? _headerPresenter;
+    private TextBox? _editableTextBox;
+    private RibbonComboBox? _quickAccessOwner;
+    private object? _borrowedTopPopupContent;
+    private UIElement? _borrowedMenu;
+    private int _automationSelectedIndex;
+    private object? _automationSelectedItem;
+    private string _automationValue = string.Empty;
 
     #region Events
 
@@ -263,11 +270,29 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
     public RibbonComboBox()
     {
         DefaultStyleKey = typeof(RibbonComboBox);
+        _automationSelectedIndex = SelectedIndex;
+        _automationSelectedItem = SelectedItem;
+        _automationValue = GetAutomationValue();
         base.DropDownOpened += OnNativeDropDownOpened;
         base.DropDownClosed += OnNativeDropDownClosed;
         DropDownOpened += (_, _) => { };
         DropDownClosed += (_, _) => { };
         QuickAccessHelper.AttachContextMenu(this);
+        RegisterPropertyChangedCallback(
+            Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty,
+            static (sender, _) => ((RibbonComboBox)sender).UpdateEditableAutomationName());
+        RegisterPropertyChangedCallback(
+            HeaderProperty,
+            static (sender, _) => ((RibbonComboBox)sender).UpdateEditableAutomationName());
+        RegisterPropertyChangedCallback(
+            PlaceholderTextProperty,
+            static (sender, _) => ((RibbonComboBox)sender).UpdateEditableAutomationName());
+        RegisterPropertyChangedCallback(
+            SelectedIndexProperty,
+            static (sender, _) => ((RibbonComboBox)sender).OnAutomationSelectionChanged());
+        RegisterPropertyChangedCallback(
+            TextProperty,
+            static (sender, _) => ((RibbonComboBox)sender).OnAutomationValueChanged());
     }
 
     #endregion
@@ -279,7 +304,29 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
     {
         base.OnApplyTemplate();
         _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
+        _editableTextBox = GetTemplateChild("EditableText") as TextBox;
+        UpdateEditableAutomationName();
         UpdateVisualState();
+    }
+
+    private void UpdateEditableAutomationName()
+    {
+        if (_editableTextBox is not null)
+        {
+            var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = Fluent.Automation.Peers.AutomationPeerHelpers
+                    .GetHeaderOrPlaceholderName(this);
+            }
+
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                    _editableTextBox,
+                    name);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -332,6 +379,41 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         DropDownClosed?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnAutomationSelectionChanged()
+    {
+        var oldIndex = _automationSelectedIndex;
+        var oldItem = _automationSelectedItem;
+        var newIndex = SelectedIndex;
+        var newItem = SelectedItem;
+        _automationSelectedIndex = newIndex;
+        _automationSelectedItem = newItem;
+
+#if !WINDOWS
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonComboBoxAccessibleAutomationPeer peer)
+        {
+            peer.RaiseSelectionChanged(oldItem, oldIndex, newItem, newIndex);
+        }
+#endif
+
+        OnAutomationValueChanged();
+    }
+
+    private void OnAutomationValueChanged()
+    {
+        var oldValue = _automationValue;
+        var newValue = GetAutomationValue();
+        _automationValue = newValue;
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonComboBoxAccessibleAutomationPeer peer)
+        {
+            peer.RaiseValueChanged(oldValue, newValue);
+        }
+    }
+
+    private string GetAutomationValue()
+        => Text ?? Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(SelectedItem);
+
     #endregion
 
     #region IQuickAccessItemProvider
@@ -354,7 +436,13 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
             Size = RibbonControlSize.Small,
             InputWidth = Math.Min(InputWidth, 120d),
             IsEditable = IsEditable,
+            ResizeMode = ResizeMode,
+            DropDownHeight = DropDownHeight,
+            MaxDropDownHeight = MaxDropDownHeight,
+            TopPopupContent = TopPopupContent is UIElement ? null : TopPopupContent,
+            TopPopupContentTemplate = TopPopupContentTemplate,
             CanAddToQuickAccessToolBar = false,
+            _quickAccessOwner = this,
         };
 
         if (ItemsSource is not null)
@@ -376,11 +464,21 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         RibbonControl.BindQuickAccessItem(this, clone);
         BindOneWay(DisplayMemberPathProperty);
         BindOneWay(SelectedValuePathProperty);
+        BindOneWay(PlaceholderTextProperty);
+        BindOneWay(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
+        if (Header is not UIElement)
+        {
+            BindOneWay(HeaderProperty);
+        }
+
         BindTwoWay(SelectedIndexProperty);
         if (IsEditable)
         {
             BindTwoWay(TextProperty);
         }
+
+        clone.DropDownOpened += OnQuickAccessDropDownOpened;
+        clone.DropDownClosed += OnQuickAccessDropDownClosed;
 
         return clone;
 
@@ -391,6 +489,50 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         {
             RibbonControl.Synchronize(this, property, clone, property);
             RibbonControl.Synchronize(clone, property, this, property);
+        }
+    }
+
+    private static void OnQuickAccessDropDownOpened(object? sender, EventArgs e)
+    {
+        if (sender is not RibbonComboBox { _quickAccessOwner: { } owner } clone)
+        {
+            return;
+        }
+
+        if (owner.TopPopupContent is UIElement topContent)
+        {
+            owner.TopPopupContent = null;
+            clone._borrowedTopPopupContent = topContent;
+            clone.TopPopupContent = topContent;
+        }
+
+        if (owner.Menu is { } menu)
+        {
+            owner.Menu = null;
+            clone._borrowedMenu = menu;
+            clone.Menu = menu;
+        }
+    }
+
+    private static void OnQuickAccessDropDownClosed(object? sender, EventArgs e)
+    {
+        if (sender is not RibbonComboBox { _quickAccessOwner: { } owner } clone)
+        {
+            return;
+        }
+
+        if (clone._borrowedTopPopupContent is { } topContent)
+        {
+            clone.TopPopupContent = null;
+            owner.TopPopupContent = topContent;
+            clone._borrowedTopPopupContent = null;
+        }
+
+        if (clone._borrowedMenu is { } menu)
+        {
+            clone.Menu = null;
+            owner.Menu = menu;
+            clone._borrowedMenu = null;
         }
     }
 

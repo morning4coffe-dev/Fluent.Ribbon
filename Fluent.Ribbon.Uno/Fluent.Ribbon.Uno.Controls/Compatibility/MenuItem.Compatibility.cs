@@ -1,8 +1,10 @@
 namespace Fluent;
 
 using System.Collections;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Windows.System;
 
 public partial class MenuItem :
     IDropDownItemOwner,
@@ -13,6 +15,7 @@ public partial class MenuItem :
 {
     private ItemsControl? submenuItemsHost;
     private DependencyObject? dropDownOwner;
+    private bool focusFirstSubmenuItemWhenOpened;
 
     /// <summary>Identifies whether access-key markers are recognized.</summary>
     public static readonly DependencyProperty RecognizesAccessKeyProperty =
@@ -175,6 +178,175 @@ public partial class MenuItem :
         dropDownOwner = owner;
     }
 
+    internal DependencyObject? DropDownOwner => dropDownOwner;
+
+    internal bool HandleMenuNavigationKey(VirtualKey key)
+    {
+        if (key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End)
+        {
+            var target = GetSiblingNavigationTarget(key);
+            return target is not null && target.Focus(FocusState.Keyboard);
+        }
+
+        var openKey = FlowDirection == FlowDirection.RightToLeft
+            ? VirtualKey.Left
+            : VirtualKey.Right;
+        var closeKey = openKey == VirtualKey.Right
+            ? VirtualKey.Left
+            : VirtualKey.Right;
+
+        if (key == openKey && HasSubItems)
+        {
+            OpenSubmenuAndFocusFirstItem();
+            return true;
+        }
+
+        if (key == closeKey || key == VirtualKey.Escape)
+        {
+            return CloseSubmenuOrParent();
+        }
+
+        return false;
+    }
+
+    internal MenuItem? GetSiblingNavigationTarget(VirtualKey key)
+    {
+        var siblings = GetSiblingMenuItems().ToList();
+        if (siblings.Count == 0)
+        {
+            return null;
+        }
+
+        if (key == VirtualKey.Home)
+        {
+            return siblings.FirstOrDefault(IsKeyboardNavigable);
+        }
+
+        if (key == VirtualKey.End)
+        {
+            return siblings.LastOrDefault(IsKeyboardNavigable);
+        }
+
+        var currentIndex = siblings.IndexOf(this);
+        if (currentIndex < 0)
+        {
+            return key == VirtualKey.Up
+                ? siblings.LastOrDefault(IsKeyboardNavigable)
+                : siblings.FirstOrDefault(IsKeyboardNavigable);
+        }
+
+        var targetIndex = FindSiblingTargetIndex(
+            siblings.Count,
+            currentIndex,
+            key == VirtualKey.Up ? -1 : 1,
+            index => IsKeyboardNavigable(siblings[index]));
+        return targetIndex < 0 ? null : siblings[targetIndex];
+    }
+
+    internal static int FindSiblingTargetIndex(
+        int count,
+        int currentIndex,
+        int direction,
+        Func<int, bool> canFocus)
+    {
+        for (var offset = 1; offset < count; offset++)
+        {
+            var candidateIndex = (currentIndex + (direction * offset) + count) % count;
+            if (canFocus(candidateIndex))
+            {
+                return candidateIndex;
+            }
+        }
+
+        return -1;
+    }
+
+    internal IEnumerable<MenuItem> GetSiblingMenuItems()
+    {
+        if (dropDownOwner is MenuItem parentMenuItem)
+        {
+            return parentMenuItem.Items.OfType<MenuItem>();
+        }
+
+        if (dropDownOwner is RibbonDropDownButton dropDownButton)
+        {
+            var items = dropDownButton.ItemsSource as IEnumerable
+                        ?? dropDownButton.Items;
+            return items.Cast<object>().OfType<MenuItem>();
+        }
+
+        for (DependencyObject? current = this;
+             current is not null;
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is ItemsControl itemsControl)
+            {
+                return itemsControl.Items.Cast<object>().OfType<MenuItem>();
+            }
+        }
+
+        return [];
+    }
+
+    internal void OpenSubmenuAndFocusFirstItem()
+    {
+        if (!HasSubItems)
+        {
+            return;
+        }
+
+        focusFirstSubmenuItemWhenOpened = true;
+        IsDropDownOpen = true;
+
+        if (DropDownPopup?.IsOpen == true)
+        {
+            FocusFirstEnabledSubmenuItem();
+        }
+    }
+
+    private bool CloseSubmenuOrParent()
+    {
+        if (IsDropDownOpen)
+        {
+            IsDropDownOpen = false;
+            Focus(FocusState.Keyboard);
+            return true;
+        }
+
+        if (dropDownOwner is MenuItem parentMenuItem)
+        {
+            parentMenuItem.IsDropDownOpen = false;
+            parentMenuItem.Focus(FocusState.Keyboard);
+            return true;
+        }
+
+        if (dropDownOwner is IDropDownControl dropDownControl)
+        {
+            dropDownControl.IsDropDownOpen = false;
+            if (dropDownOwner is Control ownerControl)
+            {
+                ownerControl.Focus(FocusState.Keyboard);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private void FocusFirstEnabledSubmenuItem()
+    {
+        focusFirstSubmenuItemWhenOpened = false;
+        Items.OfType<MenuItem>()
+            .FirstOrDefault(IsKeyboardNavigable)
+            ?.Focus(FocusState.Keyboard);
+    }
+
+    private static bool IsKeyboardNavigable(MenuItem item)
+        => item.IsEnabled
+           && item.IsTabStop
+           && item.Visibility == Visibility.Visible;
+
     private void ShowCompatibilitySubmenu()
     {
         if (Items.Count == 0 || XamlRoot is null)
@@ -192,7 +364,8 @@ public partial class MenuItem :
             submenuItemsHost = new ItemsControl
             {
                 ItemsSource = Items,
-                MinWidth = Math.Max(160, ActualWidth)
+                MinWidth = Math.Max(160, ActualWidth),
+                FlowDirection = FlowDirection,
             };
             DropDownPopup = new Popup
             {
@@ -200,6 +373,7 @@ public partial class MenuItem :
                 IsLightDismissEnabled = true,
                 XamlRoot = XamlRoot
             };
+            DropDownPopup.Opened += OnCompatibilitySubmenuOpened;
             DropDownPopup.Closed += (_, _) =>
             {
                 if (IsDropDownOpen)
@@ -220,6 +394,7 @@ public partial class MenuItem :
             {
                 submenuItemsHost.ItemsSource = Items;
                 submenuItemsHost.MinWidth = Math.Max(160, ActualWidth);
+                submenuItemsHost.FlowDirection = FlowDirection;
             }
         }
 
@@ -234,7 +409,33 @@ public partial class MenuItem :
     {
         if (DropDownPopup is not null)
         {
+            var shouldRestoreFocus =
+                DropDownPopup.Child is DependencyObject child
+                && XamlRoot is { } xamlRoot
+                && FocusManager.GetFocusedElement(xamlRoot) is DependencyObject focused
+                && FocusRoutingHelper.IsDescendantOf(focused, child);
             DropDownPopup.IsOpen = false;
+            if (shouldRestoreFocus)
+            {
+                Focus(FocusState.Keyboard);
+            }
+        }
+    }
+
+    private void OnCompatibilitySubmenuOpened(object? sender, object args)
+    {
+        if (focusFirstSubmenuItemWhenOpened)
+        {
+            FocusFirstEnabledSubmenuItem();
+        }
+    }
+
+    private void RaiseInvokedAutomationEvent()
+    {
+        if (FrameworkElementAutomationPeer.FromElement(this)
+            is RibbonMenuItemAutomationPeer peer)
+        {
+            peer.RaiseInvoked();
         }
     }
 

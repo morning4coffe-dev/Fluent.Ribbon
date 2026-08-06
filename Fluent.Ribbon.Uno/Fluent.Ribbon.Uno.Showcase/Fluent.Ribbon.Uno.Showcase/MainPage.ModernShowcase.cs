@@ -88,6 +88,7 @@ public sealed partial class MainPage
         {
             Header = "Command Search",
         };
+        AutomationProperties.SetAutomationId(searchGroup, "ModernSearchGroup");
 
         var ribbonSearchBox = new RibbonSearchBox
         {
@@ -104,6 +105,7 @@ public sealed partial class MainPage
         {
             Header = "Keyboard Accelerators",
         };
+        AutomationProperties.SetAutomationId(acceleratorGroup, "ModernAcceleratorGroup");
 
         var acceleratorLog = new TextBlock
         {

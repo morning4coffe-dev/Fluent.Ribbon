@@ -14,6 +14,8 @@ public partial class BackstageTabItem :
     ILogicalChildSupport
 {
     private const string PART_Header = "PART_Header";
+    private bool _isPointerOver;
+    private bool _isPressed;
 
     internal FrameworkElement? HeaderContentHost { get; private set; }
 
@@ -127,6 +129,7 @@ public partial class BackstageTabItem :
     {
         DefaultStyleKey = typeof(BackstageTabItem);
         IsTabStop = true;
+        IsEnabledChanged += (_, _) => UpdateVisualState();
     }
 
     /// <inheritdoc />
@@ -152,7 +155,42 @@ public partial class BackstageTabItem :
     protected override void OnPointerPressed(PointerRoutedEventArgs e)
     {
         base.OnPointerPressed(e);
+        _isPressed = true;
+        UpdateVisualState();
         OnMouseLeftButtonDown(e);
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerEntered(PointerRoutedEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        _isPointerOver = true;
+        UpdateVisualState();
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerExited(PointerRoutedEventArgs e)
+    {
+        base.OnPointerExited(e);
+        _isPointerOver = false;
+        _isPressed = false;
+        UpdateVisualState();
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerReleased(PointerRoutedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        _isPressed = false;
+        UpdateVisualState();
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerCaptureLost(PointerRoutedEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _isPressed = false;
+        UpdateVisualState();
     }
 
     /// <summary>Handles the WPF-compatible left-button activation hook.</summary>
@@ -177,7 +215,10 @@ public partial class BackstageTabItem :
     protected virtual void OnSelected(RoutedEventArgs e)
     {
         UpdateVisualState();
-        Focus(FocusState.Programmatic);
+        if (FocusState == Microsoft.UI.Xaml.FocusState.Unfocused)
+        {
+            Focus(FocusState.Programmatic);
+        }
     }
 
     /// <summary>Handles deselection.</summary>
@@ -237,8 +278,13 @@ public partial class BackstageTabItem :
     protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
         => new Fluent.Automation.Peers.RibbonBackstageTabItemAutomationPeer(this);
 
+    private StartScreenTabControl? StartScreenTabControlParent =>
+        FocusRoutingHelper.FindAncestor<StartScreenTabControl>(this);
+
     private BackstageTabControl? TabControlParent =>
-        FocusRoutingHelper.FindAncestor<BackstageTabControl>(this);
+        StartScreenTabControlParent is null
+            ? FocusRoutingHelper.FindAncestor<BackstageTabControl>(this)
+            : null;
 
     private static void OnIsSelectedChanged(
         DependencyObject sender,
@@ -247,7 +293,11 @@ public partial class BackstageTabItem :
         var tabItem = (BackstageTabItem)sender;
         if ((bool)args.NewValue)
         {
-            if (tabItem.TabControlParent is { } tabControl
+            if (tabItem.StartScreenTabControlParent is { } startScreenTabControl)
+            {
+                startScreenTabControl.SelectTabForAutomation(tabItem);
+            }
+            else if (tabItem.TabControlParent is { } tabControl
                 && ReferenceEquals(tabControl.SelectedItem, tabItem) is false)
             {
                 tabControl.SelectTabForAutomation(tabItem);
@@ -259,25 +309,58 @@ public partial class BackstageTabItem :
         {
             tabItem.OnUnselected(new RoutedEventArgs());
         }
+
+        var owningBackstageTabControl = tabItem.TabControlParent;
+        var requiresPortableSelectionEvent =
+#if WINDOWS
+            tabItem.StartScreenTabControlParent is not null;
+#else
+            true;
+#endif
+        if (requiresPortableSelectionEvent
+            && (owningBackstageTabControl is null
+             || owningBackstageTabControl.Items.Contains(tabItem))
+            && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(tabItem)
+                is Fluent.Automation.Peers.RibbonBackstageTabItemAutomationPeer peer)
+        {
+            peer.RaiseIsSelectedChanged(
+                (bool)args.OldValue,
+                (bool)args.NewValue);
+        }
     }
 
     private void SelectInOwningControl()
     {
-        if (TabControlParent is { } backstageTabControl)
+        if (StartScreenTabControlParent is { } startScreenTabControl)
         {
-            backstageTabControl.SelectTabForAutomation(this);
+            startScreenTabControl.SelectTabForAutomation(this);
             return;
         }
 
-        FocusRoutingHelper.FindAncestor<StartScreenTabControl>(this)
-            ?.SelectTabForAutomation(this);
+        if (TabControlParent is { } backstageTabControl)
+        {
+            backstageTabControl.SelectTabForAutomation(this);
+        }
     }
 
     private void UpdateVisualState()
     {
+#if WINDOWS
+        const string disabledState = "Disabled";
+#else
+        const string disabledState = "DisabledPortable";
+#endif
+        var commonState = !IsEnabled
+            ? disabledState
+            : _isPressed
+                ? "Pressed"
+                : _isPointerOver
+                    ? "PointerOver"
+                    : "Normal";
         VisualStateManager.GoToState(
             this,
             IsSelected ? "Selected" : "Unselected",
             true);
+        VisualStateManager.GoToState(this, commonState, true);
     }
 }

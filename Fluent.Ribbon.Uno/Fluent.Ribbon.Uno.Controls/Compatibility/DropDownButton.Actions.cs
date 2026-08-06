@@ -39,7 +39,6 @@ public partial class DropDownButton
         BindOneWay(RibbonDropDownButton.DropDownHeightProperty);
         BindOneWay(RibbonDropDownButton.ClosePopupOnMouseDownProperty);
         BindOneWay(RibbonDropDownButton.ClosePopupOnMouseDownDelayProperty);
-        BindTwoWay(RibbonDropDownButton.IsDropDownOpenProperty);
         return;
 
         void BindPresentation(DependencyProperty property) =>
@@ -47,12 +46,6 @@ public partial class DropDownButton
 
         void BindOneWay(DependencyProperty property) =>
             RibbonControl.Synchronize(this, property, target, property);
-
-        void BindTwoWay(DependencyProperty property)
-        {
-            RibbonControl.Synchronize(this, property, target, property);
-            RibbonControl.Synchronize(target, property, this, property);
-        }
     }
 
     protected void BindQuickAccessItemDropDownEvents(DropDownButton button)

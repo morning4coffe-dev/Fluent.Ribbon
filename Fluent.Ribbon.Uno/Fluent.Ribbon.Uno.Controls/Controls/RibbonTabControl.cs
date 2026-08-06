@@ -86,10 +86,28 @@ public partial class RibbonTabControl : TabView
     {
         if (d is RibbonTabControl tabControl)
         {
+            var oldState = GetSelectedTabExpandCollapseState(
+                (bool)e.OldValue,
+                tabControl.IsDropDownOpen);
+            var newState = GetSelectedTabExpandCollapseState(
+                (bool)e.NewValue,
+                tabControl.IsDropDownOpen);
+            if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(tabControl)
+                is Fluent.Automation.Peers.RibbonTabControlAutomationPeer peer)
+            {
+                peer.RaiseSelectedTabExpandCollapseChanged(oldState, newState);
+            }
+
             tabControl.OnMinimizedCompatibilityChanged((bool)e.NewValue);
             tabControl.UpdateMinimizedState();
         }
     }
+
+    internal static Microsoft.UI.Xaml.Automation.ExpandCollapseState
+        GetSelectedTabExpandCollapseState(bool isMinimized, bool isDropDownOpen)
+        => !isMinimized || isDropDownOpen
+            ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded
+            : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed;
 
     private static void OnContentHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

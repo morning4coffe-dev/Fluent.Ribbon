@@ -6,6 +6,10 @@ namespace Fluent;
 public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider, IQuickAccessItemProvider, IRibbonHeaderAlignable
 {
     private FrameworkElement? _headerPresenter;
+    private bool _synchronizingSelection;
+    private TextBox? _textBox;
+    private bool _redirectingFocus;
+    private Microsoft.UI.Xaml.FocusState _delegatedFocusState;
 
     #region Dependency Properties
 
@@ -172,7 +176,9 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     public RibbonTextBox()
     {
         DefaultStyleKey = typeof(RibbonTextBox);
+        GettingFocus += OnRibbonTextBoxGettingFocus;
         GotFocus += OnRibbonTextBoxGotFocus;
+        SelectionChanged += OnOwnerSelectionChanged;
         QuickAccessHelper.AttachContextMenu(this);
     }
 
@@ -183,9 +189,30 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
+        if (_textBox is not null)
+        {
+            _textBox.SelectionChanged -= OnEditorSelectionChanged;
+            _textBox.GotFocus -= OnEditorGotFocus;
+            _textBox.LostFocus -= OnEditorLostFocus;
+        }
+
         base.OnApplyTemplate();
 
         _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
+        _textBox = GetTemplateChild("PART_TextBox") as TextBox;
+        if (_textBox is not null)
+        {
+            _textBox.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                _textBox,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+            _textBox.SelectionChanged += OnEditorSelectionChanged;
+            _textBox.GotFocus += OnEditorGotFocus;
+            _textBox.LostFocus += OnEditorLostFocus;
+            SynchronizeEditorSelection();
+        }
+
+        UpdateFocusVisualState(false);
     }
 
     /// <inheritdoc />
@@ -207,10 +234,219 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
 
     private void OnRibbonTextBoxGotFocus(object sender, RoutedEventArgs e)
     {
-        if (SelectAllTextOnFocus)
+        if (_textBox is null || XamlRoot is null)
         {
-            SelectAll();
+            return;
         }
+
+        var focused = FocusManager.GetFocusedElement(XamlRoot);
+        if (ReferenceEquals(focused, this) && !_redirectingFocus)
+        {
+            if (FocusState is not Microsoft.UI.Xaml.FocusState.Unfocused)
+            {
+                _delegatedFocusState = FocusState;
+            }
+
+            _redirectingFocus = true;
+            try
+            {
+                var focusState = _delegatedFocusState is Microsoft.UI.Xaml.FocusState.Keyboard
+                    or Microsoft.UI.Xaml.FocusState.Pointer
+                    ? _delegatedFocusState
+                    : Microsoft.UI.Xaml.FocusState.Programmatic;
+                FocusEditor(focusState);
+            }
+            finally
+            {
+                _redirectingFocus = false;
+            }
+
+            UpdateFocusVisualState(false);
+            ScheduleFocusVisualUpdate();
+            return;
+        }
+
+        if (ReferenceEquals(focused, _textBox) && SelectAllTextOnFocus)
+        {
+            _textBox.SelectAll();
+        }
+    }
+
+    private void OnRibbonTextBoxGettingFocus(UIElement sender, GettingFocusEventArgs e)
+    {
+        if (ReferenceEquals(e.NewFocusedElement, this)
+            || (ReferenceEquals(e.NewFocusedElement, _textBox) && !_redirectingFocus))
+        {
+            _delegatedFocusState = e.FocusState;
+        }
+    }
+
+    private void OnEditorSelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (_textBox is null || _synchronizingSelection)
+        {
+            return;
+        }
+
+        _synchronizingSelection = true;
+        try
+        {
+            base.SelectionStart = _textBox.SelectionStart;
+            base.SelectionLength = _textBox.SelectionLength;
+        }
+        finally
+        {
+            _synchronizingSelection = false;
+        }
+    }
+
+    private void OnEditorGotFocus(object sender, RoutedEventArgs e)
+    {
+        UpdateFocusVisualState(false);
+        ScheduleFocusVisualUpdate();
+    }
+
+    private void OnEditorLostFocus(object sender, RoutedEventArgs e)
+        => ScheduleFocusVisualUpdate(resetWhenOutside: true);
+
+    private void UpdateFocusVisualState(bool useTransitions)
+    {
+        var focusState = FocusRoutingHelper.ResolveDelegatedFocusState(
+            _delegatedFocusState,
+            _textBox?.FocusState ?? Microsoft.UI.Xaml.FocusState.Unfocused);
+        var stateName = focusState == Microsoft.UI.Xaml.FocusState.Keyboard
+            ? "KeyboardFocused"
+            : focusState == Microsoft.UI.Xaml.FocusState.Pointer
+                ? "PointerFocused"
+                : "Unfocused";
+        VisualStateManager.GoToState(this, stateName, useTransitions);
+    }
+
+    private void ScheduleFocusVisualUpdate(bool resetWhenOutside = false)
+    {
+        DispatcherQueue.TryEnqueue(
+            () =>
+            {
+                var focused = XamlRoot is null
+                    ? null
+                    : FocusManager.GetFocusedElement(XamlRoot);
+                if (resetWhenOutside
+                    && !ReferenceEquals(focused, this)
+                    && !ReferenceEquals(focused, _textBox))
+                {
+                    _delegatedFocusState = Microsoft.UI.Xaml.FocusState.Unfocused;
+                }
+
+                UpdateFocusVisualState(true);
+            });
+    }
+
+    private bool FocusEditor(Microsoft.UI.Xaml.FocusState focusState)
+    {
+        if (_textBox is null)
+        {
+            return false;
+        }
+
+        var isTabStop = _textBox.IsTabStop;
+        try
+        {
+            _textBox.IsTabStop = true;
+            return _textBox.Focus(focusState);
+        }
+        finally
+        {
+            _textBox.IsTabStop = isTabStop;
+        }
+    }
+
+    private void OnOwnerSelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (_synchronizingSelection)
+        {
+            return;
+        }
+
+        SynchronizeEditorSelection();
+    }
+
+    private void SynchronizeEditorSelection()
+    {
+        if (_textBox is null || _synchronizingSelection)
+        {
+            return;
+        }
+
+        _synchronizingSelection = true;
+        try
+        {
+            var start = Math.Clamp(base.SelectionStart, 0, _textBox.Text.Length);
+            _textBox.Select(start, Math.Min(base.SelectionLength, _textBox.Text.Length - start));
+        }
+        finally
+        {
+            _synchronizingSelection = false;
+        }
+    }
+
+    /// <summary>Selects text in the editable template part.</summary>
+    public new void Select(int start, int length)
+    {
+        base.Select(start, length);
+        _textBox?.Select(start, length);
+    }
+
+    /// <summary>Selects all text in the editable template part.</summary>
+    public new void SelectAll()
+    {
+        base.SelectAll();
+        _textBox?.SelectAll();
+    }
+
+    /// <summary>Gets or sets the caret/selection start owned by the editable template part.</summary>
+    public new int SelectionStart
+    {
+        get => _textBox?.SelectionStart ?? base.SelectionStart;
+        set
+        {
+            base.SelectionStart = value;
+            if (_textBox is not null)
+            {
+                _textBox.SelectionStart = value;
+            }
+        }
+    }
+
+    /// <summary>Gets or sets the selection length owned by the editable template part.</summary>
+    public new int SelectionLength
+    {
+        get => _textBox?.SelectionLength ?? base.SelectionLength;
+        set
+        {
+            base.SelectionLength = value;
+            if (_textBox is not null)
+            {
+                _textBox.SelectionLength = value;
+            }
+        }
+    }
+
+    internal bool FocusEditorForAutomation()
+    {
+        ApplyTemplate();
+        var ownerFocused = Focus(FocusState.Programmatic);
+        if (_textBox is null)
+        {
+            return ownerFocused;
+        }
+
+        if (XamlRoot is not null
+            && ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), _textBox))
+        {
+            return true;
+        }
+
+        return FocusEditor(FocusState.Programmatic);
     }
 
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

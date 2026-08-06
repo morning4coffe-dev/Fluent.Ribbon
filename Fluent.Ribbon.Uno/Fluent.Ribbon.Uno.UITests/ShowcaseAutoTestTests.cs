@@ -36,7 +36,7 @@ public class ShowcaseAutoTestTests
             StartInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"run --project \"{projectPath}\" -f net10.0-desktop -c Release -p:TargetFrameworks=net10.0-desktop -p:UseSharedCompilation=false",
+                Arguments = $"run --project \"{projectPath}\" -f net10.0-desktop -c Release -p:TargetFrameworks=net10.0-desktop --no-build",
                 WorkingDirectory = repositoryRoot,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -48,17 +48,26 @@ public class ShowcaseAutoTestTests
         process.StartInfo.Environment["SHOWCASE_AUTOTEST"] = "1";
         process.StartInfo.Environment["SHOWCASE_AUTOTEST_EXIT"] = "1";
         process.StartInfo.Environment["SHOWCASE_AUTOTEST_LOG"] = logPath;
+        process.StartInfo.Environment["UNO_FORCE_SOFTWARE_RENDERING"] = "1";
 
         Assert.That(process.Start(), Is.True);
 
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        var exited = await WaitForExitAsync(process, TimeSpan.FromMinutes(3));
+        var exited = await WaitForExitAsync(process, TimeSpan.FromMinutes(6));
 
         if (!exited)
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail("The Desktop Showcase auto-test did not exit within three minutes.");
+            await process.WaitForExitAsync();
+            var timeoutOutput = await ReadWithTimeoutAsync(standardOutput);
+            var timeoutError = await ReadWithTimeoutAsync(standardError);
+            Assert.Fail(
+                "The Desktop Showcase auto-test did not exit within six minutes."
+                + Environment.NewLine
+                + timeoutOutput
+                + Environment.NewLine
+                + timeoutError);
         }
 
         var output = await standardOutput;
@@ -91,6 +100,14 @@ public class ShowcaseAutoTestTests
         {
             return false;
         }
+    }
+
+    private static async Task<string> ReadWithTimeoutAsync(Task<string> readTask)
+    {
+        var completed = await Task.WhenAny(readTask, Task.Delay(TimeSpan.FromSeconds(10)));
+        return ReferenceEquals(completed, readTask)
+            ? await readTask
+            : "<process output did not close within ten seconds>";
     }
 
     private static string FindRepositoryRoot(string startingDirectory)

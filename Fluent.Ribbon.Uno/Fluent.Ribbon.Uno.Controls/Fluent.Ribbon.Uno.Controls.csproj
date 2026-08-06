@@ -31,7 +31,8 @@
       https://aka.platform.uno/singleproject-features
     -->
     
-    <UnoFeatures>
+    <UnoFeatures
+      Condition="'$(TargetFramework)' == 'net10.0-desktop' Or '$(TargetFramework)' == 'net10.0-browserwasm'">
       SkiaRenderer;
     </UnoFeatures>
     <!-- Ensure this Uno library is not affected by repository-wide WPF/WinForms settings -->

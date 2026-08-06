@@ -4,42 +4,49 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:BackstageButton">
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonBackstageForegroundBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="Height" Value="36" />
         <Setter Property="Padding" Value="16,0" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:BackstageButton">
                     <Border
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
-                        Padding="{TemplateBinding Padding}">
+                        Padding="{TemplateBinding Padding}"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="RootBorder.Background">
-                                            <Setter.Value>
-                                                <SolidColorBrush Color="White" Opacity="0.15" />
-                                            </Setter.Value>
-                                        </Setter>
+                                        <Setter Target="RootBorder.Background" Value="{ThemeResource RibbonBackstageBackgroundHoverBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <VisualState.Setters>
-                                        <Setter Target="RootBorder.Background">
-                                            <Setter.Value>
-                                                <SolidColorBrush Color="White" Opacity="0.25" />
-                                            </Setter.Value>
-                                        </Setter>
+                                        <Setter Target="RootBorder.Background" Value="{ThemeResource RibbonBackstageBackgroundPressedBrush}" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
                                     <VisualState.Setters>
-                                        <Setter Target="RootBorder.Opacity" Value="0.5" />
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="DisabledPortable">
+                                    <VisualState.Setters>
+                                        <Setter Target="IconPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundDisabledBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonBackstageForegroundDisabledBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -48,12 +55,15 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <!-- Icon -->
                             <ContentPresenter
+                                x:Name="IconPresenter"
                                 Content="{TemplateBinding Icon}"
+                                Foreground="{TemplateBinding Foreground}"
                                 VerticalAlignment="Center"
                                 Margin="0,0,8,0"
                                 Visibility="{Binding Icon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
                             <!-- Header -->
                             <ContentPresenter
+                                x:Name="HeaderPresenter"
                                 Content="{TemplateBinding Header}"
                                 Foreground="{TemplateBinding Foreground}"
                                 VerticalAlignment="Center" />

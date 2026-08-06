@@ -127,6 +127,7 @@ public partial class RibbonStatusBar
 
     private void AddCustomizationItems(IEnumerable<UIElement> items)
     {
+        var itemIndex = 0;
         foreach (var item in items)
         {
             if (item is not StatusBarItem statusItem)
@@ -145,7 +146,12 @@ public partial class RibbonStatusBar
                 $"StatusBarCustomizationItem{_customizationPanel.Children.Count}");
             AutomationProperties.SetName(
                 menuItem,
-                statusItem.Title ?? statusItem.Content?.ToString() ?? "Status item");
+                Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(
+                    statusItem.Title ?? statusItem.Content) is { Length: > 0 } itemName
+                    ? itemName
+                    : string.Format(
+                        RibbonLocalization.Current.Localization.StatusBarItemFormat,
+                        ++itemIndex));
             _customizationPanel.Children.Add(menuItem);
         }
     }

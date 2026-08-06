@@ -42,7 +42,7 @@ public partial class RibbonInfoBarHostAutomationPeer : FrameworkElementAutomatio
         }
 
         return string.IsNullOrWhiteSpace(OwnerInfoBarHost.Message)
-            ? "Ribbon notification"
+            ? RibbonLocalization.Current.Localization.RibbonNotificationName
             : OwnerInfoBarHost.Message;
     }
 }

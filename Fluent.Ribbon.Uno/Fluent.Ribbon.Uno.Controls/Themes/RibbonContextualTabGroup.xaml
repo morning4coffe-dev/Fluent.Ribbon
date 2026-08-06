@@ -4,8 +4,9 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:RibbonContextualTabGroup">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="{ThemeResource RibbonAccentBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonAccentForegroundBrush}" />
         <Setter Property="Padding" Value="8,2" />
         <Setter Property="MinHeight" Value="22" />
         <Setter Property="HorizontalAlignment" Value="Center" />

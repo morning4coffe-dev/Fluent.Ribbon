@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:RibbonToolBarControlGroup">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonToolBarControlGroup">

@@ -12,9 +12,9 @@ namespace Fluent;
 /// Attach it in XAML with <c>fluent:RibbonGroupsContainerScrollViewer.EnableHorizontalWheelScrolling="True"</c>.
 /// </remarks>
 #if WINDOWS
-public class RibbonGroupsContainerScrollViewer : RibbonScrollViewer
+public partial class RibbonGroupsContainerScrollViewer : RibbonScrollViewer
 #else
-public class RibbonGroupsContainerScrollViewer : ScrollViewer
+public partial class RibbonGroupsContainerScrollViewer : ScrollViewer
 #endif
 {
     /// <summary>Initializes a new instance.</summary>
@@ -78,17 +78,31 @@ public class RibbonGroupsContainerScrollViewer : ScrollViewer
             return;
         }
 
-        // Scroll horizontally
-        if (delta > 0)
+        var targetOffset = GetHorizontalWheelTarget(
+            scrollViewer.HorizontalOffset,
+            scrollViewer.ScrollableWidth,
+            delta,
+            48);
+        if (targetOffset.Equals(scrollViewer.HorizontalOffset))
         {
-            scrollViewer.ChangeView(Math.Max(0, scrollViewer.HorizontalOffset - 48), null, null);
-        }
-        else
-        {
-            scrollViewer.ChangeView(scrollViewer.HorizontalOffset + 48, null, null);
+            return;
         }
 
-        e.Handled = true;
+        if (scrollViewer.ChangeView(targetOffset, null, null))
+        {
+            e.Handled = true;
+        }
+    }
+
+    internal static double GetHorizontalWheelTarget(
+        double currentOffset,
+        double scrollableWidth,
+        int delta,
+        double step)
+    {
+        var maximum = Math.Max(0, scrollableWidth);
+        var target = currentOffset + (delta > 0 ? -step : step);
+        return Math.Clamp(target, 0, maximum);
     }
 
     /// <summary>Handles WPF-compatible wheel input.</summary>

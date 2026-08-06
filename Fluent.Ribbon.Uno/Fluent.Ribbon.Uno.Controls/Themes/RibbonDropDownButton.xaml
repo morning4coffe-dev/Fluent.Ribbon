@@ -12,6 +12,9 @@
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="MinWidth" Value="44" />
         <Setter Property="MinHeight" Value="{ThemeResource RibbonControlMinHeight}" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonDropDownButton">
@@ -20,11 +23,17 @@
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="4">
+                        CornerRadius="4"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="LabelText.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="DropDownArrow.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonHoverBrush}" />
@@ -35,6 +44,11 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="LabelText.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="DropDownArrow.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonPressedBrush}" />
@@ -42,13 +56,12 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
-                                    <Storyboard>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="ContentPanel"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0.5"
-                                            Duration="0" />
-                                    </Storyboard>
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="LabelText.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="DropDownArrow.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_Icon.Opacity" Value="0.5" />
+                                    </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="SizeStates">
@@ -92,7 +105,10 @@
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
-                            Padding="{TemplateBinding Padding}">
+                            Padding="{TemplateBinding Padding}"
+                            IsTabStop="False"
+                            AllowFocusOnInteraction="False"
+                            AutomationProperties.AccessibilityView="Raw">
                             <StackPanel x:Name="ContentPanel" Orientation="Vertical" HorizontalAlignment="Center">
                                 <!-- Glyph Icon -->
                                 <FontIcon

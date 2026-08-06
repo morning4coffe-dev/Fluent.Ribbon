@@ -53,7 +53,7 @@ public partial class MenuItem
             nameof(IsChecked),
             typeof(bool?),
             typeof(MenuItem),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnIsCheckedChanged));
 
     /// <summary>Gets or sets the checked state.</summary>
     public bool? IsChecked
@@ -129,6 +129,7 @@ public partial class MenuItem
         DependencyPropertyChangedEventArgs args)
     {
         var item = (MenuItem)sender;
+        item.RaiseExpandCollapseAutomationEvent((bool)args.OldValue, (bool)args.NewValue);
         if ((bool)args.NewValue)
         {
             item.ShowCompatibilitySubmenu();
@@ -141,5 +142,18 @@ public partial class MenuItem
             item.HideCompatibilitySubmenu();
             item.DropDownClosed?.Invoke(item, EventArgs.Empty);
         }
+    }
+
+    private static void OnIsCheckedChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var item = (MenuItem)sender;
+        if ((bool?)args.NewValue is true && !string.IsNullOrEmpty(item.GroupName))
+        {
+            item.UncheckGroupPeers();
+        }
+
+        item.RaiseCheckedAutomationEvent((bool?)args.OldValue, (bool?)args.NewValue);
     }
 }

@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:RibbonGallery">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -32,7 +33,7 @@
                                 Visibility="{Binding HasFilter, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <TextBlock
-                                        Text="Filter:"
+                                        x:Name="PART_FilterLabel"
                                         FontSize="11"
                                         Foreground="{ThemeResource RibbonSecondaryTextBrush}"
                                         VerticalAlignment="Center"
@@ -47,7 +48,9 @@
 
                             <!-- Header -->
                             <ContentPresenter
+                                x:Name="PART_GalleryHeader"
                                 Grid.Row="1"
+                                AutomationProperties.HeadingLevel="Level2"
                                 Content="{TemplateBinding Header}"
                                 Margin="8,4,8,2"
                                 Visibility="{Binding Header, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}">
@@ -86,11 +89,15 @@
     </Style>
 
     <Style TargetType="fluent:RibbonGalleryItem">
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="2" />
         <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonGalleryItem">
@@ -100,11 +107,15 @@
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
                         CornerRadius="4"
-                        Padding="4">
+                        Padding="4"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonHoverBrush}" />
@@ -115,6 +126,9 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonPressedBrush}" />
@@ -124,14 +138,30 @@
                                 <VisualState x:Name="Selected">
                                     <VisualState.Setters>
                                         <Setter Target="RootBorder.BorderBrush" Value="{ThemeResource RibbonAccentBrush}" />
-                                        <Setter Target="RootBorder.Background" Value="{ThemeResource RibbonPressedBrush}" />
+                                        <Setter Target="RootBorder.Background" Value="{ThemeResource RibbonSelectedBrush}" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource RibbonSelectedForegroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="DensityStates">
+                                <VisualState x:Name="Regular" />
+                                <VisualState x:Name="Compact">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootBorder.Padding" Value="0" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
                         <ContentPresenter
+                            x:Name="ContentPresenter"
                             Content="{TemplateBinding Content}"
+                            Foreground="{TemplateBinding Foreground}"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center" />
                     </Border>
@@ -141,6 +171,7 @@
     </Style>
 
     <Style TargetType="fluent:GalleryGroupContainer">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template">
             <Setter.Value>

@@ -35,6 +35,15 @@ using System.Runtime.InteropServices;
 
 public static class ShowcaseWindowNativeMethods
 {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowPos(
         IntPtr hWnd,
@@ -44,10 +53,17 @@ public static class ShowcaseWindowNativeMethods
         int cx,
         int cy,
         uint uFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
 }
 "@
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Drawing
 
 function Invoke-Checked {
     param(
@@ -122,6 +138,57 @@ function Set-ComparisonWindowSize {
         $noMove -bor $noZOrder -bor $noActivate)
     if (-not $result) {
         throw "Could not resize comparison window."
+    }
+}
+
+function Capture-WpfWindow {
+    param(
+        [Parameter(Mandatory)]
+        [IntPtr]$WindowHandle,
+
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $rect = [ShowcaseWindowNativeMethods+RECT]::new()
+    if (-not [ShowcaseWindowNativeMethods]::GetWindowRect($WindowHandle, [ref]$rect)) {
+        throw "Could not read WPF comparison window bounds."
+    }
+
+    $captureWidth = $rect.Right - $rect.Left
+    $captureHeight = $rect.Bottom - $rect.Top
+    if ($captureWidth -le 0 -or $captureHeight -le 0) {
+        throw "WPF comparison window bounds are empty."
+    }
+
+    [ShowcaseWindowNativeMethods]::SetForegroundWindow($WindowHandle) | Out-Null
+    Start-Sleep -Milliseconds 150
+
+    $bitmap = [System.Drawing.Bitmap]::new($captureWidth, $captureHeight)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen(
+            $rect.Left,
+            $rect.Top,
+            0,
+            0,
+            [System.Drawing.Size]::new($captureWidth, $captureHeight))
+
+        $sampledColors = [System.Collections.Generic.HashSet[int]]::new()
+        for ($x = 0; $x -lt $captureWidth; $x += 16) {
+            for ($y = 0; $y -lt $captureHeight; $y += 16) {
+                $sampledColors.Add($bitmap.GetPixel($x, $y).ToArgb()) | Out-Null
+            }
+        }
+        if ($sampledColors.Count -lt 4) {
+            throw "WPF capture is blank; run visual comparison in an interactive desktop session."
+        }
+
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
     }
 }
 
@@ -498,9 +565,16 @@ function Capture-OpenSurface {
     }
 
     $path = Join-Path $OutputDirectory "$Prefix-$State.png"
-    & winapp ui screenshot -a $ProcessId -o $path | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not capture '$State' for process $ProcessId."
+    if ($Prefix -eq "wpf") {
+        Capture-WpfWindow `
+            -WindowHandle (Wait-ForMainWindow -ProcessId $ProcessId) `
+            -Path $path
+    }
+    else {
+        & winapp ui screenshot -a $ProcessId -o $path | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not capture '$State' for process $ProcessId."
+        }
     }
 }
 
@@ -583,10 +657,16 @@ function Capture-ShowcaseState {
 
     $safeState = $State -replace "[^A-Za-z0-9]+", "-"
     $path = Join-Path $OutputDirectory "$Prefix-$safeState.png"
-    $windowHandle = [long](Wait-ForMainWindow -ProcessId $ProcessId)
-    & winapp ui screenshot -w $windowHandle -o $path | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not capture '$State' for process $ProcessId."
+    if ($Prefix -eq "wpf") {
+        Capture-WpfWindow `
+            -WindowHandle (Wait-ForMainWindow -ProcessId $ProcessId) `
+            -Path $path
+    }
+    else {
+        & winapp ui screenshot -a $ProcessId -o $path | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not capture '$State' for process $ProcessId."
+        }
     }
 }
 

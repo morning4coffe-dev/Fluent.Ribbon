@@ -7,6 +7,8 @@ using Windows.System;
 /// </summary>
 public partial class RibbonTabItem
 {
+    private bool _automationIsSelected;
+
     /// <summary>Identifies the <see cref="HasLeftGroupBorder"/> dependency property.</summary>
     public static readonly DependencyProperty HasLeftGroupBorderProperty =
         DependencyProperty.Register(
@@ -89,6 +91,8 @@ public partial class RibbonTabItem
 
     private void InitializeCompatibility()
     {
+        _automationIsSelected = IsSelected;
+        UpdateAutomationContentVisibility();
         RegisterPropertyChangedCallback(
             IsSelectedProperty,
             static (sender, _) => ((RibbonTabItem)sender).OnCompatibilitySelectionChanged());
@@ -98,6 +102,11 @@ public partial class RibbonTabItem
 
     private void OnCompatibilitySelectionChanged()
     {
+        var oldValue = _automationIsSelected;
+        var newValue = IsSelected;
+        _automationIsSelected = newValue;
+        UpdateAutomationContentVisibility();
+
         if (IsSelected)
         {
             StartBringIntoView();
@@ -107,7 +116,20 @@ public partial class RibbonTabItem
         {
             OnUnselected(new RoutedEventArgs());
         }
+
+#if !WINDOWS
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonTabItemAutomationPeer peer)
+        {
+            peer.RaiseIsSelectedChanged(oldValue, newValue);
+        }
+#endif
     }
+
+    private void UpdateAutomationContentVisibility()
+        => _groupsPanel.Visibility = IsSelected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     /// <inheritdoc />
     protected override void OnKeyDown(KeyRoutedEventArgs args)

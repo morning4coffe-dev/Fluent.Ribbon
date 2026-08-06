@@ -72,6 +72,14 @@ public partial class ModernIconPresenter : Control
             typeof(ModernIconPresenter),
             new PropertyMetadata(16.0));
 
+    /// <summary>Identifies the state-specific icon foreground override.</summary>
+    public static readonly DependencyProperty IconForegroundOverrideProperty =
+        DependencyProperty.Register(
+            nameof(IconForegroundOverride),
+            typeof(Brush),
+            typeof(ModernIconPresenter),
+            new PropertyMetadata(null, OnPropertyChanged));
+
     #endregion
 
     #region Properties
@@ -139,6 +147,15 @@ public partial class ModernIconPresenter : Control
         private set => SetValue(ActualIconDimensionProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets a temporary foreground that overrides the source foreground.
+    /// </summary>
+    public Brush? IconForegroundOverride
+    {
+        get => (Brush?)GetValue(IconForegroundOverrideProperty);
+        set => SetValue(IconForegroundOverrideProperty, value);
+    }
+
     #endregion
 
     #region Constructor
@@ -175,7 +192,13 @@ public partial class ModernIconPresenter : Control
 
     private static void OnPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        ((ModernIconPresenter)d).Update();
+        var presenter = (ModernIconPresenter)d;
+        if (e.Property == IconForegroundOverrideProperty)
+        {
+            presenter._appliedSource = null;
+        }
+
+        presenter.Update();
     }
 
     private void OnIsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -237,7 +260,10 @@ public partial class ModernIconPresenter : Control
         {
             _iconHost.Content = Source is null
                 ? null
-                : new IconSourceElement { IconSource = CloneIconSource(Source) };
+                : new IconSourceElement
+                {
+                    IconSource = CloneIconSource(Source, IconForegroundOverride),
+                };
 
             _appliedSource = Source;
         }
@@ -247,7 +273,9 @@ public partial class ModernIconPresenter : Control
         }
     }
 
-    private static IconSource CloneIconSource(IconSource source)
+    private static IconSource CloneIconSource(
+        IconSource source,
+        Brush? foregroundOverride)
     {
         switch (source)
         {
@@ -271,27 +299,30 @@ public partial class ModernIconPresenter : Control
                     fontClone.FontSize = font.FontSize;
                 }
 
-                if (font.Foreground is not null)
+                var fontForeground = foregroundOverride ?? font.Foreground;
+                if (fontForeground is not null)
                 {
-                    fontClone.Foreground = font.Foreground;
+                    fontClone.Foreground = fontForeground;
                 }
 
                 return fontClone;
 
             case SymbolIconSource symbol:
                 var symbolClone = new SymbolIconSource { Symbol = symbol.Symbol };
-                if (symbol.Foreground is not null)
+                var symbolForeground = foregroundOverride ?? symbol.Foreground;
+                if (symbolForeground is not null)
                 {
-                    symbolClone.Foreground = symbol.Foreground;
+                    symbolClone.Foreground = symbolForeground;
                 }
 
                 return symbolClone;
 
             case PathIconSource path:
                 var pathClone = new PathIconSource { Data = path.Data };
-                if (path.Foreground is not null)
+                var pathForeground = foregroundOverride ?? path.Foreground;
+                if (pathForeground is not null)
                 {
-                    pathClone.Foreground = path.Foreground;
+                    pathClone.Foreground = pathForeground;
                 }
 
                 return pathClone;
@@ -300,27 +331,29 @@ public partial class ModernIconPresenter : Control
                 var bitmapClone = new BitmapIconSource
                 {
                     UriSource = bitmap.UriSource,
-                    ShowAsMonochrome = bitmap.ShowAsMonochrome,
+                    ShowAsMonochrome = foregroundOverride is not null || bitmap.ShowAsMonochrome,
                 };
 
-                if (bitmap.Foreground is not null)
+                var bitmapForeground = foregroundOverride ?? bitmap.Foreground;
+                if (bitmapForeground is not null)
                 {
-                    bitmapClone.Foreground = bitmap.Foreground;
+                    bitmapClone.Foreground = bitmapForeground;
                 }
 
                 return bitmapClone;
 
             case ImageIconSource image:
                 var imageClone = new ImageIconSource { ImageSource = image.ImageSource };
-                if (image.Foreground is not null)
+                var imageForeground = foregroundOverride ?? image.Foreground;
+                if (imageForeground is not null)
                 {
-                    imageClone.Foreground = image.Foreground;
+                    imageClone.Foreground = imageForeground;
                 }
 
                 return imageClone;
 
             default:
-                return CloneUnknownIconSource(source);
+                return CloneUnknownIconSource(source, foregroundOverride);
         }
     }
 
@@ -330,7 +363,9 @@ public partial class ModernIconPresenter : Control
     // child of another element". Shallow-copy every readable/writable public property onto a fresh
     // instance of the same runtime type; if that is not possible, fall back to an empty icon rather
     // than leaking the shared instance.
-    private static IconSource CloneUnknownIconSource(IconSource source)
+    private static IconSource CloneUnknownIconSource(
+        IconSource source,
+        Brush? foregroundOverride)
     {
         try
         {
@@ -354,6 +389,11 @@ public partial class ModernIconPresenter : Control
                     {
                         // Skip properties that reject a direct copy; the clone stays usable.
                     }
+                }
+
+                if (foregroundOverride is not null)
+                {
+                    clone.Foreground = foregroundOverride;
                 }
 
                 return clone;

@@ -32,6 +32,7 @@ public partial class ModernRibbonButtonAutomationPeer : ButtonAutomationPeer
             return name;
         }
 
-        return OwnerButton.Header?.ToString() ?? string.Empty;
+        return Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(
+            OwnerButton.Header);
     }
 }

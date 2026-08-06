@@ -29,18 +29,22 @@ public partial class RibbonAutomationPeer : FrameworkElementAutomationPeer, IExp
         => AutomationControlType.Group;
 
     /// <inheritdoc/>
-    protected override string GetLocalizedControlTypeCore() => "ribbon";
+    protected override string GetLocalizedControlTypeCore()
+        => global::Fluent.RibbonLocalization.Current.Localization.RibbonControlType;
 
     /// <inheritdoc/>
     protected override string GetNameCore()
     {
         var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name) ? "Ribbon" : name;
+        return string.IsNullOrWhiteSpace(name)
+            ? global::Fluent.RibbonLocalization.Current.Localization.RibbonName
+            : name;
     }
 
     /// <inheritdoc/>
     protected override object? GetPatternCore(PatternInterface patternInterface)
         => patternInterface == PatternInterface.ExpandCollapse
+           && OwnerRibbon.CanMinimize
             ? this
             : base.GetPatternCore(patternInterface);
 
@@ -50,19 +54,21 @@ public partial class RibbonAutomationPeer : FrameworkElementAutomationPeer, IExp
     /// <inheritdoc/>
     public void Collapse()
     {
-        if (OwnerRibbon.CanMinimize)
-        {
-            OwnerRibbon.IsMinimized = true;
-        }
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerRibbon.CanMinimize,
+            "The ribbon cannot be minimized.");
+        OwnerRibbon.IsMinimized = true;
     }
 
     /// <inheritdoc/>
     public void Expand()
     {
-        if (OwnerRibbon.CanMinimize)
-        {
-            OwnerRibbon.IsMinimized = false;
-        }
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerRibbon.CanMinimize,
+            "The ribbon cannot be restored.");
+        OwnerRibbon.IsMinimized = false;
     }
 
     /// <inheritdoc/>
@@ -70,6 +76,19 @@ public partial class RibbonAutomationPeer : FrameworkElementAutomationPeer, IExp
         => OwnerRibbon.IsMinimized
             ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed
             : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded;
+
+    internal void RaiseIsMinimizedChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+            oldValue ? ExpandCollapseState.Collapsed : ExpandCollapseState.Expanded,
+            newValue ? ExpandCollapseState.Collapsed : ExpandCollapseState.Expanded);
+    }
 
     /// <inheritdoc/>
     protected override bool IsOffscreenCore()
@@ -85,7 +104,14 @@ public partial class RibbonAutomationPeer : FrameworkElementAutomationPeer, IExp
     protected override List<AutomationPeer>? GetChildrenCore()
     {
         var peers = new List<AutomationPeer>();
-        if (CreatePeerForMenu() is { } menuPeer)
+        if (OwnerRibbon.IsCollapsed)
+        {
+            return peers;
+        }
+
+        if (OwnerRibbon.Menu is FrameworkElement menu
+            && AutomationPeerHelpers.IsEffectivelyVisible(menu)
+            && CreatePeerForMenu() is { } menuPeer)
         {
             peers.Add(menuPeer);
         }
@@ -97,7 +123,9 @@ public partial class RibbonAutomationPeer : FrameworkElementAutomationPeer, IExp
                      OwnerRibbon.StartScreen
                  })
         {
-            if (element is not null && CreatePeerForElement(element) is { } peer)
+            if (element is not null
+                && AutomationPeerHelpers.IsEffectivelyVisible(element)
+                && CreatePeerForElement(element) is { } peer)
             {
                 peers.Add(peer);
             }
@@ -131,13 +159,16 @@ public partial class RibbonBackstageAutomationPeer : RibbonControlAutomationPeer
     {
         var name = base.GetNameCore();
         return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetObjectName(OwnerBackstage.Header)
+            ? AutomationPeerHelpers.GetObjectName(OwnerBackstage.Header) is { Length: > 0 } header
+                ? header
+                : global::Fluent.RibbonLocalization.Current.Localization.ApplicationMenuName
             : name;
     }
 
     /// <inheritdoc/>
     protected override object? GetPatternCore(PatternInterface patternInterface)
         => patternInterface == PatternInterface.ExpandCollapse
+           && OwnerBackstage.CanChangeIsOpen
             ? this
             : base.GetPatternCore(patternInterface);
 
@@ -145,10 +176,24 @@ public partial class RibbonBackstageAutomationPeer : RibbonControlAutomationPeer
     public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
-    public void Collapse() => OwnerBackstage.IsOpen = false;
+    public void Collapse()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerBackstage.CanChangeIsOpen,
+            "The backstage open state cannot be changed.");
+        OwnerBackstage.IsOpen = false;
+    }
 
     /// <inheritdoc/>
-    public void Expand() => OwnerBackstage.IsOpen = true;
+    public void Expand()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerBackstage.CanChangeIsOpen,
+            "The backstage open state cannot be changed.");
+        OwnerBackstage.IsOpen = true;
+    }
 
     /// <inheritdoc/>
     public Microsoft.UI.Xaml.Automation.ExpandCollapseState ExpandCollapseState
@@ -156,10 +201,29 @@ public partial class RibbonBackstageAutomationPeer : RibbonControlAutomationPeer
             ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded
             : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed;
 
+    internal void RaiseIsOpenChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+            oldValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed,
+            newValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+        RaiseChildrenVisibilityChanged(newValue);
+    }
+
     /// <inheritdoc/>
     protected override List<AutomationPeer>? GetChildrenCore()
     {
         var peers = new List<AutomationPeer>();
+        if (!OwnerBackstage.IsOpen)
+        {
+            return peers;
+        }
+
         if (OwnerBackstage.Content is BackstageTabControl tabControl)
         {
             peers.Add(
@@ -174,6 +238,152 @@ public partial class RibbonBackstageAutomationPeer : RibbonControlAutomationPeer
 
         return peers;
     }
+
+    private void RaiseChildrenVisibilityChanged(bool childrenVisible)
+    {
+#if WINDOWS
+        RaiseStructureChangedEvent(
+            childrenVisible
+                ? AutomationStructureChangeType.ChildrenBulkAdded
+                : AutomationStructureChangeType.ChildrenBulkRemoved,
+            this);
+#else
+        RaiseAutomationEvent(AutomationEvents.LayoutInvalidated);
+#endif
+    }
+}
+
+/// <summary>
+/// Exposes <see cref="StartScreen"/> as an expandable application surface.
+/// </summary>
+public partial class RibbonStartScreenAutomationPeer : RibbonControlAutomationPeer, IExpandCollapseProvider
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RibbonStartScreenAutomationPeer"/> class.
+    /// </summary>
+    public RibbonStartScreenAutomationPeer(StartScreen owner)
+        : base(owner)
+    {
+    }
+
+    private StartScreen OwnerStartScreen => (StartScreen)Owner;
+
+    /// <inheritdoc/>
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.Menu;
+
+    /// <inheritdoc/>
+    protected override string GetNameCore()
+    {
+        var name = base.GetNameCore();
+        return string.IsNullOrWhiteSpace(name)
+            ? AutomationPeerHelpers.GetObjectName(OwnerStartScreen.Header) is { Length: > 0 } header
+                ? header
+                : global::Fluent.RibbonLocalization.Current.Localization.ApplicationMenuName
+            : name;
+    }
+
+    /// <inheritdoc/>
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.ExpandCollapse
+           && OwnerStartScreen.CanChangeIsOpen
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc cref="AutomationPeer.GetPattern"/>
+    public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    public void Collapse()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerStartScreen.CanChangeIsOpen,
+            "The start-screen open state cannot be changed.");
+        OwnerStartScreen.IsOpen = false;
+    }
+
+    /// <inheritdoc/>
+    public void Expand()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerStartScreen.CanChangeIsOpen,
+            "The start-screen open state cannot be changed.");
+        OwnerStartScreen.IsOpen = true;
+    }
+
+    /// <inheritdoc/>
+    public Microsoft.UI.Xaml.Automation.ExpandCollapseState ExpandCollapseState
+        => OwnerStartScreen.IsOpen
+            ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded
+            : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed;
+
+    internal void RaiseIsOpenChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+            oldValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed,
+            newValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+        RaiseChildrenVisibilityChanged(newValue);
+    }
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore()
+    {
+        var peers = new List<AutomationPeer>();
+        if (!OwnerStartScreen.IsOpen)
+        {
+            return peers;
+        }
+
+        AddPeerOrDescendants(OwnerStartScreen.LeftPaneContent, peers);
+        AddPeerOrDescendants(OwnerStartScreen.Content, peers);
+        return peers;
+    }
+
+    private void AddPeerOrDescendants(object? content, ICollection<AutomationPeer> peers)
+    {
+        if (content is not DependencyObject dependencyObject)
+        {
+            return;
+        }
+
+        if (dependencyObject is UIElement element
+            && CreatePeerForElement(element) is { } peer)
+        {
+            if (!peers.Contains(peer))
+            {
+                peers.Add(peer);
+            }
+
+            return;
+        }
+
+        var childCount = VisualTreeHelper.GetChildrenCount(dependencyObject);
+        for (var index = 0; index < childCount; index++)
+        {
+            AddPeerOrDescendants(VisualTreeHelper.GetChild(dependencyObject, index), peers);
+        }
+    }
+
+    private void RaiseChildrenVisibilityChanged(bool childrenVisible)
+    {
+#if WINDOWS
+        RaiseStructureChangedEvent(
+            childrenVisible
+                ? AutomationStructureChangeType.ChildrenBulkAdded
+                : AutomationStructureChangeType.ChildrenBulkRemoved,
+            this);
+#else
+        RaiseAutomationEvent(AutomationEvents.LayoutInvalidated);
+#endif
+    }
 }
 
 /// <summary>
@@ -183,6 +393,8 @@ public partial class RibbonBackstageTabControlAutomationPeer :
     SelectorAutomationPeer,
     ISelectionProvider
 {
+    private readonly List<RibbonBackstageTabItemDataAutomationPeer?> itemPeers = [];
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonBackstageTabControlAutomationPeer"/> class.
     /// </summary>
@@ -201,17 +413,17 @@ public partial class RibbonBackstageTabControlAutomationPeer :
         => AutomationControlType.Tab;
 
     /// <inheritdoc/>
-    protected override object? GetPatternCore(PatternInterface patternInterface)
+    protected override object GetPatternCore(PatternInterface patternInterface)
         => patternInterface == PatternInterface.Selection
             ? this
             : base.GetPatternCore(patternInterface);
 
     /// <summary>Creates an item peer for a backstage item.</summary>
     protected new virtual ItemAutomationPeer CreateItemAutomationPeer(object item)
-        => new SelectorItemAutomationPeer(item, this);
+        => GetDataPeer(item);
 
     /// <inheritdoc/>
-    protected override List<AutomationPeer>? GetChildrenCore()
+    protected override List<AutomationPeer> GetChildrenCore()
     {
         var peers = new List<AutomationPeer>();
         if (OwnerTabControl.IsBackButtonVisible
@@ -228,17 +440,21 @@ public partial class RibbonBackstageTabControlAutomationPeer :
         {
             switch (item)
             {
-                case BackstageTabItem tabItem:
+                case BackstageTabItem tabItem
+                    when AutomationPeerHelpers.IsEffectivelyVisible(tabItem):
                     peers.Add(
                         CreatePeerForElement(tabItem)
                         ?? new RibbonBackstageTabItemAutomationPeer(tabItem));
                     break;
-                case BackstageButton button:
+                case BackstageButton button
+                    when AutomationPeerHelpers.IsEffectivelyVisible(button):
                     peers.Add(
                         CreatePeerForElement(button)
                         ?? new RibbonBackstageButtonAutomationPeer(button));
                     break;
-                case UIElement element when CreatePeerForElement(element) is { } peer:
+                case FrameworkElement element
+                    when AutomationPeerHelpers.IsEffectivelyVisible(element)
+                         && CreatePeerForElement(element) is { } peer:
                     peers.Add(peer);
                     break;
                 default:
@@ -259,18 +475,169 @@ public partial class RibbonBackstageTabControlAutomationPeer :
 
     IRawElementProviderSimple[] ISelectionProvider.GetSelection()
     {
-        var selectedItem = OwnerTabControl.SelectedItem as BackstageTabItem
-                           ?? OwnerTabControl.ContainerFromItem(
-                               OwnerTabControl.SelectedItem) as BackstageTabItem;
+        if (OwnerTabControl.SelectedItem is not { } selectedItem)
+        {
+            return [];
+        }
+
+        var peer = selectedItem is BackstageTabItem tabItem
+            ? CreatePeerForElement(tabItem)
+            : GetDataPeer(selectedItem);
+        return peer is null ? [] : [ProviderFromPeer(peer)];
+    }
+
+    internal void RaiseSelectionChanged(object? oldItem, object? newItem)
+    {
+        if (ReferenceEquals(oldItem, newItem))
+        {
+            return;
+        }
+
+        RaiseDataItemSelectionChanged(oldItem, true, false);
+        RaiseDataItemSelectionChanged(newItem, false, true);
+    }
+
+    private RibbonBackstageTabItemDataAutomationPeer GetDataPeer(object item)
+    {
+        for (var index = 0; index < itemPeers.Count; index++)
+        {
+            if (itemPeers[index] is { } peer
+                && ReferenceEquals(peer.Item, item))
+            {
+                return peer;
+            }
+        }
+
+        var newPeer = new RibbonBackstageTabItemDataAutomationPeer(item, this);
+        itemPeers.Add(newPeer);
+        return newPeer;
+    }
+
+    private void RaiseDataItemSelectionChanged(object? item, bool oldValue, bool newValue)
+    {
+        if (item is null
+            || item is UIElement)
+        {
+            return;
+        }
+
+        for (var index = 0; index < itemPeers.Count; index++)
+        {
+            if (itemPeers[index] is { } peer
+                && ReferenceEquals(peer.Item, item))
+            {
+                peer.RaiseIsSelectedChanged(oldValue, newValue);
+                return;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Exposes <see cref="StartScreenTabControl"/> as a single-selection tab control.
+/// </summary>
+public partial class RibbonStartScreenTabControlAutomationPeer :
+    SelectorAutomationPeer,
+    ISelectionProvider
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RibbonStartScreenTabControlAutomationPeer"/> class.
+    /// </summary>
+    public RibbonStartScreenTabControlAutomationPeer(StartScreenTabControl owner)
+        : base(owner)
+    {
+    }
+
+    private StartScreenTabControl OwnerTabControl => (StartScreenTabControl)Owner;
+
+    /// <inheritdoc/>
+    protected override string GetClassNameCore() => nameof(StartScreenTabControl);
+
+    /// <inheritdoc/>
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.Tab;
+
+    /// <inheritdoc/>
+    protected override object GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Selection
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc cref="AutomationPeer.GetPattern"/>
+    public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer> GetChildrenCore()
+    {
+        var peers = new List<AutomationPeer>();
+        foreach (var item in OwnerTabControl.Items)
+        {
+            switch (item)
+            {
+                case BackstageTabItem tabItem
+                    when AutomationPeerHelpers.IsEffectivelyVisible(tabItem):
+                    peers.Add(
+                        CreatePeerForElement(tabItem)
+                        ?? new RibbonBackstageTabItemAutomationPeer(tabItem));
+                    break;
+                case BackstageButton button
+                    when AutomationPeerHelpers.IsEffectivelyVisible(button):
+                    peers.Add(
+                        CreatePeerForElement(button)
+                        ?? new RibbonBackstageButtonAutomationPeer(button));
+                    break;
+                case FrameworkElement element
+                    when AutomationPeerHelpers.IsEffectivelyVisible(element)
+                         && CreatePeerForElement(element) is { } peer:
+                    peers.Add(peer);
+                    break;
+            }
+        }
+
+        AddPeer(OwnerTabControl.LeftContent, peers);
+        AddPeer(OwnerTabControl.RightContent, peers);
+        return peers;
+    }
+
+    bool ISelectionProvider.CanSelectMultiple => false;
+
+    bool ISelectionProvider.IsSelectionRequired => true;
+
+    IRawElementProviderSimple[] ISelectionProvider.GetSelection()
+    {
+        var selectedItem = OwnerTabControl.Items
+            .OfType<BackstageTabItem>()
+            .FirstOrDefault(item => item.IsSelected);
         if (selectedItem is null)
         {
             return [];
         }
 
-        var peer = CreatePeerForElement(selectedItem);
-        return peer is null ? [] : [ProviderFromPeer(peer)];
+        var peer = CreatePeerForElement(selectedItem)
+                   ?? new RibbonBackstageTabItemAutomationPeer(selectedItem);
+        return [ProviderFromPeer(peer)];
     }
 
+    internal void RaiseSelectionChanged(
+        BackstageTabItem? oldItem,
+        BackstageTabItem? newItem)
+    {
+        if (ReferenceEquals(oldItem, newItem))
+        {
+            return;
+        }
+
+    }
+
+    private void AddPeer(object? content, ICollection<AutomationPeer> peers)
+    {
+        if (content is UIElement element
+            && CreatePeerForElement(element) is { } peer
+            && !peers.Contains(peer))
+        {
+            peers.Add(peer);
+        }
+    }
 }
 
 internal sealed partial class RibbonBackstageButtonAutomationPeer : FrameworkElementAutomationPeer,
@@ -313,15 +680,52 @@ internal sealed partial class RibbonBackstageButtonAutomationPeer : FrameworkEle
 
     public void Invoke()
     {
-        if (!OwnerButton.IsEnabled)
+        var dispatcherQueue = OwnerButton.DispatcherQueue;
+        if (dispatcherQueue.HasThreadAccess)
         {
+            InvokeOnOwnerThread();
             return;
         }
 
-        if (!OwnerButton.DispatcherQueue.TryEnqueue(OwnerButton.InvokeForAutomation))
+        using var completion = new System.Threading.ManualResetEventSlim();
+        Exception? dispatchException = null;
+        if (!dispatcherQueue.TryEnqueue(
+                () =>
+                {
+                    try
+                    {
+                        InvokeOnOwnerThread();
+                    }
+                    catch (Exception exception)
+                    {
+                        dispatchException = exception;
+                    }
+                    finally
+                    {
+                        completion.Set();
+                    }
+                }))
         {
             throw new InvalidOperationException("Could not dispatch the Backstage button action.");
         }
+
+        if (!completion.Wait(TimeSpan.FromSeconds(5)))
+        {
+            throw new TimeoutException("The Backstage button automation action timed out.");
+        }
+
+        if (dispatchException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(dispatchException)
+                .Throw();
+        }
+    }
+
+    private void InvokeOnOwnerThread()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        OwnerButton.InvokeForAutomation();
     }
 }
 
@@ -383,25 +787,46 @@ public partial class RibbonBackstageTabItemAutomationPeer : FrameworkElementAuto
     }
 
     /// <inheritdoc/>
-    public void AddToSelection() => Select();
+    public void AddToSelection()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        if (IsSelected)
+        {
+            return;
+        }
+
+        if (HasOtherSelection())
+        {
+            throw new InvalidOperationException(
+                "The owning tab control supports only one selected item.");
+        }
+
+        Select();
+    }
 
     /// <inheritdoc/>
     public void RemoveFromSelection()
     {
-        // Backstage tab controls require one selected item.
+        AutomationProviderGuard.EnsureEnabled(this);
+        if (IsSelected)
+        {
+            throw new InvalidOperationException(
+                "The owning tab control requires one selected item.");
+        }
     }
 
     /// <inheritdoc/>
     public void Select()
     {
-        if (AutomationPeerHelpers.FindAncestor<BackstageTabControl>(OwnerTabItem) is { } tabControl)
-        {
-            tabControl.SelectTabForAutomation(OwnerTabItem);
-        }
-        else if (AutomationPeerHelpers.FindAncestor<StartScreenTabControl>(OwnerTabItem)
-                 is { } startScreenTabControl)
+        AutomationProviderGuard.EnsureEnabled(this);
+        if (AutomationPeerHelpers.FindAncestor<StartScreenTabControl>(OwnerTabItem)
+            is { } startScreenTabControl)
         {
             startScreenTabControl.SelectTabForAutomation(OwnerTabItem);
+        }
+        else if (AutomationPeerHelpers.FindAncestor<BackstageTabControl>(OwnerTabItem) is { } tabControl)
+        {
+            tabControl.SelectTabForAutomation(OwnerTabItem);
         }
         else
         {
@@ -418,11 +843,43 @@ public partial class RibbonBackstageTabItemAutomationPeer : FrameworkElementAuto
         get
         {
             FrameworkElement? container =
-                AutomationPeerHelpers.FindAncestor<BackstageTabControl>(OwnerTabItem);
-            container ??= AutomationPeerHelpers.FindAncestor<StartScreenTabControl>(OwnerTabItem);
+                AutomationPeerHelpers.FindAncestor<StartScreenTabControl>(OwnerTabItem);
+            container ??= AutomationPeerHelpers.FindAncestor<BackstageTabControl>(OwnerTabItem);
             var peer = container is null ? null : CreatePeerForElement(container);
             return peer is null ? null : ProviderFromPeer(peer);
         }
+    }
+
+    internal void RaiseIsSelectedChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        InvalidatePeer();
+        RaisePropertyChangedEvent(
+            SelectionItemPatternIdentifiers.IsSelectedProperty,
+            oldValue,
+            newValue);
+        RaiseAutomationEvent(
+            newValue
+                ? AutomationEvents.SelectionItemPatternOnElementSelected
+                : AutomationEvents.SelectionItemPatternOnElementRemovedFromSelection);
+    }
+
+    private bool HasOtherSelection()
+    {
+        if (AutomationPeerHelpers.FindAncestor<StartScreenTabControl>(OwnerTabItem)
+            is { } startScreenTabControl)
+        {
+            return startScreenTabControl.Items
+                .OfType<BackstageTabItem>()
+                .Any(item => item.IsSelected);
+        }
+
+        return AutomationPeerHelpers.FindAncestor<BackstageTabControl>(OwnerTabItem)
+            is { SelectedItem: not null };
     }
 
     /// <inheritdoc/>
@@ -457,5 +914,33 @@ public partial class RibbonBackstageTabItemAutomationPeer : FrameworkElementAuto
         {
             AddPeerOrDescendants(VisualTreeHelper.GetChild(element, index), peers);
         }
+    }
+
+}
+
+internal sealed class RibbonBackstageTabItemDataAutomationPeer : SelectorItemAutomationPeer
+{
+    internal RibbonBackstageTabItemDataAutomationPeer(
+        object item,
+        RibbonBackstageTabControlAutomationPeer parent)
+        : base(item, parent)
+    {
+    }
+
+    internal void RaiseIsSelectedChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            SelectionItemPatternIdentifiers.IsSelectedProperty,
+            oldValue,
+            newValue);
+        RaiseAutomationEvent(
+            newValue
+                ? AutomationEvents.SelectionItemPatternOnElementSelected
+                : AutomationEvents.SelectionItemPatternOnElementRemovedFromSelection);
     }
 }

@@ -15,6 +15,8 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 [ContentProperty(Name = nameof(Items))]
 public partial class RibbonGallery : ListBox
 {
+    private const string PART_FilterLabel = "PART_FilterLabel";
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
@@ -244,7 +246,7 @@ public partial class RibbonGallery : ListBox
             nameof(Selectable),
             typeof(bool),
             typeof(RibbonGallery),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnSelectableChanged));
 
     /// <summary>
     /// Gets or sets whether items in the gallery can be selected.
@@ -336,16 +338,22 @@ public partial class RibbonGallery : ListBox
 
     #region Constructor
 
+    private readonly Dictionary<RibbonGalleryItem, long> _selectionTokens = new();
+    private readonly HashSet<UIElement> _hookedItems = new();
+    private bool _isSynchronizingSelection;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonGallery"/> class.
     /// </summary>
     public RibbonGallery()
     {
         DefaultStyleKey = typeof(RibbonGallery);
+        IsTabStop = false;
         Items = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsChanged;
         Filters = new ObservableCollection<GalleryGroupFilter>();
         Filters.CollectionChanged += OnFiltersChanged;
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
     #endregion
@@ -366,6 +374,7 @@ public partial class RibbonGallery : ListBox
     private UniformItemsPanel? _itemsPanel;
     private StackPanel? _groupedPanel;
     private StackPanel? _filterButtons;
+    private TextBlock? _filterLabel;
     private readonly List<(string Group, FrameworkElement? Header, UIElement Panel)> _groupEntries = new();
 
     /// <inheritdoc/>
@@ -377,6 +386,8 @@ public partial class RibbonGallery : ListBox
         _itemsPanel = GetTemplateChild("PART_ItemsPanel") as UniformItemsPanel;
         _groupedPanel = GetTemplateChild("PART_GroupedPanel") as StackPanel;
         _filterButtons = GetTemplateChild("PART_FilterButtons") as StackPanel;
+        _filterLabel = GetTemplateChild(PART_FilterLabel) as TextBlock;
+        RefreshLocalizedTemplateMetadata();
 
         // Re-sync live children on load/unload so items are never orphaned between panels
         // (a UIElement can only live under one parent at a time).
@@ -387,6 +398,17 @@ public partial class RibbonGallery : ListBox
 
         SyncItems();
         SyncFilters();
+    }
+
+    private void RefreshLocalizedTemplateMetadata()
+    {
+        if (_filterLabel is not null)
+        {
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetValueIfUnsetOrGenerated(
+                _filterLabel,
+                TextBlock.TextProperty,
+                RibbonLocalization.Current.Localization.GalleryFilter);
+        }
     }
 
     private void OnGalleryLoaded(object? sender, RoutedEventArgs e)
@@ -420,7 +442,160 @@ public partial class RibbonGallery : ListBox
 
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        foreach (var item in _hookedItems.Where(item => !Items.Contains(item)).ToList())
+        {
+            ResetRemovedItem(item);
+            UnhookItem(item);
+        }
+
+        if (e.OldItems is not null)
+        {
+            foreach (var item in e.OldItems.OfType<UIElement>())
+            {
+                if (!Items.Contains(item))
+                {
+                    ResetRemovedItem(item);
+                    UnhookItem(item);
+                }
+            }
+        }
+
+        if (e.NewItems is not null)
+        {
+            foreach (var item in e.NewItems.OfType<UIElement>())
+            {
+                HookItem(item);
+            }
+        }
+
+        if (SelectedItem is UIElement selected)
+        {
+            if (Items.Contains(selected))
+            {
+                var selectedIndex = Items.IndexOf(selected);
+                if (SelectedIndex != selectedIndex)
+                {
+                    SelectedIndex = selectedIndex;
+                }
+            }
+            else
+            {
+                SelectedItem = null;
+            }
+        }
+        else
+        {
+            var preselectedItem = Items
+                .OfType<RibbonGalleryItem>()
+                .FirstOrDefault(item => item.IsSelected);
+            if (preselectedItem is not null && !SelectItem(preselectedItem))
+            {
+                ResetRemovedItem(preselectedItem);
+            }
+        }
+
+        foreach (var item in Items
+                     .OfType<RibbonGalleryItem>()
+                     .Where(item => item.IsSelected && !ReferenceEquals(item, SelectedItem)))
+        {
+            ResetRemovedItem(item);
+        }
+
         SyncItems();
+        UpdateItemTabStops();
+    }
+
+    private void ResetRemovedItem(UIElement item)
+    {
+        if (item is not RibbonGalleryItem { IsSelected: true } galleryItem)
+        {
+            return;
+        }
+
+        _isSynchronizingSelection = true;
+        try
+        {
+            galleryItem.IsSelected = false;
+        }
+        finally
+        {
+            _isSynchronizingSelection = false;
+        }
+    }
+
+    private void HookItem(UIElement item)
+    {
+        if (item is RibbonGalleryItem galleryItem)
+        {
+            galleryItem.GalleryOwner = this;
+        }
+
+        if (!_hookedItems.Add(item))
+        {
+            return;
+        }
+
+        item.PointerPressed += OnItemPointerPressed;
+        if (item is RibbonGalleryItem selectableItem)
+        {
+            _selectionTokens[selectableItem] = selectableItem.RegisterPropertyChangedCallback(
+                RibbonGalleryItem.IsSelectedProperty,
+                OnGalleryItemIsSelectedChanged);
+        }
+    }
+
+    private void UnhookItem(UIElement item)
+    {
+        if (!_hookedItems.Remove(item))
+        {
+            return;
+        }
+
+        item.PointerPressed -= OnItemPointerPressed;
+        if (item is RibbonGalleryItem galleryItem)
+        {
+            if (ReferenceEquals(galleryItem.GalleryOwner, this))
+            {
+                galleryItem.GalleryOwner = null;
+            }
+
+            if (_selectionTokens.Remove(galleryItem, out var token))
+            {
+                galleryItem.UnregisterPropertyChangedCallback(
+                    RibbonGalleryItem.IsSelectedProperty,
+                    token);
+            }
+        }
+    }
+
+    private void OnItemPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement item)
+        {
+            SelectItem(item);
+        }
+    }
+
+    private void OnGalleryItemIsSelectedChanged(DependencyObject sender, DependencyProperty property)
+    {
+        if (_isSynchronizingSelection || sender is not RibbonGalleryItem item)
+        {
+            return;
+        }
+
+        if (item.IsSelected)
+        {
+            if (!SelectItem(item))
+            {
+                _isSynchronizingSelection = true;
+                item.IsSelected = false;
+                _isSynchronizingSelection = false;
+            }
+        }
+        else if (ReferenceEquals(SelectedItem, item))
+        {
+            SelectedItem = null;
+        }
     }
 
     private void SyncItems()
@@ -507,22 +682,7 @@ public partial class RibbonGallery : ListBox
 
         foreach (var item in Items)
         {
-            string groupName = string.Empty;
-
-            if (item is RibbonGalleryItem galleryItem && !string.IsNullOrEmpty(galleryItem.Group))
-            {
-                groupName = galleryItem.Group;
-            }
-            else if (!string.IsNullOrEmpty(GroupBy) && item is FrameworkElement fe)
-            {
-                // Try to get group from data context property
-                var dataContext = fe.DataContext;
-                if (dataContext is not null)
-                {
-                    var prop = dataContext.GetType().GetProperty(GroupBy);
-                    groupName = prop?.GetValue(dataContext)?.ToString() ?? string.Empty;
-                }
-            }
+            var groupName = GetItemGroup(item);
 
             if (string.IsNullOrEmpty(groupName))
             {
@@ -555,6 +715,10 @@ public partial class RibbonGallery : ListBox
                 Margin = new Thickness(4, 8, 4, 4),
                 Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["RibbonSecondaryTextBrush"],
             };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(header, groupName);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(
+                header,
+                Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level3);
             _groupedPanel.Children.Insert(insertIndex++, header);
 
             // Items grid (non-virtualizing, hosts the live item elements directly)
@@ -621,30 +785,34 @@ public partial class RibbonGallery : ListBox
     private void ApplyFilter()
     {
         var allowedGroups = GetAllowedGroupNames();
-        if (allowedGroups is null)
-        {
-            // No filter active: show all items
-            foreach (var item in Items)
-            {
-                if (item is UIElement ue)
-                {
-                    ue.Visibility = Visibility.Visible;
-                }
-            }
-            return;
-        }
-
-        // Apply filter: show only items whose Group is in the allowed set
         foreach (var item in Items)
         {
-            if (item is RibbonGalleryItem galleryItem)
-            {
-                galleryItem.Visibility = string.IsNullOrEmpty(galleryItem.Group) ||
-                    allowedGroups.Contains(galleryItem.Group)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-            }
+            var group = GetItemGroup(item);
+            item.Visibility = allowedGroups is null
+                              || string.IsNullOrEmpty(group)
+                              || allowedGroups.Contains(group)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
+    }
+
+    private string GetItemGroup(UIElement item)
+    {
+        if (item is RibbonGalleryItem { Group.Length: > 0 } galleryItem)
+        {
+            return galleryItem.Group;
+        }
+
+        if (string.IsNullOrEmpty(GroupBy) || item is not FrameworkElement element)
+        {
+            return string.Empty;
+        }
+
+        var source = element.DataContext ?? element;
+        return Fluent.Helpers.PropertyValueHelper
+                   .GetPublicPropertyValue(source, GroupBy)
+                   ?.ToString()
+               ?? string.Empty;
     }
 
     private HashSet<string>? GetAllowedGroupNames()
@@ -662,6 +830,7 @@ public partial class RibbonGallery : ListBox
         if (_filterButtons is null || Filters.Count == 0) return;
 
         var buttons = new List<WinUIButton>();
+        var targetSize = Fluent.Helpers.TouchTargetGeometry.ResolveCompactTargetSize(this);
         foreach (var filter in Filters)
         {
             var btn = new WinUIButton
@@ -669,11 +838,18 @@ public partial class RibbonGallery : ListBox
                 Content = filter.Title,
                 Tag = filter,
                 Padding = new Thickness(8, 2, 8, 2),
-                MinHeight = 20,
+                MinHeight = targetSize,
                 FontSize = 11,
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 BorderThickness = new Thickness(0),
             };
+            if (_filterLabel is not null)
+            {
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(
+                    btn,
+                    _filterLabel);
+            }
+
             btn.Click += OnFilterButtonClick;
             buttons.Add(btn);
         }
@@ -721,12 +897,7 @@ public partial class RibbonGallery : ListBox
     {
         if (d is RibbonGallery gallery)
         {
-            if (!gallery.Selectable)
-            {
-                return;
-            }
-
-            gallery.SelectionChanged?.Invoke(gallery, e.NewValue);
+            gallery.HandleSelectedItemChanged(e.OldValue, e.NewValue);
         }
     }
 
@@ -735,12 +906,214 @@ public partial class RibbonGallery : ListBox
         if (d is RibbonGallery gallery)
         {
             var index = (int)e.NewValue;
-            if (index >= 0 && index < gallery.Items.Count)
+            var item = index >= 0 && index < gallery.Items.Count
+                ? gallery.Items[index]
+                : null;
+            if (!ReferenceEquals(gallery.SelectedItem, item))
             {
-                gallery.SelectedItem = gallery.Items[index];
+                gallery.SelectedItem = item;
             }
         }
     }
+
+    private static void OnSelectableChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RibbonGallery gallery && !(bool)e.NewValue)
+        {
+            gallery.SelectedItem = null;
+        }
+    }
+
+    private void HandleSelectedItemChanged(object? oldValue, object? newValue)
+    {
+        if (newValue is not null
+            && (!Selectable || newValue is not UIElement element || !Items.Contains(element)))
+        {
+            SelectedItem = null;
+            return;
+        }
+
+        var newIndex = newValue is UIElement selected ? Items.IndexOf(selected) : -1;
+        if (SelectedIndex != newIndex)
+        {
+            SelectedIndex = newIndex;
+        }
+
+        _isSynchronizingSelection = true;
+        try
+        {
+            foreach (var item in Items.OfType<RibbonGalleryItem>())
+            {
+                item.IsSelected = ReferenceEquals(item, newValue);
+            }
+        }
+        finally
+        {
+            _isSynchronizingSelection = false;
+        }
+
+        UpdateItemTabStops();
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonGalleryAutomationPeer peer)
+        {
+            peer.RaiseSelectionChanged(oldValue as UIElement, newValue as UIElement);
+        }
+
+        SelectionChanged?.Invoke(this, newValue);
+    }
+
+    internal bool SelectItem(UIElement item)
+    {
+        if (!Selectable || !IsEnabled || !IsItemEnabled(item) || !Items.Contains(item))
+        {
+            return false;
+        }
+
+        SelectedItem = item;
+        return ReferenceEquals(SelectedItem, item);
+    }
+
+    internal bool RemoveItemFromSelection(UIElement item)
+    {
+        if (!IsEnabled || !IsItemEnabled(item) || !ReferenceEquals(SelectedItem, item))
+        {
+            return false;
+        }
+
+        SelectedItem = null;
+        return SelectedItem is null;
+    }
+
+    internal IEnumerable<UIElement> GetAutomationItems()
+    {
+        var allowedGroups = GetAllowedGroupNames();
+        return Items.Where(item =>
+            Fluent.Automation.Peers.AutomationPeerHelpers.IsEffectivelyVisible(item)
+            && (allowedGroups is null
+                || string.IsNullOrEmpty(GetItemGroup(item))
+                || allowedGroups.Contains(GetItemGroup(item))));
+    }
+
+    internal bool HandleGalleryItemKeyDown(UIElement source, KeyRoutedEventArgs e)
+        => HandleNavigationKey(source, e);
+
+    /// <inheritdoc/>
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        if (!e.Handled)
+        {
+            HandleNavigationKey(e.OriginalSource as UIElement, e);
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    private bool HandleNavigationKey(UIElement? source, KeyRoutedEventArgs e)
+    {
+        if (!TryGetNavigationDirection(e.Key, out var direction))
+        {
+            return false;
+        }
+
+        if (Orientation == Orientation.Vertical
+            && e.Key is Windows.System.VirtualKey.Left or Windows.System.VirtualKey.Right)
+        {
+            return false;
+        }
+
+        var items = GetAutomationItems().Where(IsItemEnabled).ToList();
+        if (items.Count == 0)
+        {
+            return false;
+        }
+
+        var current = source is null ? null : FindContainingItem(source, items);
+        current ??= SelectedItem as UIElement;
+        var currentIndex = current is null ? 0 : Math.Max(0, items.IndexOf(current));
+        var columns = Orientation == Orientation.Vertical
+            ? 1
+            : GalleryLayoutMath.ComputeColumns(
+                ActualWidth,
+                ItemWidth,
+                items.Count,
+                MinItemsInRow,
+                MaxItemsInRow,
+                Orientation);
+        var targetIndex = GalleryNavigationMath.GetTargetIndex(
+            currentIndex,
+            items.Count,
+            columns,
+            Orientation,
+            direction);
+        if (targetIndex < 0)
+        {
+            return false;
+        }
+
+        var target = items[targetIndex];
+        SelectItem(target);
+        SetRovingFocus(target);
+        target.Focus(FocusState.Keyboard);
+        target.StartBringIntoView();
+        e.Handled = true;
+        return true;
+    }
+
+    private static UIElement? FindContainingItem(UIElement source, IReadOnlyCollection<UIElement> items)
+    {
+        DependencyObject? current = source;
+        while (current is not null)
+        {
+            if (current is UIElement element && items.Contains(element))
+            {
+                return element;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static bool TryGetNavigationDirection(
+        Windows.System.VirtualKey key,
+        out GalleryNavigationDirection direction)
+    {
+        direction = key switch
+        {
+            Windows.System.VirtualKey.Left => GalleryNavigationDirection.Previous,
+            Windows.System.VirtualKey.Right => GalleryNavigationDirection.Next,
+            Windows.System.VirtualKey.Up => GalleryNavigationDirection.PreviousRow,
+            Windows.System.VirtualKey.Down => GalleryNavigationDirection.NextRow,
+            Windows.System.VirtualKey.Home => GalleryNavigationDirection.First,
+            Windows.System.VirtualKey.End => GalleryNavigationDirection.Last,
+            _ => default,
+        };
+        return key is Windows.System.VirtualKey.Left
+            or Windows.System.VirtualKey.Right
+            or Windows.System.VirtualKey.Up
+            or Windows.System.VirtualKey.Down
+            or Windows.System.VirtualKey.Home
+            or Windows.System.VirtualKey.End;
+    }
+
+    private void UpdateItemTabStops()
+    {
+        var focusTarget = SelectedItem as UIElement
+                          ?? GetAutomationItems().FirstOrDefault(IsItemEnabled);
+        SetRovingFocus(focusTarget);
+    }
+
+    private void SetRovingFocus(UIElement? focusTarget)
+    {
+        foreach (var item in Items.OfType<Control>())
+        {
+            item.IsTabStop = ReferenceEquals(item, focusTarget);
+        }
+    }
+
+    private static bool IsItemEnabled(UIElement item)
+        => item is not Control control || control.IsEnabled;
 
     private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -815,8 +1188,56 @@ public partial class RibbonGallery : ListBox
                 }
                 break;
 
+            case NotifyCollectionChangedAction.Replace:
+                if (e.NewItems is not null
+                    && e.NewStartingIndex >= 0
+                    && e.NewStartingIndex + e.NewItems.Count <= Items.Count)
+                {
+                    for (var index = 0; index < e.NewItems.Count; index++)
+                    {
+                        Items[e.NewStartingIndex + index] =
+                            CreateItemContainer(e.NewItems[index]!);
+                    }
+                }
+                else
+                {
+                    RebuildItemsFromSource();
+                }
+
+                break;
+
+            case NotifyCollectionChangedAction.Move:
+                if (e.OldItems?.Count == 1
+                    && e.OldStartingIndex >= 0
+                    && e.NewStartingIndex >= 0
+                    && e.OldStartingIndex < Items.Count
+                    && e.NewStartingIndex < Items.Count)
+                {
+                    Items.Move(e.OldStartingIndex, e.NewStartingIndex);
+                }
+                else
+                {
+                    RebuildItemsFromSource();
+                }
+
+                break;
+
             default:
                 break;
+        }
+    }
+
+    private void RebuildItemsFromSource()
+    {
+        Items.Clear();
+        if (ItemsSource is null)
+        {
+            return;
+        }
+
+        foreach (var item in ItemsSource)
+        {
+            Items.Add(CreateItemContainer(item));
         }
     }
 
@@ -827,17 +1248,12 @@ public partial class RibbonGallery : ListBox
             return element;
         }
 
-        if (ItemTemplate is not null)
+        return new RibbonGalleryItem
         {
-            var content = new ContentPresenter
-            {
-                Content = item,
-                ContentTemplate = ItemTemplate,
-            };
-            return content;
-        }
-
-        return new TextBlock { Text = item?.ToString() ?? string.Empty };
+            Content = item,
+            ContentTemplate = ItemTemplate,
+            DataContext = item,
+        };
     }
 
     private static void OnSelectedFilterChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -859,6 +1275,7 @@ public partial class RibbonGallery : ListBox
             }
 
             gallery.UpdateFilterHighlight();
+            gallery.UpdateItemTabStops();
         }
     }
 
@@ -871,6 +1288,10 @@ public partial class RibbonGallery : ListBox
             SelectedFilter = Filters[0];
         }
     }
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonGalleryAutomationPeer(this);
 
     #endregion
 }

@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:ColorGallery">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:ColorGallery">
@@ -12,7 +13,7 @@
                         <Button
                             x:Name="PART_AutomaticButton"
                             AutomationProperties.AutomationId="ColorGalleryAutomaticButton"
-                            Content="Automatic"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
                             Padding="8,4"
@@ -22,7 +23,7 @@
                         <Button
                             x:Name="PART_NoColorButton"
                             AutomationProperties.AutomationId="ColorGalleryNoColorButton"
-                            Content="No Color"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
                             Padding="8,4"
@@ -31,7 +32,8 @@
                         <!-- Theme colors -->
                         <StackPanel x:Name="PART_ThemeColorsSection" Visibility="Collapsed">
                             <TextBlock
-                                Text="Theme Colors"
+                                x:Name="PART_ThemeColorsHeader"
+                                AutomationProperties.HeadingLevel="Level3"
                                 FontSize="12"
                                 FontWeight="SemiBold"
                                 Margin="0,4,0,2"
@@ -42,7 +44,8 @@
 
                         <!-- Standard colors -->
                         <TextBlock
-                            Text="Standard Colors"
+                            x:Name="PART_StandardColorsHeader"
+                            AutomationProperties.HeadingLevel="Level3"
                             FontSize="12"
                             FontWeight="SemiBold"
                             Margin="0,4,0,2"
@@ -53,7 +56,8 @@
                         <!-- Recent colors -->
                         <StackPanel x:Name="PART_RecentColorsSection" Visibility="Collapsed">
                             <TextBlock
-                                Text="Recent Colors"
+                                x:Name="PART_RecentColorsHeader"
+                                AutomationProperties.HeadingLevel="Level3"
                                 FontSize="12"
                                 FontWeight="SemiBold"
                                 Margin="0,4,0,2"
@@ -65,7 +69,7 @@
                         <Button
                             x:Name="PART_MoreColorsButton"
                             AutomationProperties.AutomationId="ColorGalleryMoreColorsButton"
-                            Content="More Colors..."
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
                             Padding="8,4"

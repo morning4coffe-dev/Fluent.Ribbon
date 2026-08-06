@@ -404,6 +404,14 @@ public partial class Ribbon : Control
         Unloaded += OnRibbonUnloaded;
         SizeChanged += OnRibbonSizeChanged;
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedAutomationName);
+    }
+
+    private void RefreshLocalizedAutomationName()
+    {
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+            this,
+            RibbonLocalization.Current.Localization.RibbonName);
     }
 
     #endregion
@@ -423,6 +431,13 @@ public partial class Ribbon : Control
         _titleText = GetTemplateChild(PART_Title) as FrameworkElement;
         TitleBarHost = GetTemplateChild(PART_TitleBarHost) as FrameworkElement;
         TitleBarDragRegion = GetTemplateChild(PART_TitleBarDragRegion) as FrameworkElement;
+#if !WINDOWS
+        if (_contextualGroupsPanel is not null)
+        {
+            // Keep contextual headers out of the right-side title-bar action column.
+            Grid.SetColumnSpan(_contextualGroupsPanel, 3);
+        }
+#endif
         UpdateCompatibilityTemplateParts();
         UpdateMenu();
 
@@ -697,6 +712,11 @@ public partial class Ribbon : Control
             ribbon.UpdateMinimizedState();
             ribbon.RaiseIsMinimizedChanged(e);
             ribbon.SaveStateTemporaryIfAvailable();
+            if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(ribbon)
+                is Fluent.Automation.Peers.RibbonAutomationPeer peer)
+            {
+                peer.RaiseIsMinimizedChanged((bool)e.OldValue, (bool)e.NewValue);
+            }
         }
     }
 

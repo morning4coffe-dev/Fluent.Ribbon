@@ -6,6 +6,7 @@
     <fluent:IconConverter x:Key="InRibbonGalleryIconConverter" />
 
     <Style TargetType="fluent:InRibbonGallery">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -37,6 +38,36 @@
                                         <Setter Target="CollapsedButtonChevron.Margin" Value="3,0,0,0" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <VisualState x:Name="CollapsedToButtonSimplified">
+                                    <VisualState.Setters>
+                                        <Setter Target="InlineContent.Visibility" Value="Collapsed" />
+                                        <Setter Target="CollapsedContent.Visibility" Value="Visible" />
+                                        <Setter Target="CollapsedContent.MinWidth" Value="0" />
+                                        <Setter Target="CollapsedContent.MinHeight" Value="{ThemeResource RibbonCompactTargetSize}" />
+                                        <Setter Target="CollapsedContent.Padding" Value="4,2" />
+                                        <Setter Target="CollapsedContent.VerticalAlignment" Value="Center" />
+                                        <Setter Target="CollapsedButtonPanel.Orientation" Value="Horizontal" />
+                                        <Setter Target="CollapsedButtonGlyph.FontSize" Value="16" />
+                                        <Setter Target="CollapsedButtonImage.Width" Value="16" />
+                                        <Setter Target="CollapsedButtonImage.Height" Value="16" />
+                                        <Setter Target="CollapsedButtonHeader.Margin" Value="4,0,0,0" />
+                                        <Setter Target="CollapsedButtonHeader.VerticalAlignment" Value="Center" />
+                                        <Setter Target="CollapsedButtonChevron.Margin" Value="4,0,0,0" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="SimplifiedStates">
+                                <VisualState x:Name="Classic" />
+                                <VisualState x:Name="Simplified">
+                                    <VisualState.Setters>
+                                        <Setter Target="InlineContent.Height" Value="NaN" />
+                                        <Setter Target="InlineContent.MinHeight" Value="0" />
+                                        <Setter Target="UpButtonRow.Height" Value="10" />
+                                        <Setter Target="DownButtonRow.Height" Value="10" />
+                                        <Setter Target="PART_UpButton.MinHeight" Value="10" />
+                                        <Setter Target="PART_DownButton.MinHeight" Value="10" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
@@ -48,6 +79,7 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="2"
                             Height="{TemplateBinding GalleryPanelContainerHeight}"
+                            MinHeight="{ThemeResource RibbonInlineGalleryMinHeight}"
                             MinWidth="80">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -70,56 +102,57 @@
                                      occupying the bottom cell. Keep the same footprint while
                                      retaining platform-native monochrome Fluent glyphs. -->
                                 <Grid
+                                    x:Name="PART_ActionStrip"
                                     Grid.Column="1"
-                                    Width="17"
+                                    Width="{ThemeResource RibbonCompactTargetSize}"
                                     Background="{ThemeResource RibbonBackgroundBrush}">
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="17" />
+                                        <RowDefinition
+                                            x:Name="UpButtonRow"
+                                            Height="{ThemeResource RibbonCompactTargetSize}" />
                                         <RowDefinition Height="*" />
-                                        <RowDefinition Height="17" />
-                                        <RowDefinition Height="17" />
+                                        <RowDefinition
+                                            x:Name="DownButtonRow"
+                                            Height="{ThemeResource RibbonCompactTargetSize}" />
+                                        <RowDefinition Height="{ThemeResource RibbonCompactTargetSize}" />
                                     </Grid.RowDefinitions>
 
                                     <Button
                                         x:Name="PART_UpButton"
                                         Grid.Row="0"
                                         Background="Transparent"
+                                        Foreground="{ThemeResource RibbonIconBrush}"
                                         BorderThickness="0"
                                         CornerRadius="0"
                                         Padding="0"
-                                        MinWidth="0"
-                                        MinHeight="0"
+                                        MinWidth="{ThemeResource RibbonCompactTargetSize}"
+                                        MinHeight="{ThemeResource RibbonCompactTargetSize}"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
-                                        AutomationProperties.AutomationId="InRibbonGalleryUpButton"
-                                        AutomationProperties.Name="Scroll gallery up"
-                                        ToolTipService.ToolTip="Scroll up">
+                                        AutomationProperties.AutomationId="InRibbonGalleryUpButton">
                                         <FontIcon
                                             Glyph="&#xE70E;"
                                             FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                            FontSize="8"
-                                            Foreground="{ThemeResource RibbonIconBrush}" />
+                                            FontSize="8" />
                                     </Button>
 
                                     <Button
                                         x:Name="PART_DownButton"
                                         Grid.Row="2"
                                         Background="Transparent"
+                                        Foreground="{ThemeResource RibbonIconBrush}"
                                         BorderThickness="0"
                                         CornerRadius="0"
                                         Padding="0"
-                                        MinWidth="0"
-                                        MinHeight="0"
+                                        MinWidth="{ThemeResource RibbonCompactTargetSize}"
+                                        MinHeight="{ThemeResource RibbonCompactTargetSize}"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
-                                        AutomationProperties.AutomationId="InRibbonGalleryDownButton"
-                                        AutomationProperties.Name="Scroll gallery down"
-                                        ToolTipService.ToolTip="Scroll down">
+                                        AutomationProperties.AutomationId="InRibbonGalleryDownButton">
                                         <FontIcon
                                             Glyph="&#xE70D;"
                                             FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                            FontSize="8"
-                                            Foreground="{ThemeResource RibbonIconBrush}" />
+                                            FontSize="8" />
                                     </Button>
 
                                     <Rectangle
@@ -133,18 +166,17 @@
                                         x:Name="PART_ExpandButton"
                                         Grid.Row="3"
                                         Background="Transparent"
+                                        Foreground="{ThemeResource RibbonIconBrush}"
                                         BorderThickness="0"
                                         CornerRadius="0"
                                         Padding="0"
-                                        MinWidth="0"
-                                        MinHeight="0"
+                                        MinWidth="{ThemeResource RibbonCompactTargetSize}"
+                                        MinHeight="{ThemeResource RibbonCompactTargetSize}"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
                                         AutomationProperties.AutomationId="InRibbonGalleryExpandButton"
-                                        AutomationProperties.Name="Open gallery"
                                         Content="{Binding ExpandButtonContent, RelativeSource={RelativeSource TemplatedParent}}"
-                                        ContentTemplate="{Binding ExpandButtonContentTemplate, RelativeSource={RelativeSource TemplatedParent}}"
-                                        ToolTipService.ToolTip="More options" />
+                                        ContentTemplate="{Binding ExpandButtonContentTemplate, RelativeSource={RelativeSource TemplatedParent}}" />
                                 </Grid>
                             </Grid>
                         </Border>
@@ -154,23 +186,25 @@
                             x:Name="CollapsedContent"
                             Visibility="Collapsed"
                             Background="Transparent"
+                            Foreground="{ThemeResource RibbonIconBrush}"
                             BorderThickness="0"
                             Padding="{TemplateBinding Padding}"
                             MinWidth="56"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             AutomationProperties.AutomationId="InRibbonGalleryCollapsedButton"
-                            AutomationProperties.Name="Open gallery"
                             VerticalAlignment="Stretch">
                             <StackPanel x:Name="CollapsedButtonPanel" Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <!-- Icon glyph or image -->
                                 <FontIcon
+                                    x:Name="CollapsedButtonGlyph"
                                     Glyph="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}}"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     FontSize="{TemplateBinding FontSize}"
-                                    Foreground="{ThemeResource RibbonIconBrush}"
                                     VerticalAlignment="Center"
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
 
                                 <Image
+                                    x:Name="CollapsedButtonImage"
                                     Source="{Binding LargeIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource InRibbonGalleryIconConverter}}"
                                     Width="32"
                                     Height="32"
@@ -191,7 +225,6 @@
                                     Glyph="&#xE70D;"
                                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                     FontSize="8"
-                                    Foreground="{ThemeResource RibbonIconBrush}"
                                     VerticalAlignment="Center"
                                     Margin="0,2,0,0" />
                             </StackPanel>

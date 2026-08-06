@@ -21,11 +21,26 @@
       UnoFeatures are used to quickly add and manage features enabled for your app.
       https://aka.platform.uno/singleproject-features
     -->
-    <UnoFeatures>SkiaRenderer;Svg;</UnoFeatures>
+    <UnoFeatures>Svg;</UnoFeatures>
+    <UnoFeatures
+      Condition="'$(TargetFramework)' == 'net10.0-desktop' Or '$(TargetFramework)' == 'net10.0-browserwasm'">
+      $(UnoFeatures);SkiaRenderer;
+    </UnoFeatures>
     <!-- Ensure this Uno project is not affected by repository-wide WPF/WinForms settings -->
     <UseWpf>false</UseWpf>
     <UseWindowsForms>false</UseWindowsForms>
     <RootNamespace>FluentRibbon.Uno.Showcase</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    The external Windows UIA test launches this executable directly, so its CI build must
+    be unpackaged and carry the Windows App SDK runtime beside it. Normal Showcase builds
+    keep Uno's default packaging behavior.
+  -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('windows10')) AND '$(ShowcaseExternalUia)' == 'true'">
+    <WindowsPackageType>None</WindowsPackageType>
+    <AppxPackage>false</AppxPackage>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>

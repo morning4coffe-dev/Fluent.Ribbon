@@ -5,9 +5,11 @@
 
     <Style TargetType="fluent:RibbonSpinner">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Padding" Value="{ThemeResource RibbonButtonPadding}" />
+        <Setter Property="Padding" Value="4,0" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="MinHeight" Value="{ThemeResource RibbonControlMinHeight}" />
+        <Setter Property="MinHeight" Value="{ThemeResource RibbonStackedSpinnerHeight}" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonSpinner">
@@ -22,6 +24,15 @@
                                 <VisualState x:Name="Small">
                                     <VisualState.Setters>
                                         <Setter Target="HeaderText.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualState x:Name="Unfocused" />
+                                <VisualState x:Name="PointerFocused" />
+                                <VisualState x:Name="KeyboardFocused">
+                                    <VisualState.Setters>
+                                        <Setter Target="FocusVisual.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -68,6 +79,7 @@
                             <Border
                                 x:Name="InputRoot"
                                 Grid.Column="1"
+                                MinHeight="{ThemeResource RibbonStackedSpinnerHeight}"
                                 HorizontalAlignment="Stretch"
                                 BorderBrush="{ThemeResource TextControlBorderBrush}"
                                 BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
@@ -86,40 +98,61 @@
                                         VerticalAlignment="Center"
                                         TextAlignment="Right"
                                         Padding="6,2"
-                                        MinHeight="{ThemeResource RibbonControlMinHeight}"
+                                        MinHeight="{ThemeResource RibbonStackedSpinnerHeight}"
                                         FontSize="12"
                                         BorderThickness="0"
-                                        Background="Transparent" />
+                                        Background="Transparent"
+                                        IsTabStop="False"
+                                        UseSystemFocusVisuals="False"
+                                        AutomationProperties.AccessibilityView="Raw" />
 
                                     <Grid Grid.Column="1">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*" />
-                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="{ThemeResource RibbonSpinnerButtonHeight}" />
+                                            <RowDefinition Height="{ThemeResource RibbonSpinnerButtonHeight}" />
                                         </Grid.RowDefinitions>
                                         <Button
                                             x:Name="PART_UpButton"
                                             Background="Transparent"
+                                            Foreground="{ThemeResource RibbonIconBrush}"
                                             BorderThickness="0"
                                             Padding="2,0"
-                                            MinWidth="18"
+                                            MinWidth="{ThemeResource RibbonSpinnerButtonWidth}"
+                                            MinHeight="{ThemeResource RibbonSpinnerButtonHeight}"
                                             CornerRadius="0,3,0,0"
+                                            IsTabStop="False"
+                                            AllowFocusOnInteraction="False"
+                                            AutomationProperties.AccessibilityView="Raw"
                                             VerticalAlignment="Stretch">
-                                            <FontIcon Glyph="&#xE70E;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
+                                            <FontIcon Glyph="&#xE70E;" FontSize="8" />
                                         </Button>
                                         <Button
                                             x:Name="PART_DownButton"
                                             Grid.Row="1"
                                             Background="Transparent"
+                                            Foreground="{ThemeResource RibbonIconBrush}"
                                             BorderThickness="0"
                                             Padding="2,0"
-                                            MinWidth="18"
+                                            MinWidth="{ThemeResource RibbonSpinnerButtonWidth}"
+                                            MinHeight="{ThemeResource RibbonSpinnerButtonHeight}"
                                             CornerRadius="0,0,3,0"
+                                            IsTabStop="False"
+                                            AllowFocusOnInteraction="False"
+                                            AutomationProperties.AccessibilityView="Raw"
                                             VerticalAlignment="Stretch">
-                                            <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
+                                            <FontIcon Glyph="&#xE70D;" FontSize="8" />
                                         </Button>
                                     </Grid>
                                 </Grid>
                             </Border>
+                            <Border
+                                x:Name="FocusVisual"
+                                Grid.Column="1"
+                                BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+                                BorderThickness="2"
+                                CornerRadius="{ThemeResource ControlCornerRadius}"
+                                IsHitTestVisible="False"
+                                Visibility="Collapsed" />
                         </Grid>
                     </Border>
                 </ControlTemplate>

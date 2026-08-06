@@ -10,6 +10,8 @@
         <Setter Property="Margin" Value="{ThemeResource RibbonGroupMargin}" />
         <Setter Property="Padding" Value="6,2,6,0" />
         <Setter Property="MinWidth" Value="60" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonGroupBox">
@@ -39,6 +41,15 @@
                                         <Setter Target="PART_CollapsedHeaderContentControl.Margin" Value="0" />
                                         <Setter Target="PART_CollapsedChevron.FontSize" Value="7" />
                                         <Setter Target="PART_CollapsedChevron.Margin" Value="0" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualState x:Name="Unfocused" />
+                                <VisualState x:Name="PointerFocused" />
+                                <VisualState x:Name="KeyboardFocused">
+                                    <VisualState.Setters>
+                                        <Setter Target="CollapsedFocusVisual.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -78,30 +89,59 @@
                                     <fluent:Button
                                         x:Name="LauncherButton"
                                         Grid.Column="1"
-                                        Width="16"
-                                        Height="16"
+                                        Width="{ThemeResource RibbonCompactTargetSize}"
+                                        Height="{ThemeResource RibbonCompactTargetSize}"
                                         Padding="2"
                                         Margin="4,0,0,0"
                                         CornerRadius="4"
                                         Background="Transparent"
+                                        Foreground="{ThemeResource RibbonIconBrush}"
                                         BorderThickness="0"
+                                        UseSystemFocusVisuals="True"
+                                        FocusVisualMargin="-2"
                                         Visibility="{Binding IsLauncherVisible, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"
                                         Command="{TemplateBinding LauncherCommand}">
                                         <fluent:Button.Template>
                                             <ControlTemplate TargetType="fluent:Button">
                                                 <Border
+                                                    x:Name="LauncherRoot"
                                                     Background="{TemplateBinding Background}"
                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="{TemplateBinding CornerRadius}">
+                                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                                    Control.IsTemplateFocusTarget="True">
+                                                    <VisualStateManager.VisualStateGroups>
+                                                        <VisualStateGroup x:Name="CommonStates">
+                                                            <VisualState x:Name="Normal" />
+                                                            <VisualState x:Name="PointerOver">
+                                                                <VisualState.Setters>
+                                                                    <Setter Target="LauncherRoot.Background" Value="{ThemeResource RibbonHoverBrush}" />
+                                                                    <Setter Target="LauncherContent.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                                                </VisualState.Setters>
+                                                            </VisualState>
+                                                            <VisualState x:Name="Pressed">
+                                                                <VisualState.Setters>
+                                                                    <Setter Target="LauncherRoot.Background" Value="{ThemeResource RibbonPressedBrush}" />
+                                                                    <Setter Target="LauncherContent.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                                                </VisualState.Setters>
+                                                            </VisualState>
+                                                            <VisualState x:Name="Disabled">
+                                                                <VisualState.Setters>
+                                                                    <Setter Target="LauncherContent.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                                                </VisualState.Setters>
+                                                            </VisualState>
+                                                        </VisualStateGroup>
+                                                    </VisualStateManager.VisualStateGroups>
                                                     <ContentPresenter
+                                                        x:Name="LauncherContent"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
+                                                        Foreground="{TemplateBinding Foreground}"
                                                         Content="{TemplateBinding Content}" />
                                                 </Border>
                                             </ControlTemplate>
                                         </fluent:Button.Template>
-                                        <FontIcon Glyph="&#xE70D;" FontSize="8" Foreground="{ThemeResource RibbonIconBrush}" />
+                                        <FontIcon Glyph="&#xE70D;" FontSize="8" />
                                     </fluent:Button>
                                 </Grid>
                             </Grid>
@@ -112,18 +152,62 @@
                             x:Name="PART_CollapsedButton"
                             Visibility="Collapsed"
                             Background="Transparent"
+                            Foreground="{ThemeResource RibbonIconBrush}"
                             BorderBrush="Transparent"
                             BorderThickness="1"
                             Padding="8,4"
                             CornerRadius="4"
-                            MinWidth="56">
+                            MinWidth="56"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
+                            IsTabStop="False"
+                            AllowFocusOnInteraction="False"
+                            AutomationProperties.AccessibilityView="Raw">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border
+                                        x:Name="CollapsedRoot"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="{TemplateBinding CornerRadius}"
+                                        Padding="{TemplateBinding Padding}">
+                                        <VisualStateManager.VisualStateGroups>
+                                            <VisualStateGroup x:Name="CommonStates">
+                                                <VisualState x:Name="Normal" />
+                                                <VisualState x:Name="PointerOver">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="CollapsedRoot.Background" Value="{ThemeResource RibbonHoverBrush}" />
+                                                        <Setter Target="CollapsedContentPresenter.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="Pressed">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="CollapsedRoot.Background" Value="{ThemeResource RibbonPressedBrush}" />
+                                                        <Setter Target="CollapsedContentPresenter.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="Disabled">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="CollapsedContentPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                        </VisualStateManager.VisualStateGroups>
+                                        <ContentPresenter
+                                            x:Name="CollapsedContentPresenter"
+                                            Content="{TemplateBinding Content}"
+                                            Foreground="{TemplateBinding Foreground}"
+                                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
                             <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                 <!-- Icon Glyph (preferred) -->
                                 <FontIcon
                                     x:Name="PART_CollapsedGlyph"
                                     Glyph="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}}"
                                     FontSize="32"
-                                    Foreground="{ThemeResource RibbonIconBrush}"
                                     Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
                                 <!-- Fallback image icon -->
                                 <Image
@@ -137,7 +221,6 @@
                                     x:Name="PART_CollapsedHeaderContentControl"
                                     Content="{TemplateBinding Header}"
                                     ContentTemplate="{TemplateBinding HeaderTemplate}"
-                                    Foreground="{ThemeResource RibbonTextBrush}"
                                     FontSize="11"
                                     HorizontalContentAlignment="Center"
                                     Margin="0,2,0,0" />
@@ -145,10 +228,18 @@
                                     x:Name="PART_CollapsedChevron"
                                     Glyph="&#xE70D;"
                                     FontSize="8"
-                                    Foreground="{ThemeResource RibbonIconBrush}"
                                     Margin="0,2,0,0" />
                             </StackPanel>
                         </Button>
+
+                        <Border
+                            x:Name="CollapsedFocusVisual"
+                            BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+                            BorderThickness="2"
+                            CornerRadius="4"
+                            Margin="-2"
+                            Visibility="Collapsed"
+                            IsHitTestVisible="False" />
 
                         <!-- Popup for collapsed group expansion -->
                         <Popup x:Name="PART_CollapsedPopup" IsLightDismissEnabled="True">

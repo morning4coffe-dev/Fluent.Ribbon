@@ -217,8 +217,7 @@ public sealed class RemainingCompatibilityWrapperTests
                 OneWay("Header"), OneWay("Icon"), OneWay("LargeIcon"), OneWay("MediumIcon"),
                 OneWay("MenuHeader"), OneWay("HasTriangle"),
                 OneWay("ResizeMode"), OneWay("MaxDropDownHeight"), OneWay("DropDownHeight"),
-                OneWay("ClosePopupOnMouseDown"), OneWay("ClosePopupOnMouseDownDelay"),
-                TwoWay("IsDropDownOpen"));
+                OneWay("ClosePopupOnMouseDown"), OneWay("ClosePopupOnMouseDownDelay"));
             yield return Contracts<global::Fluent.SplitButton>(
                 OneWay("DropDownToolTip"), OneWay("IsCheckable"), OneWay("IsButtonEnabled"),
                 OneWay("IsDefinitive"), TwoWay("IsChecked"));

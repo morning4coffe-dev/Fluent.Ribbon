@@ -36,6 +36,8 @@ try {
         "test",
         ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Tests\Fluent.Ribbon.Uno.Tests.csproj",
         "-c", "Release",
+        "-f", "net10.0",
+        "-p:TargetFrameworks=net10.0",
         "--nologo"
     )
 
@@ -43,6 +45,8 @@ try {
         "test",
         ".\Fluent.Ribbon.Uno\ApiCompatibility\Fluent.Ribbon.ApiCompatibility.Tests\Fluent.Ribbon.ApiCompatibility.Tests.csproj",
         "-c", "Release",
+        "-f", "net10.0",
+        "-p:TargetFrameworks=net10.0",
         "--nologo"
     )
 
@@ -51,6 +55,7 @@ try {
         ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Controls\Fluent.Ribbon.Uno.Controls.csproj",
         "-c", "Release",
         "-f", "net10.0-desktop",
+        "-p:TargetFrameworks=net10.0-desktop",
         "--nologo"
     )
 
@@ -59,6 +64,7 @@ try {
         ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Compatibility\Fluent.Ribbon.Uno.Compatibility.csproj",
         "-c", "Release",
         "-f", "net10.0-desktop",
+        "-p:TargetFrameworks=net10.0-desktop",
         "--nologo"
     )
 
@@ -67,6 +73,7 @@ try {
         ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Compatibility.XamlTests\Fluent.Ribbon.Uno.Compatibility.XamlTests.csproj",
         "-c", "Release",
         "-f", "net10.0-desktop",
+        "-p:TargetFrameworks=net10.0-desktop",
         "--nologo"
     )
 
@@ -75,6 +82,7 @@ try {
         ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj",
         "-c", "Release",
         "-f", "net10.0-desktop",
+        "-p:TargetFrameworks=net10.0-desktop",
         "--nologo"
     )
 

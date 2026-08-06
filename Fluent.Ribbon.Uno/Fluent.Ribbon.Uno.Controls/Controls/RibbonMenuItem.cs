@@ -1,5 +1,7 @@
 namespace Fluent;
 
+using Windows.System;
+
 /// <summary>
 /// Represents a menu item within a Ribbon dropdown or context menu.
 /// </summary>
@@ -14,7 +16,11 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// <summary>
     /// Occurs when the menu item is clicked.
     /// </summary>
+#if __ANDROID__ || __IOS__
+    public new event RoutedEventHandler? Click;
+#else
     public event RoutedEventHandler? Click;
+#endif
 
     #endregion
 
@@ -211,6 +217,30 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// <inheritdoc/>
     protected override void OnInvoke() => OnClick();
 
+    /// <inheritdoc/>
+    protected override void OnKeyboardInvoke(VirtualKey key)
+    {
+        if (HasSubItems && IsSplit is false)
+        {
+            OpenSubmenuAndFocusFirstItem();
+            return;
+        }
+
+        OnInvoke();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        if (IsEnabled && HandleMenuNavigationKey(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
     /// <summary>
     /// Executes the menu item's command and raises <see cref="Click"/>.
     /// Shared by pointer/keyboard input and the automation (Invoke) peer.
@@ -231,9 +261,32 @@ public partial class MenuItem : InteractiveMenuItemBase
     // item with a screen reader skips check toggling, sub-menu opening and popup dismissal.
     internal void InvokeFromAutomation() => OnClick();
 
+    internal void RaiseExpandCollapseAutomationEvent(bool oldValue, bool newValue)
+    {
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is RibbonMenuItemAutomationPeer peer)
+        {
+            peer.RaiseExpandCollapseStateChanged(oldValue, newValue);
+        }
+    }
+
+    internal void RaiseCheckedAutomationEvent(bool? oldValue, bool? newValue)
+    {
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is RibbonMenuItemAutomationPeer peer)
+        {
+            peer.RaiseCheckedStateChanged(oldValue, newValue);
+        }
+    }
+
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         HasSubItems = Items.Count > 0;
+
+        foreach (var item in Items.OfType<IDropDownItemOwner>())
+        {
+            item.SetDropDownOwner(this);
+        }
     }
 
     /// <inheritdoc/>

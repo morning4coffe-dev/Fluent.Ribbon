@@ -281,12 +281,27 @@ public partial class RibbonGroupBox :
         LauncherButton.IsEnabled = IsLauncherEnabled;
         LauncherButton.Command = LauncherCommand;
         LauncherButton.CommandParameter = LauncherCommandParameter;
-        ToolTipService.SetToolTip(LauncherButton, LauncherToolTip);
 
-        var name = LauncherText ?? Header?.ToString();
-        if (!string.IsNullOrWhiteSpace(name))
+        var header = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
+        var launcherName = !string.IsNullOrWhiteSpace(LauncherText)
+            ? LauncherText
+            : string.IsNullOrWhiteSpace(header)
+                ? RibbonLocalization.Current.Localization.OpenGroupDialog
+                : string.Format(
+                    RibbonLocalization.Current.Localization.OpenGroupDialogFormat,
+                    header);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+            LauncherButton,
+            launcherName);
+        if (LauncherToolTip is null)
         {
-            AutomationProperties.SetName(LauncherButton, name);
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(
+                LauncherButton,
+                launcherName);
+        }
+        else
+        {
+            ToolTipService.SetToolTip(LauncherButton, LauncherToolTip);
         }
 
         if (!string.IsNullOrWhiteSpace(LauncherKeys))
@@ -322,6 +337,14 @@ public partial class RibbonGroupBox :
         {
             groupBox.CollapseForAutomation();
             groupBox.DropDownClosed?.Invoke(groupBox, EventArgs.Empty);
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(groupBox)
+            is Fluent.Automation.Peers.RibbonGroupBoxAutomationPeer peer)
+        {
+            peer.RaiseIsDropDownOpenChanged(
+                (bool)args.OldValue,
+                (bool)args.NewValue);
         }
     }
 
@@ -361,7 +384,12 @@ public partial class RibbonGroupBox :
             CanAddToQuickAccessToolBar = false,
         };
 
-        var automationName = Header?.ToString() ?? nameof(RibbonGroupBox);
+        var automationName =
+            Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
+        if (string.IsNullOrWhiteSpace(automationName))
+        {
+            automationName = RibbonLocalization.Current.Localization.RibbonGroupName;
+        }
         AutomationProperties.SetName(quickAccessButton, automationName);
         AutomationProperties.SetAutomationId(
             quickAccessButton,

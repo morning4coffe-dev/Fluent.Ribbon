@@ -23,6 +23,14 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     private FrameworkElement? _headerText;
     private DispatcherTimer? _repeatTimer;
     private bool _isIncrementing;
+    private bool _redirectingFocus;
+    private bool _suppressNextEditorFocusRedirect;
+    private Microsoft.UI.Xaml.FocusState _delegatedFocusState;
+    private double _effectiveValue;
+    private double _effectiveMinimum;
+    private double _effectiveMaximum = double.MaxValue;
+    private double _effectiveIncrement = 1.0;
+    private bool _isCoercingDependencyValue;
 
     #region Events
 
@@ -99,7 +107,7 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     /// </summary>
     public double Value
     {
-        get => (double)GetValue(ValueProperty);
+        get => _effectiveValue;
         set => SetValue(ValueProperty, CoerceValue(value));
     }
 
@@ -109,15 +117,19 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
             nameof(Minimum),
             typeof(double),
             typeof(RibbonSpinner),
-            new PropertyMetadata(0.0));
+            new PropertyMetadata(0.0, OnMinimumChanged));
 
     /// <summary>
     /// Gets or sets the minimum value.
     /// </summary>
     public double Minimum
     {
-        get => (double)GetValue(MinimumProperty);
-        set => SetValue(MinimumProperty, value);
+        get => _effectiveMinimum;
+        set
+        {
+            EnsureFinite(value, nameof(Minimum));
+            SetValue(MinimumProperty, value);
+        }
     }
 
     /// <summary>Identifies the <see cref="Maximum"/> dependency property.</summary>
@@ -126,15 +138,19 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
             nameof(Maximum),
             typeof(double),
             typeof(RibbonSpinner),
-            new PropertyMetadata(double.MaxValue));
+            new PropertyMetadata(double.MaxValue, OnMaximumChanged));
 
     /// <summary>
     /// Gets or sets the maximum value.
     /// </summary>
     public double Maximum
     {
-        get => (double)GetValue(MaximumProperty);
-        set => SetValue(MaximumProperty, value);
+        get => _effectiveMaximum;
+        set
+        {
+            EnsureFinite(value, nameof(Maximum));
+            SetValue(MaximumProperty, value);
+        }
     }
 
     /// <summary>Identifies the <see cref="Increment"/> dependency property.</summary>
@@ -143,14 +159,14 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
             nameof(Increment),
             typeof(double),
             typeof(RibbonSpinner),
-            new PropertyMetadata(1.0));
+            new PropertyMetadata(1.0, OnIncrementChanged));
 
     /// <summary>
     /// Gets or sets the increment step.
     /// </summary>
     public double Increment
     {
-        get => (double)GetValue(IncrementProperty);
+        get => _effectiveIncrement;
         set => SetValue(IncrementProperty, value);
     }
 
@@ -317,6 +333,8 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     public RibbonSpinner()
     {
         DefaultStyleKey = typeof(RibbonSpinner);
+        GettingFocus += OnRibbonSpinnerGettingFocus;
+        GotFocus += OnRibbonSpinnerGotFocus;
     }
 
     #endregion
@@ -374,13 +392,21 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
 
         if (_textBox is not null)
         {
+            _textBox.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                _textBox,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             _textBox.LostFocus += OnTextBoxLostFocus;
             _textBox.KeyDown += OnTextBoxKeyDown;
             _textBox.GotFocus += OnTextBoxGotFocus;
         }
 
+        ConfigureImplementationButton(_upButton);
+        ConfigureImplementationButton(_downButton);
+
         UpdateTextBox();
         UpdateVisualState();
+        UpdateFocusVisualState(false);
     }
 
     #endregion
@@ -420,6 +446,70 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     }
 
     #region Methods
+
+    private static void ConfigureImplementationButton(WinUIButton? button)
+    {
+        if (button is null)
+        {
+            return;
+        }
+
+        button.IsTabStop = false;
+        button.AllowFocusOnInteraction = false;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+            button,
+            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+    }
+
+    private void OnRibbonSpinnerGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressNextEditorFocusRedirect)
+        {
+            _suppressNextEditorFocusRedirect = false;
+            return;
+        }
+
+        if (_textBox is null || XamlRoot is null)
+        {
+            return;
+        }
+
+        var focused = FocusManager.GetFocusedElement(XamlRoot);
+        if (ReferenceEquals(focused, this) && !_redirectingFocus)
+        {
+            if (FocusState is not Microsoft.UI.Xaml.FocusState.Unfocused)
+            {
+                _delegatedFocusState = FocusState;
+            }
+
+            _redirectingFocus = true;
+            try
+            {
+                var focusState = _delegatedFocusState is Microsoft.UI.Xaml.FocusState.Keyboard
+                    or Microsoft.UI.Xaml.FocusState.Pointer
+                    ? _delegatedFocusState
+                    : Microsoft.UI.Xaml.FocusState.Programmatic;
+                FocusEditor(focusState);
+            }
+            finally
+            {
+                _redirectingFocus = false;
+            }
+
+            UpdateFocusVisualState(false);
+            ScheduleFocusVisualUpdate();
+        }
+
+    }
+
+    private void OnRibbonSpinnerGettingFocus(UIElement sender, GettingFocusEventArgs e)
+    {
+        if (ReferenceEquals(e.NewFocusedElement, this)
+            || (ReferenceEquals(e.NewFocusedElement, _textBox) && !_redirectingFocus))
+        {
+            _delegatedFocusState = e.FocusState;
+        }
+    }
 
     private void OnUpButtonClick(object sender, RoutedEventArgs e)
     {
@@ -509,6 +599,8 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
 
     private void OnTextBoxGotFocus(object sender, RoutedEventArgs e)
     {
+        UpdateFocusVisualState(false);
+        ScheduleFocusVisualUpdate();
         if (SelectAllTextOnFocus && _textBox is not null)
         {
             _textBox.SelectAll();
@@ -517,7 +609,59 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
 
     private void OnTextBoxLostFocus(object sender, RoutedEventArgs e)
     {
+        ScheduleFocusVisualUpdate(resetWhenOutside: true);
         ApplyTextBoxValue();
+    }
+
+    private void UpdateFocusVisualState(bool useTransitions)
+    {
+        var focusState = FocusRoutingHelper.ResolveDelegatedFocusState(
+            _delegatedFocusState,
+            _textBox?.FocusState ?? Microsoft.UI.Xaml.FocusState.Unfocused);
+        var stateName = focusState == Microsoft.UI.Xaml.FocusState.Keyboard
+            ? "KeyboardFocused"
+            : focusState == Microsoft.UI.Xaml.FocusState.Pointer
+                ? "PointerFocused"
+                : "Unfocused";
+        VisualStateManager.GoToState(this, stateName, useTransitions);
+    }
+
+    private void ScheduleFocusVisualUpdate(bool resetWhenOutside = false)
+    {
+        DispatcherQueue.TryEnqueue(
+            () =>
+            {
+                var focused = XamlRoot is null
+                    ? null
+                    : FocusManager.GetFocusedElement(XamlRoot);
+                if (resetWhenOutside
+                    && !ReferenceEquals(focused, this)
+                    && !ReferenceEquals(focused, _textBox))
+                {
+                    _delegatedFocusState = Microsoft.UI.Xaml.FocusState.Unfocused;
+                }
+
+                UpdateFocusVisualState(true);
+            });
+    }
+
+    private bool FocusEditor(Microsoft.UI.Xaml.FocusState focusState)
+    {
+        if (_textBox is null)
+        {
+            return false;
+        }
+
+        var isTabStop = _textBox.IsTabStop;
+        try
+        {
+            _textBox.IsTabStop = true;
+            return _textBox.Focus(focusState);
+        }
+        finally
+        {
+            _textBox.IsTabStop = isTabStop;
+        }
     }
 
     private void OnTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
@@ -554,8 +698,30 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     {
         if (IsTabStop)
         {
-            Focus(FocusState.Programmatic);
+            _suppressNextEditorFocusRedirect = true;
+            if (!Focus(FocusState.Programmatic))
+            {
+                _suppressNextEditorFocusRedirect = false;
+            }
         }
+    }
+
+    internal bool FocusEditorForAutomation()
+    {
+        ApplyTemplate();
+        var ownerFocused = Focus(FocusState.Programmatic);
+        if (_textBox is null)
+        {
+            return ownerFocused;
+        }
+
+        if (XamlRoot is not null
+            && ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), _textBox))
+        {
+            return true;
+        }
+
+        return FocusEditor(FocusState.Programmatic);
     }
 
     private void ApplyTextBoxValue()
@@ -642,13 +808,133 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     {
         if (d is RibbonSpinner spinner)
         {
-            spinner.UpdateTextBox();
-            spinner.Text = spinner.Value.ToString(spinner.Format);
-            spinner.ValueChanged?.Invoke(
+            spinner.ApplyDependencyValue((double)e.NewValue);
+        }
+    }
+
+    private static void OnMinimumChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RibbonSpinner spinner)
+        {
+            var oldMinimum = spinner._effectiveMinimum;
+            var newMinimum = (double)e.NewValue;
+            EnsureFinite(newMinimum, nameof(Minimum));
+            spinner._effectiveMinimum = newMinimum;
+            NotifyRangeChanged(
                 spinner,
-                new RoutedPropertyChangedEventArgs<double>(
-                    (double)e.OldValue,
-                    (double)e.NewValue));
+                oldMinimum,
+                spinner.Maximum,
+                newMinimum,
+                spinner.Maximum);
+        }
+    }
+
+    private static void OnMaximumChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is RibbonSpinner spinner)
+        {
+            var oldMaximum = spinner._effectiveMaximum;
+            var newMaximum = (double)e.NewValue;
+            EnsureFinite(newMaximum, nameof(Maximum));
+            spinner._effectiveMaximum = newMaximum;
+            NotifyRangeChanged(
+                spinner,
+                spinner.Minimum,
+                oldMaximum,
+                spinner.Minimum,
+                newMaximum);
+        }
+    }
+
+    private static void NotifyRangeChanged(
+        RibbonSpinner spinner,
+        double oldMinimumValue,
+        double oldMaximumValue,
+        double newMinimumValue,
+        double newMaximumValue)
+    {
+        var oldMinimum = Math.Min(oldMinimumValue, oldMaximumValue);
+        var oldMaximum = Math.Max(oldMinimumValue, oldMaximumValue);
+        var newMinimum = Math.Min(newMinimumValue, newMaximumValue);
+        var newMaximum = Math.Max(newMinimumValue, newMaximumValue);
+
+        spinner.ApplyDependencyValue((double)spinner.GetValue(ValueProperty));
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(spinner)
+            is Fluent.Automation.Peers.RibbonSpinnerAutomationPeer peer)
+        {
+            peer.RaiseRangeChanged(oldMinimum, newMinimum, oldMaximum, newMaximum);
+        }
+    }
+
+    private static void OnIncrementChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not RibbonSpinner spinner)
+        {
+            return;
+        }
+
+        var oldIncrement = spinner._effectiveIncrement;
+        var newIncrement = (double)e.NewValue;
+        spinner._effectiveIncrement = newIncrement;
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(spinner)
+            is Fluent.Automation.Peers.RibbonSpinnerAutomationPeer peer)
+        {
+            peer.RaiseIncrementChanged(oldIncrement, newIncrement);
+        }
+    }
+
+    private void UpdateEffectiveValue(double newValue)
+    {
+        var oldValue = _effectiveValue;
+        _effectiveValue = newValue;
+        UpdateTextBox();
+        Text = newValue.ToString(Format);
+        if (oldValue.Equals(newValue))
+        {
+            return;
+        }
+
+        ValueChanged?.Invoke(
+            this,
+            new RoutedPropertyChangedEventArgs<double>(oldValue, newValue));
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonSpinnerAutomationPeer peer)
+        {
+            peer.RaiseValueChanged(oldValue, newValue);
+        }
+    }
+
+    private void ApplyDependencyValue(double requestedValue)
+    {
+        var coercedValue = CoerceValue(requestedValue);
+        if (!_isCoercingDependencyValue
+            && !requestedValue.Equals(coercedValue))
+        {
+            _isCoercingDependencyValue = true;
+            try
+            {
+                SetValue(ValueProperty, coercedValue);
+            }
+            finally
+            {
+                _isCoercingDependencyValue = false;
+            }
+
+            return;
+        }
+
+        UpdateEffectiveValue(coercedValue);
+    }
+
+    private static void EnsureFinite(double value, string propertyName)
+    {
+        if (!double.IsFinite(value))
+        {
+            throw new ArgumentOutOfRangeException(
+                propertyName,
+                value,
+                "The value must be finite.");
         }
     }
 
@@ -691,4 +977,8 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonSpinnerAutomationPeer(this);
 }

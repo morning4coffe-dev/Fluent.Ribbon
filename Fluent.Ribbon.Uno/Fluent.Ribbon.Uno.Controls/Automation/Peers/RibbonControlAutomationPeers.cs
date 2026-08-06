@@ -21,6 +21,12 @@ public partial class RibbonControlAutomationPeer : FrameworkElementAutomationPee
 
     /// <inheritdoc/>
     protected override string GetClassNameCore() => Owner.GetType().Name;
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
 }
 
 /// <summary>
@@ -52,7 +58,7 @@ public partial class RibbonControlDataAutomationPeer : ItemAutomationPeer
         => GetWrapperPeer()?.GetName() ?? AutomationPeerHelpers.GetObjectName(_item);
 
     /// <inheritdoc/>
-    protected override object? GetPatternCore(PatternInterface patternInterface)
+    protected override object GetPatternCore(PatternInterface patternInterface)
         => GetWrapperPeer()?.GetPattern(patternInterface) ?? base.GetPatternCore(patternInterface);
 
     /// <inheritdoc cref="AutomationPeer.GetPattern"/>
@@ -89,11 +95,21 @@ public abstract partial class RibbonHeaderedControlAutomationPeer : FrameworkEle
     /// <inheritdoc/>
     protected override string GetNameCore()
     {
-        var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
-            : name;
+        var name = AutomationProperties.GetName(Owner);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        name = AutomationPeerHelpers.GetHeaderOrPlaceholderName((FrameworkElement)Owner);
+        return string.IsNullOrWhiteSpace(name) ? base.GetNameCore() : name;
     }
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
 
 }
 
@@ -127,8 +143,29 @@ public partial class RibbonGroupBoxAutomationPeer : FrameworkElementAutomationPe
     }
 
     /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            OwnerGroup,
+            base.GetAccessKeyCore());
+
+    /// <inheritdoc/>
     protected override AutomationControlType GetAutomationControlTypeCore()
         => OwnerGroup.IsInButtonState ? AutomationControlType.Button : AutomationControlType.Group;
+
+    /// <inheritdoc/>
+    protected override bool IsControlElementCore()
+        => OwnerGroup.AutomationOwnerTab is not { IsSelected: false }
+           && base.IsControlElementCore();
+
+    /// <inheritdoc/>
+    protected override bool IsContentElementCore()
+        => OwnerGroup.AutomationOwnerTab is not { IsSelected: false }
+           && base.IsContentElementCore();
+
+    /// <inheritdoc/>
+    protected override bool IsOffscreenCore()
+        => OwnerGroup.AutomationOwnerTab is { IsSelected: false }
+           || base.IsOffscreenCore();
 
     /// <inheritdoc/>
     protected override object? GetPatternCore(PatternInterface patternInterface)
@@ -147,10 +184,16 @@ public partial class RibbonGroupBoxAutomationPeer : FrameworkElementAutomationPe
     /// <inheritdoc/>
     protected override List<AutomationPeer>? GetChildrenCore()
     {
+        if (OwnerGroup.IsInButtonState && !OwnerGroup.IsDropDownOpen)
+        {
+            return [];
+        }
+
         var peers = new List<AutomationPeer>();
         foreach (var item in OwnerGroup.Items)
         {
-            if (CreatePeerForElement(item) is { } peer)
+            if (AutomationPeerHelpers.IsEffectivelyVisible(item)
+                && CreatePeerForElement(item) is { } peer)
             {
                 peers.Add(peer);
             }
@@ -158,8 +201,9 @@ public partial class RibbonGroupBoxAutomationPeer : FrameworkElementAutomationPe
 
         // The dialog launcher is a real, clickable control, so it must be reachable by assistive
         // technology and keyboard users rather than only by pointing at the chevron.
-        if (OwnerGroup is { IsLauncherVisible: true, LauncherButton: { } launcher }
-            && launcher.Visibility == Visibility.Visible
+        if (!OwnerGroup.IsInButtonState
+            && OwnerGroup is { IsLauncherVisible: true, LauncherButton: { } launcher }
+            && AutomationPeerHelpers.IsEffectivelyVisible(launcher)
             && CreatePeerForElement(launcher) is { } launcherPeer)
         {
             peers.Add(launcherPeer);
@@ -169,10 +213,24 @@ public partial class RibbonGroupBoxAutomationPeer : FrameworkElementAutomationPe
     }
 
     /// <inheritdoc/>
-    public void Collapse() => OwnerGroup.CollapseForAutomation();
+    public void Collapse()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerGroup.IsInButtonState,
+            "This ribbon group cannot be collapsed.");
+        OwnerGroup.CollapseForAutomation();
+    }
 
     /// <inheritdoc/>
-    public void Expand() => OwnerGroup.ExpandForAutomation();
+    public void Expand()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerGroup.IsInButtonState,
+            "This ribbon group cannot be expanded.");
+        OwnerGroup.ExpandForAutomation();
+    }
 
     /// <inheritdoc/>
     public Microsoft.UI.Xaml.Automation.ExpandCollapseState ExpandCollapseState
@@ -180,13 +238,36 @@ public partial class RibbonGroupBoxAutomationPeer : FrameworkElementAutomationPe
             ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded
             : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed;
 
+    internal void RaiseIsDropDownOpenChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+            oldValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed,
+            newValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+    }
+
     /// <inheritdoc/>
-    public void ScrollIntoView() => OwnerGroup.StartBringIntoView();
+    public void ScrollIntoView()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        OwnerGroup.StartBringIntoView();
+    }
 
     /// <inheritdoc/>
     protected override void SetFocusCore()
     {
-        // The group itself is a semantic container; focus remains on its interactive children.
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerGroup.IsInButtonState,
+            "Only a collapsed ribbon group can receive automation focus.");
+        AutomationProviderGuard.EnsureAvailable(
+            OwnerGroup.Focus(FocusState.Programmatic),
+            "The collapsed ribbon group could not receive focus.");
     }
 }
 
@@ -222,8 +303,104 @@ public partial class RibbonGroupHeaderAutomationPeer : FrameworkElementAutomatio
             return name;
         }
 
-        return AutomationPeerHelpers.FindAncestor<RibbonGroupBox>((FrameworkElement)Owner)?.Header?.ToString()
-               ?? string.Empty;
+        return AutomationPeerHelpers.GetObjectName(
+            AutomationPeerHelpers.FindAncestor<RibbonGroupBox>((FrameworkElement)Owner)?.Header);
+    }
+}
+
+/// <summary>
+/// Automation peer for <see cref="RibbonGallery"/>.
+/// </summary>
+public partial class RibbonGalleryAutomationPeer : SelectorAutomationPeer,
+    ISelectionProvider
+{
+    private readonly Dictionary<UIElement, AutomationPeer> _itemPeers = new();
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RibbonGalleryAutomationPeer"/> class.
+    /// </summary>
+    public RibbonGalleryAutomationPeer(RibbonGallery owner)
+        : base(owner)
+    {
+    }
+
+    internal RibbonGallery OwnerGallery => (RibbonGallery)Owner;
+
+    /// <inheritdoc/>
+    protected override string GetClassNameCore() => nameof(RibbonGallery);
+
+    /// <inheritdoc/>
+    protected override AutomationControlType GetAutomationControlTypeCore()
+        => AutomationControlType.List;
+
+    /// <inheritdoc/>
+    protected override object GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Selection
+           && OwnerGallery.Selectable
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc cref="AutomationPeer.GetPattern"/>
+    public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer> GetChildrenCore()
+        => OwnerGallery.GetAutomationItems().Select(CreateGalleryItemPeer).ToList();
+
+    bool ISelectionProvider.CanSelectMultiple => false;
+
+    bool ISelectionProvider.IsSelectionRequired => false;
+
+    IRawElementProviderSimple[] ISelectionProvider.GetSelection()
+    {
+        if (OwnerGallery.SelectedItem is not UIElement selected
+            || !OwnerGallery.GetAutomationItems().Contains(selected))
+        {
+            return [];
+        }
+
+        return [ProviderFromPeer(CreateGalleryItemPeer(selected))];
+    }
+
+    private AutomationPeer CreateGalleryItemPeer(UIElement item)
+    {
+        if (item is RibbonGalleryItem galleryItem)
+        {
+            galleryItem.GalleryOwner = OwnerGallery;
+            return CreatePeerForElement(galleryItem)
+                   ?? new GalleryItemWrapperAutomationPeer(galleryItem);
+        }
+
+        if (!_itemPeers.TryGetValue(item, out var peer))
+        {
+            peer = new GalleryItemAutomationPeer(item, this);
+            _itemPeers[item] = peer;
+        }
+
+        return peer;
+    }
+
+    internal void RaiseSelectionChanged(UIElement? oldItem, UIElement? newItem)
+    {
+        if (ReferenceEquals(oldItem, newItem))
+        {
+            return;
+        }
+
+        if (oldItem is not null
+            && oldItem is not RibbonGalleryItem
+            && _itemPeers.TryGetValue(oldItem, out var oldPeer)
+            && oldPeer is GalleryItemAutomationPeer oldGalleryPeer)
+        {
+            oldGalleryPeer.RaiseIsSelectedChanged(true, false);
+        }
+
+        if (newItem is not null
+            && newItem is not RibbonGalleryItem
+            && CreateGalleryItemPeer(newItem) is GalleryItemAutomationPeer newGalleryPeer)
+        {
+            newGalleryPeer.RaiseIsSelectedChanged(false, true);
+        }
     }
 }
 
@@ -231,8 +408,11 @@ public partial class RibbonGroupHeaderAutomationPeer : FrameworkElementAutomatio
 /// Automation peer for <see cref="InRibbonGallery"/>.
 /// </summary>
 public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPeer,
-    IExpandCollapseProvider
+    IExpandCollapseProvider,
+    ISelectionProvider
 {
+    private readonly Dictionary<UIElement, AutomationPeer> _itemPeers = new();
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonInRibbonGalleryAutomationPeer"/> class.
     /// </summary>
@@ -241,7 +421,7 @@ public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPee
     {
     }
 
-    private InRibbonGallery OwnerGallery => (InRibbonGallery)Owner;
+    internal InRibbonGallery OwnerGallery => (InRibbonGallery)Owner;
 
     /// <inheritdoc/>
     protected override string GetClassNameCore() => nameof(InRibbonGallery);
@@ -255,21 +435,27 @@ public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPee
             : name;
     }
 
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            OwnerGallery,
+            base.GetAccessKeyCore());
+
     /// <summary>Creates an item peer for a gallery item.</summary>
     protected new virtual ItemAutomationPeer CreateItemAutomationPeer(object item)
-        => new SelectorItemAutomationPeer(item, this);
+        => new GalleryItemAutomationPeer(item, this);
 
     /// <inheritdoc/>
     protected override AutomationControlType GetAutomationControlTypeCore()
         => AutomationControlType.List;
 
     /// <inheritdoc/>
-    protected override object? GetPatternCore(PatternInterface patternInterface)
+    protected override object GetPatternCore(PatternInterface patternInterface)
     {
         return patternInterface switch
         {
             PatternInterface.ExpandCollapse => this,
-            PatternInterface.Selection => this,
+            PatternInterface.Selection when OwnerGallery.Selectable => this,
             _ => base.GetPatternCore(patternInterface),
         };
     }
@@ -278,10 +464,22 @@ public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPee
     public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
-    public void Collapse() => OwnerGallery.CollapseForAutomation();
+    protected override List<AutomationPeer> GetChildrenCore()
+        => OwnerGallery.GetAutomationItems().Select(CreateGalleryItemPeer).ToList();
 
     /// <inheritdoc/>
-    public void Expand() => OwnerGallery.ExpandForAutomation();
+    public void Collapse()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        OwnerGallery.CollapseForAutomation();
+    }
+
+    /// <inheritdoc/>
+    public void Expand()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        OwnerGallery.ExpandForAutomation();
+    }
 
     /// <inheritdoc/>
     public Microsoft.UI.Xaml.Automation.ExpandCollapseState ExpandCollapseState
@@ -289,6 +487,74 @@ public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPee
             ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded
             : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed;
 
+    internal void RaiseIsDropDownOpenChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+            oldValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed,
+            newValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+    }
+
+    bool ISelectionProvider.CanSelectMultiple => false;
+
+    bool ISelectionProvider.IsSelectionRequired => false;
+
+    IRawElementProviderSimple[] ISelectionProvider.GetSelection()
+    {
+        var selected = OwnerGallery.FindSelectionContainer(OwnerGallery.SelectedItem);
+        if (selected is null || !OwnerGallery.GetAutomationItems().Contains(selected))
+        {
+            return [];
+        }
+
+        return [ProviderFromPeer(CreateGalleryItemPeer(selected))];
+    }
+
+    private AutomationPeer CreateGalleryItemPeer(UIElement item)
+    {
+        if (item is RibbonGalleryItem galleryItem)
+        {
+            galleryItem.GalleryOwner = OwnerGallery;
+            return CreatePeerForElement(galleryItem)
+                   ?? new GalleryItemWrapperAutomationPeer(galleryItem);
+        }
+
+        if (!_itemPeers.TryGetValue(item, out var peer))
+        {
+            peer = new GalleryItemAutomationPeer(item, this);
+            _itemPeers[item] = peer;
+        }
+
+        return peer;
+    }
+
+    internal void RaiseSelectionChanged(UIElement? oldItem, UIElement? newItem)
+    {
+        if (ReferenceEquals(oldItem, newItem))
+        {
+            return;
+        }
+
+        if (oldItem is not null
+            && oldItem is not RibbonGalleryItem
+            && _itemPeers.TryGetValue(oldItem, out var oldPeer)
+            && oldPeer is GalleryItemAutomationPeer oldGalleryPeer)
+        {
+            oldGalleryPeer.RaiseIsSelectedChanged(true, false);
+        }
+
+        if (newItem is not null
+            && newItem is not RibbonGalleryItem
+            && CreateGalleryItemPeer(newItem) is GalleryItemAutomationPeer newGalleryPeer)
+        {
+            newGalleryPeer.RaiseIsSelectedChanged(false, true);
+        }
+    }
 }
 
 /// <summary>
@@ -317,7 +583,9 @@ public partial class RibbonQuickAccessToolBarAutomationPeer : FrameworkElementAu
     protected override string GetNameCore()
     {
         var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name) ? "Quick Access Toolbar" : name;
+        return string.IsNullOrWhiteSpace(name)
+            ? global::Fluent.RibbonLocalization.Current.Localization.QuickAccessToolBarName
+            : name;
     }
 
     /// <inheritdoc/>
@@ -326,7 +594,7 @@ public partial class RibbonQuickAccessToolBarAutomationPeer : FrameworkElementAu
         var children = new List<AutomationPeer>();
         foreach (var item in OwnerToolBar.Items)
         {
-            if (item.Visibility != Visibility.Visible)
+            if (!AutomationPeerHelpers.IsEffectivelyVisible(item))
             {
                 continue;
             }
@@ -338,7 +606,8 @@ public partial class RibbonQuickAccessToolBarAutomationPeer : FrameworkElementAu
             }
         }
 
-        if (OwnerToolBar.OverflowButtonForAutomation is { Visibility: Visibility.Visible } overflowButton)
+        if (OwnerToolBar.OverflowButtonForAutomation is { } overflowButton
+            && AutomationPeerHelpers.IsEffectivelyVisible(overflowButton))
         {
             var peer = CreatePeerForElement(overflowButton);
             if (peer is not null)
@@ -347,7 +616,8 @@ public partial class RibbonQuickAccessToolBarAutomationPeer : FrameworkElementAu
             }
         }
 
-        if (OwnerToolBar.MenuButtonForAutomation is { Visibility: Visibility.Visible } menuButton)
+        if (OwnerToolBar.MenuButtonForAutomation is { } menuButton
+            && AutomationPeerHelpers.IsEffectivelyVisible(menuButton))
         {
             var peer = CreatePeerForElement(menuButton);
             if (peer is not null)
@@ -394,8 +664,31 @@ public partial class RibbonScreenTipAutomationPeer : FrameworkElementAutomationP
     {
         var helpText = base.GetHelpTextCore();
         return string.IsNullOrWhiteSpace(helpText)
-            ? OwnerScreenTip.Text?.ToString() ?? string.Empty
+            ? AutomationPeerHelpers.GetObjectName(OwnerScreenTip.Text)
             : helpText;
+    }
+
+    /// <inheritdoc/>
+    protected override string GetAcceleratorKeyCore()
+    {
+        var acceleratorKey = base.GetAcceleratorKeyCore();
+        return string.IsNullOrWhiteSpace(acceleratorKey)
+               && OwnerScreenTip.HelpTopic is not null
+            ? "F1"
+            : acceleratorKey;
+    }
+
+    internal void RaiseAcceleratorKeyChanged(bool hadHelpTopic, bool hasHelpTopic)
+    {
+        if (hadHelpTopic == hasHelpTopic)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            AutomationElementIdentifiers.AcceleratorKeyProperty,
+            hadHelpTopic ? "F1" : string.Empty,
+            hasHelpTopic ? "F1" : string.Empty);
     }
 }
 

@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:StartScreen">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:StartScreen">
@@ -36,7 +37,10 @@
                             <!-- Left Pane -->
                             <Border Background="{ThemeResource RibbonBackstageBackgroundBrush}" Padding="20"
                                     Width="{TemplateBinding LeftPaneWidth}">
-                                <ContentPresenter x:Name="PART_LeftPane" Content="{TemplateBinding LeftPaneContent}" />
+                                <ContentPresenter
+                                    x:Name="PART_LeftPane"
+                                    Content="{TemplateBinding LeftPaneContent}"
+                                    Foreground="{ThemeResource RibbonBackstageForegroundBrush}" />
                             </Border>
 
                             <!-- Right Pane -->

@@ -28,6 +28,7 @@ public sealed partial class MainPage
             MainRibbon.SelectedTabIndex = 0; // Toolbars
             await SettleAsync(4, 120);
             MeasureGroupInputAlignment("Spinners", SpinnersGroup);
+            VerifySpinnerInputHeights("Spinners", SpinnersGroup);
 
             var testsIndex = IndexOfTab("Tests");
             if (testsIndex >= 0)
@@ -49,6 +50,8 @@ public sealed partial class MainPage
             {
                 AutoLog("  FAIL SPINALIGN Tests tab not found");
             }
+
+            await VerifySpinnerStackLayoutAsync();
         }
         catch (Exception ex)
         {
@@ -56,6 +59,86 @@ public sealed partial class MainPage
         }
 
         AutoLog("SPINALIGN END");
+    }
+
+    private async Task VerifySpinnerStackLayoutAsync()
+    {
+        if (Content is not Panel root)
+        {
+            AutoLog("  FAIL SPINLAYOUT Showcase content is not a Panel");
+            return;
+        }
+
+        var panel = new RibbonGroupItemsPanel
+        {
+            Width = 240,
+            Height = 72,
+            Opacity = 0.01,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        var spinners = new[]
+        {
+            new RibbonSpinner { Header = "Left:", InputWidth = 75 },
+            new RibbonSpinner { Header = "Right:", InputWidth = 75 },
+            new RibbonSpinner { Header = "Top:", InputWidth = 75 },
+        };
+        foreach (var spinner in spinners)
+        {
+            panel.Children.Add(spinner);
+        }
+
+        Grid.SetRowSpan(panel, 3);
+        Canvas.SetZIndex(panel, 40);
+        root.Children.Add(panel);
+
+        try
+        {
+            await SettleAsync(2, 75);
+            foreach (var spinner in spinners)
+            {
+                spinner.ApplyTemplate();
+            }
+
+            await SettleAsync(2, 75);
+            var positions = spinners
+                .Select(
+                    spinner => spinner.TransformToVisual(panel)
+                        .TransformPoint(new Windows.Foundation.Point()))
+                .ToArray();
+            var sameColumn = positions.Max(point => point.X) - positions.Min(point => point.X) <= 1;
+            var verticallyOrdered = positions[0].Y < positions[1].Y
+                                    && positions[1].Y < positions[2].Y
+                                    && positions[0].Y + spinners[0].ActualHeight <= positions[1].Y + 0.5
+                                    && positions[1].Y + spinners[1].ActualHeight <= positions[2].Y + 0.5;
+
+            AutoLog(sameColumn && verticallyOrdered
+                ? $"  SPINLAYOUT vertical ({string.Join(",", positions.Select(point => $"({point.X:F1},{point.Y:F1})"))})"
+                : $"  FAIL SPINLAYOUT expected one vertical column, actual ({string.Join(",", positions.Select(point => $"({point.X:F1},{point.Y:F1})"))})");
+        }
+        finally
+        {
+            root.Children.Remove(panel);
+        }
+    }
+
+    private void VerifySpinnerInputHeights(string label, RibbonGroupBox group)
+    {
+        var heights = new List<double>();
+        foreach (var spinner in group.Items.OfType<RibbonSpinner>())
+        {
+            if (FindByName(spinner, "InputRoot") is FrameworkElement inputRoot)
+            {
+                heights.Add(inputRoot.ActualHeight);
+            }
+        }
+
+        const double expectedHeight = 24;
+        var valid = heights.Count > 0
+                    && heights.All(height => Math.Abs(height - expectedHeight) <= 1.5);
+        AutoLog(valid
+            ? $"  SPINHEIGHT {label} compact ({string.Join(",", heights.Select(height => height.ToString("F1")))})"
+            : $"  FAIL SPINHEIGHT {label} expected {expectedHeight:F1}, actual ({string.Join(",", heights.Select(height => height.ToString("F1")))})");
     }
 
     private void MeasureGroupInputAlignment(string label, RibbonGroupBox group)

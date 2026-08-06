@@ -4,9 +4,13 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:StatusBarMenuItem">
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonTextBrush}" />
         <Setter Property="Padding" Value="8,6" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:StatusBarMenuItem">
@@ -14,11 +18,16 @@
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
                         CornerRadius="4"
-                        Padding="{TemplateBinding Padding}">
+                        Padding="{TemplateBinding Padding}"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Checkmark.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonHoverBrush}" />
@@ -26,6 +35,10 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Checkmark.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonPressedBrush}" />
@@ -33,13 +46,10 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
-                                    <Storyboard>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="ContentGrid"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0.5"
-                                            Duration="0" />
-                                    </Storyboard>
+                                    <VisualState.Setters>
+                                        <Setter Target="Checkmark.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="HeaderPresenter.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                    </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
@@ -51,18 +61,20 @@
 
                             <!-- Checkmark, visible when IsChecked -->
                             <TextBlock
+                                x:Name="Checkmark"
                                 Grid.Column="0"
                                 Text="&#xE73E;"
                                 FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                 FontSize="14"
                                 VerticalAlignment="Center"
-                                Foreground="{ThemeResource RibbonTextBrush}"
+                                Foreground="{TemplateBinding Foreground}"
                                 Visibility="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                             <ContentPresenter
+                                x:Name="HeaderPresenter"
                                 Grid.Column="1"
                                 Content="{TemplateBinding Header}"
-                                Foreground="{ThemeResource RibbonTextBrush}"
+                                Foreground="{TemplateBinding Foreground}"
                                 VerticalAlignment="Center" />
                         </Grid>
                     </Border>

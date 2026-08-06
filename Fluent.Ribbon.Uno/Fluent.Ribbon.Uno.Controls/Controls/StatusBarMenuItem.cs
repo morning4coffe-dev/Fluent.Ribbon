@@ -92,9 +92,20 @@ public partial class StatusBarMenuItem : MenuItem
 
     private static void OnIsCheckedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is StatusBarMenuItem menuItem && menuItem.StatusBarItem is not null)
+        if (d is not StatusBarMenuItem menuItem)
+        {
+            return;
+        }
+
+        if (menuItem.StatusBarItem is not null)
         {
             menuItem.StatusBarItem.IsChecked = (bool)e.NewValue;
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(menuItem)
+            is Fluent.Automation.Peers.StatusBarMenuItemAutomationPeer peer)
+        {
+            peer.RaiseIsCheckedChanged((bool)e.OldValue, (bool)e.NewValue);
         }
     }
 
@@ -147,7 +158,7 @@ public partial class StatusBarMenuItem : MenuItem
             });
     }
 
-    private static bool IsStatusItemCheckable(StatusBarItem item)
+    internal static bool IsStatusItemCheckable(StatusBarItem item)
     {
         var property = item.GetType().GetProperty("IsCheckable");
         return property?.PropertyType != typeof(bool)

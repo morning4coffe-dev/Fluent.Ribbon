@@ -2,6 +2,13 @@ namespace Fluent;
 
 internal static class FocusRoutingHelper
 {
+    internal static FocusState ResolveDelegatedFocusState(
+        FocusState delegatedFocusState,
+        FocusState editorFocusState)
+        => delegatedFocusState is FocusState.Keyboard or FocusState.Pointer
+            ? delegatedFocusState
+            : editorFocusState;
+
     internal static WeakReference<UIElement>? CaptureFocusedElement(
         FrameworkElement owner,
         bool onlyWhenOutsideOwner = false)

@@ -16,6 +16,7 @@ public sealed partial class MainPage
     private async Task RunKeyboardFocusAutoTestAsync()
     {
         AutoLog("KEYBOARD-FOCUS BEGIN");
+        await SettleAsync(4, 150);
 
         if (Content is not Grid pageRoot
             || XamlRoot is not { } xamlRoot
@@ -71,6 +72,26 @@ public sealed partial class MainPage
             KeyTip = "ZV",
             Visibility = Visibility.Collapsed,
         };
+        var menuNavigationHost = new RibbonMenuItem
+        {
+            Header = "Menu navigation test",
+            Width = 180,
+            Opacity = 0.01,
+            IsDefinitive = false,
+        };
+        var disabledMenuItem = new RibbonMenuItem
+        {
+            Header = "Disabled menu item",
+            IsEnabled = false,
+        };
+        var firstEnabledMenuItem = new RibbonMenuItem { Header = "First enabled menu item" };
+        var lastEnabledMenuItem = new RibbonMenuItem { Header = "Last enabled menu item" };
+        menuNavigationHost.Items.Add(disabledMenuItem);
+        menuNavigationHost.Items.Add(new GroupSeparatorMenuItem { Header = "Menu group" });
+        menuNavigationHost.Items.Add(firstEnabledMenuItem);
+        menuNavigationHost.Items.Add(lastEnabledMenuItem);
+        Grid.SetRow(menuNavigationHost, 1);
+        Canvas.SetZIndex(menuNavigationHost, 60);
 
         var originalKeys = MainRibbon.KeyTipKeys.ToArray();
         var originalSelectedTab = MainRibbon.SelectedTab;
@@ -100,10 +121,18 @@ public sealed partial class MainPage
 
         try
         {
+            if (applicationMenu is not null
+                && string.IsNullOrWhiteSpace(originalApplicationMenuKeyTip))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS application menu has no default localized KeyTip");
+                return;
+            }
+
             pageRoot.Children.Add(focusProbe);
             firstGroup.Items.Add(enabledButton);
             firstGroup.Items.Add(disabledButton);
             firstGroup.Items.Add(hiddenButton);
+            pageRoot.Children.Add(menuNavigationHost);
             MainRibbon.SelectedTab = firstTab;
             MainRibbon.IsMinimized = false;
             MainRibbon.IsCollapsed = false;
@@ -375,6 +404,64 @@ public sealed partial class MainPage
                 applicationMenu.Close();
             }
 
+            menuNavigationHost.FlowDirection = FlowDirection.LeftToRight;
+            menuNavigationHost.Focus(FocusState.Keyboard);
+            InvokeMenuNavigation(menuNavigationHost, VirtualKey.Right);
+            await SettleAsync(3);
+            if (menuNavigationHost.IsDropDownOpen is false
+                || menuNavigationHost.DropDownPopup?.IsOpen != true
+                || !ReferenceEquals(
+                    Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot),
+                    firstEnabledMenuItem))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS submenu Right navigation did not focus the first enabled item");
+                return;
+            }
+
+            InvokeMenuNavigation(firstEnabledMenuItem, VirtualKey.Down);
+            if (!ReferenceEquals(
+                    Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot),
+                    lastEnabledMenuItem))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS menu Down navigation did not skip disabled/separator items");
+                return;
+            }
+
+            InvokeMenuNavigation(lastEnabledMenuItem, VirtualKey.Home);
+            InvokeMenuNavigation(firstEnabledMenuItem, VirtualKey.End);
+            if (!ReferenceEquals(
+                    Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot),
+                    lastEnabledMenuItem))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS menu Home/End navigation did not reach enabled endpoints");
+                return;
+            }
+
+            InvokeMenuNavigation(lastEnabledMenuItem, VirtualKey.Left);
+            await SettleAsync(2);
+            if (menuNavigationHost.IsDropDownOpen
+                || !ReferenceEquals(
+                    Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot),
+                    menuNavigationHost))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS submenu Left navigation did not close and restore parent focus");
+                return;
+            }
+
+            menuNavigationHost.FlowDirection = FlowDirection.RightToLeft;
+            InvokeMenuNavigation(menuNavigationHost, VirtualKey.Left);
+            await SettleAsync(3);
+            InvokeMenuNavigation(firstEnabledMenuItem, VirtualKey.Escape);
+            await SettleAsync(2);
+            if (menuNavigationHost.IsDropDownOpen
+                || !ReferenceEquals(
+                    Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot),
+                    menuNavigationHost))
+            {
+                AutoLog("  FAIL KEYBOARD-FOCUS RTL submenu entry or Escape focus restoration failed");
+                return;
+            }
+
             focusProbe.Focus(FocusState.Programmatic);
             BackstageView.OnKeyTipPressed();
             await SettleAsync(1);
@@ -601,6 +688,8 @@ public sealed partial class MainPage
             firstGroup.Items.Remove(enabledButton);
             firstGroup.Items.Remove(disabledButton);
             firstGroup.Items.Remove(hiddenButton);
+            menuNavigationHost.IsDropDownOpen = false;
+            pageRoot.Children.Remove(menuNavigationHost);
             pageRoot.Children.Remove(startScreen);
             pageRoot.Children.Remove(focusProbe);
         }
@@ -677,6 +766,15 @@ public sealed partial class MainPage
         typeof(KeyTipService)
             .GetMethod("NavigateBack", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(service, null);
+    }
+
+    private static void InvokeMenuNavigation(MenuItem item, VirtualKey key)
+    {
+        typeof(MenuItem)
+            .GetMethod(
+                "HandleMenuNavigationKey",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.Invoke(item, new object[] { key });
     }
 
     private static void InvokeKeyTipDismissal(KeyTipService service, string methodName)

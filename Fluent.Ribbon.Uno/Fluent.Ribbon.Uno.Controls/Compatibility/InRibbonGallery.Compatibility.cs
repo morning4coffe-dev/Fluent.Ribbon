@@ -3,7 +3,6 @@ namespace Fluent;
 using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 
 using System.Collections;
-using System.Reflection;
 using Fluent.Extensibility;
 using Microsoft.UI.Xaml.Automation;
 
@@ -40,6 +39,7 @@ public partial class InRibbonGallery :
     private InRibbonGallery? _quickAccessOwner;
     private List<UIElement>? _quickAccessTransferredItems;
     private UniformItemsPanel? _borrowedOwnerPanel;
+    private InRibbonGallery? _activeQuickAccessClone;
 
     /// <summary>Identifies the WPF-compatible size-definition property.</summary>
     public static readonly DependencyProperty SizeDefinitionProperty =
@@ -518,7 +518,9 @@ public partial class InRibbonGallery :
         };
         AutomationProperties.SetName(
             clone,
-            Header?.ToString() ?? "Gallery");
+            Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header) is { Length: > 0 } header
+                ? header
+                : RibbonLocalization.Current.Localization.GalleryName);
 
         foreach (var filter in Filters)
         {
@@ -624,10 +626,16 @@ public partial class InRibbonGallery :
     /// <inheritdoc />
     protected override void OnKeyDown(KeyRoutedEventArgs args)
     {
+        if (!args.Handled && HandleNavigationKey(args.OriginalSource as UIElement, args))
+        {
+            return;
+        }
+
         if (args.Key == Windows.System.VirtualKey.Escape && IsDropDownOpen)
         {
             IsDropDownOpen = false;
             args.Handled = true;
+            return;
         }
 
         base.OnKeyDown(args);
@@ -654,6 +662,10 @@ public partial class InRibbonGallery :
     {
         IsSimplified = isSimplified;
         Size = (isSimplified ? SimplifiedSizeDefinition : SizeDefinition).GetSize(Size);
+#if !WINDOWS
+        UpdateVisualState();
+        UpdateGalleryLayout();
+#endif
     }
 
     void ILogicalChildSupport.AddLogicalChild(object child)
@@ -690,7 +702,6 @@ public partial class InRibbonGallery :
             FontSize = 8,
             Foreground = GetBrush("RibbonIconBrush", Microsoft.UI.Colors.Black),
         };
-        Unloaded += (_, _) => IsDropDownOpen = false;
     }
 
     private void UpdateCompatibilityTemplate()
@@ -702,11 +713,21 @@ public partial class InRibbonGallery :
 
     private void OnCompatibilityItemsChanged(NotifyCollectionChangedEventArgs args)
     {
+        foreach (var item in _hookedItems.Where(item => !Items.Contains(item)).ToList())
+        {
+            ResetRemovedItem(item);
+            UnhookItem(item);
+        }
+
         if (args.OldItems is not null)
         {
             foreach (var item in args.OldItems.OfType<UIElement>())
             {
-                UnhookItem(item);
+                if (!Items.Contains(item))
+                {
+                    ResetRemovedItem(item);
+                    UnhookItem(item);
+                }
             }
         }
 
@@ -718,9 +739,42 @@ public partial class InRibbonGallery :
             }
         }
 
-        if (SelectedItem is UIElement selected && !Items.Contains(selected))
+        if (!_isRebuildingItemsSource)
         {
-            SelectedItem = null;
+            if (SelectedItem is not null)
+            {
+                var selected = FindSelectionContainer(SelectedItem);
+                if (selected is not null)
+                {
+                    var selectedIndex = Items.IndexOf(selected);
+                    if (SelectedIndex != selectedIndex)
+                    {
+                        SelectedIndex = selectedIndex;
+                    }
+                }
+                else
+                {
+                    SelectedItem = null;
+                }
+            }
+            else
+            {
+                var preselectedItem = Items
+                    .OfType<RibbonGalleryItem>()
+                    .FirstOrDefault(item => item.IsSelected);
+                if (preselectedItem is not null && !SelectItem(preselectedItem))
+                {
+                    ResetRemovedItem(preselectedItem);
+                }
+            }
+
+            foreach (var item in Items
+                         .OfType<RibbonGalleryItem>()
+                         .Where(item => item.IsSelected
+                                        && !ReferenceEquals(item, FindSelectionContainer(SelectedItem))))
+            {
+                ResetRemovedItem(item);
+            }
         }
 
         OnItemsChanged(args);
@@ -730,6 +784,51 @@ public partial class InRibbonGallery :
         if (_isPopupOpen && !_suppressPopupRebuild)
         {
             PreparePopupContent();
+        }
+    }
+
+    private void RefreshSelectionContainerState()
+    {
+        var selectedContainer = FindSelectionContainer(SelectedItem);
+        var selectedIndex = selectedContainer is null
+            ? -1
+            : Items.IndexOf(selectedContainer);
+        if (SelectedIndex != selectedIndex)
+        {
+            SelectedIndex = selectedIndex;
+        }
+
+        _isSynchronizingSelection = true;
+        try
+        {
+            foreach (var item in Items.OfType<RibbonGalleryItem>())
+            {
+                item.IsSelected = ReferenceEquals(item, selectedContainer);
+            }
+        }
+        finally
+        {
+            _isSynchronizingSelection = false;
+        }
+
+        UpdateItemTabStops();
+    }
+
+    private void ResetRemovedItem(UIElement item)
+    {
+        if (item is not RibbonGalleryItem { IsSelected: true } galleryItem)
+        {
+            return;
+        }
+
+        _isSynchronizingSelection = true;
+        try
+        {
+            galleryItem.IsSelected = false;
+        }
+        finally
+        {
+            _isSynchronizingSelection = false;
         }
     }
 
@@ -743,6 +842,11 @@ public partial class InRibbonGallery :
 
     private void HookItem(UIElement item)
     {
+        if (item is RibbonGalleryItem ownerItem)
+        {
+            ownerItem.GalleryOwner = this;
+        }
+
         if (!_hookedItems.Add(item))
         {
             return;
@@ -771,24 +875,30 @@ public partial class InRibbonGallery :
         item.PointerEntered -= OnItemPointerEntered;
         item.PointerExited -= OnItemPointerExited;
 
-        if (item is RibbonGalleryItem galleryItem
-            && _selectionTokens.Remove(galleryItem, out var token))
+        if (item is RibbonGalleryItem galleryItem)
         {
-            galleryItem.UnregisterPropertyChangedCallback(
-                RibbonGalleryItem.IsSelectedProperty,
-                token);
+            if (ReferenceEquals(galleryItem.GalleryOwner, this))
+            {
+                galleryItem.GalleryOwner = null;
+            }
+
+            if (_selectionTokens.Remove(galleryItem, out var token))
+            {
+                galleryItem.UnregisterPropertyChangedCallback(
+                    RibbonGalleryItem.IsSelectedProperty,
+                    token);
+            }
         }
     }
 
     private void OnItemPointerPressed(object sender, PointerRoutedEventArgs args)
     {
-        if (!Selectable || sender is not UIElement item)
+        if (sender is not UIElement item)
         {
             return;
         }
 
-        SelectedItem = item;
-        if (IsDropDownOpen)
+        if (SelectItem(item) && IsDropDownOpen)
         {
             IsDropDownOpen = false;
         }
@@ -819,9 +929,14 @@ public partial class InRibbonGallery :
 
         if (item.IsSelected)
         {
-            SelectedItem = item;
+            if (!SelectItem(item))
+            {
+                _isSynchronizingSelection = true;
+                item.IsSelected = false;
+                _isSynchronizingSelection = false;
+            }
         }
-        else if (ReferenceEquals(SelectedItem, item))
+        else if (ReferenceEquals(FindSelectionContainer(SelectedItem), item))
         {
             SelectedItem = null;
         }
@@ -829,13 +944,17 @@ public partial class InRibbonGallery :
 
     private void HandleSelectedItemChanged(object? oldValue, object? newValue)
     {
-        if (!Selectable && newValue is not null)
+        var selectedContainer = newValue is null
+            ? null
+            : FindSelectionContainer(newValue);
+        if (newValue is not null
+            && (!Selectable || selectedContainer is null))
         {
             SelectedItem = null;
             return;
         }
 
-        var newIndex = newValue is UIElement element ? Items.IndexOf(element) : -1;
+        var newIndex = selectedContainer is null ? -1 : Items.IndexOf(selectedContainer);
         if (SelectedIndex != newIndex)
         {
             SelectedIndex = newIndex;
@@ -846,12 +965,21 @@ public partial class InRibbonGallery :
         {
             foreach (var item in Items.OfType<RibbonGalleryItem>())
             {
-                item.IsSelected = ReferenceEquals(item, newValue);
+                item.IsSelected = ReferenceEquals(item, selectedContainer);
             }
         }
         finally
         {
             _isSynchronizingSelection = false;
+        }
+
+        UpdateItemTabStops();
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonInRibbonGalleryAutomationPeer peer)
+        {
+            peer.RaiseSelectionChanged(
+                FindSelectionContainer(oldValue, requireCurrentItem: false),
+                selectedContainer);
         }
 
         var removed = oldValue is null ? Array.Empty<object>() : new[] { oldValue };
@@ -861,8 +989,9 @@ public partial class InRibbonGallery :
 
     private void HandleSelectedIndexChanged(int index)
     {
-        var item = index >= 0 && index < Items.Count ? Items[index] : null;
-        if (!ReferenceEquals(SelectedItem, item))
+        var container = index >= 0 && index < Items.Count ? Items[index] : null;
+        var item = container is null ? null : GetSelectionValue(container);
+        if (!ReferenceEquals(SelectedItem, item) && !Equals(SelectedItem, item))
         {
             SelectedItem = item;
         }
@@ -895,6 +1024,14 @@ public partial class InRibbonGallery :
 
             gallery.CloseDropDownCore();
             gallery.DropDownClosed?.Invoke(gallery, EventArgs.Empty);
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(gallery)
+            is Fluent.Automation.Peers.RibbonInRibbonGalleryAutomationPeer peer)
+        {
+            peer.RaiseIsDropDownOpenChanged(
+                (bool)args.OldValue,
+                (bool)args.NewValue);
         }
     }
 
@@ -934,6 +1071,7 @@ public partial class InRibbonGallery :
 
         if (_galleryPanel is not null && _scrollViewer is not null)
         {
+            _galleryPanel.ConfigureGrouping(null);
             if (!ReferenceEquals(_scrollViewer.Content, _galleryPanel))
             {
                 DetachFromParent(_galleryPanel);
@@ -967,11 +1105,6 @@ public partial class InRibbonGallery :
         // documented on RibbonGallery.SyncItems. Moving only the one container keeps every item's peer
         // intact on both heads.
         //
-        // Grouped galleries (GroupBy / GroupByAdvanced) render the same flat item grid in the drop
-        // down. WPF achieves in-popup grouping by toggling a single grouping-capable GalleryPanel
-        // (galleryPanel.IsGrouped); the Uno UniformItemsPanel is not grouping-capable, and emulating it
-        // with per-group child panels is what required the peer-corrupting per-item reparenting. Group
-        // *filtering* (SelectedFilter) still works because it toggles item Visibility on the flat panel.
         ConfigurePanel(
             _galleryPanel,
             MinItemsInDropDownRow,
@@ -995,6 +1128,10 @@ public partial class InRibbonGallery :
         // rendered inline, whose items arrive parent-less — which is peer-safe (only detaching a
         // realized child from an unrooted panel corrupts peers; adding a parent-less child never does).
         ReconcileFlatPanelChildren();
+        _galleryPanel.ConfigureGrouping(
+            !string.IsNullOrWhiteSpace(GroupBy) || GroupByAdvanced is not null
+                ? GetItemGroup
+                : null);
         ApplyCurrentFilter();
     }
 
@@ -1098,6 +1235,7 @@ public partial class InRibbonGallery :
         _popupResizeHost.MinWidth = Math.Max(0D, MinItemsInDropDownRow) * itemWidth;
         _popupResizeHost.MaxWidth = NormalizeMaximum(MaxDropDownWidth);
         _popupResizeHost.MaxHeight = NormalizeMaximum(MaxDropDownHeight);
+        _popupResizeHost.ResizeMode = ResizeMode;
         _popupResizeHost.CanResizeBothDirections = ResizeMode == ContextMenuResizeMode.Both;
         _popupResizeHost.CanResizeVertical = ResizeMode is ContextMenuResizeMode.Vertical or ContextMenuResizeMode.Both;
     }
@@ -1119,6 +1257,7 @@ public partial class InRibbonGallery :
         }
 
         ApplyPopupGroupFilter();
+        UpdateItemTabStops();
     }
 
     private void ApplyPopupGroupFilter()
@@ -1169,10 +1308,10 @@ public partial class InRibbonGallery :
             return string.Empty;
         }
 
-        var property = source.GetType().GetProperty(
-            GroupBy,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-        return property?.GetValue(source)?.ToString() ?? string.Empty;
+        return Fluent.Helpers.PropertyValueHelper
+                   .GetPublicPropertyValue(source, GroupBy)
+                   ?.ToString()
+               ?? string.Empty;
     }
 
     private void OnFiltersCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -1288,6 +1427,7 @@ public partial class InRibbonGallery :
 
         owner.IsFrozen = true;
         owner.IsSnapped = true;
+        owner._activeQuickAccessClone = clone;
         owner._quickAccessTransferredItems = owner.Items.ToList();
 
         // Mirror the owner's items into the clone's *logical* Items collection so the clone's
@@ -1312,6 +1452,7 @@ public partial class InRibbonGallery :
             clone._suppressPopupRebuild = false;
         }
 
+        clone.CopySourceItemMappingsFrom(owner, owner._quickAccessTransferredItems);
         clone.SelectedItem = owner.SelectedItem;
         clone.SelectedFilter = owner.SelectedFilter;
         clone.RebuildPopupSupplementalContent();
@@ -1319,6 +1460,57 @@ public partial class InRibbonGallery :
         // Borrow the owner's whole gallery panel (all realized items intact) into the clone's popup
         // host, then apply the clone's current filter to the now-shared items.
         clone.BorrowOwnerGalleryPanel(owner);
+        clone.ApplyCurrentFilter();
+    }
+
+    private void SyncActiveQuickAccessClone()
+    {
+        if (_activeQuickAccessClone is not { } clone)
+        {
+            return;
+        }
+
+        var selected = clone.SelectedItem;
+        clone._isRebuildingItemsSource = true;
+        clone._suppressPopupRebuild = true;
+        try
+        {
+            foreach (var item in clone.Items.ToList())
+            {
+                clone.UnhookItem(item);
+                clone.Items.Remove(item);
+            }
+
+            clone._sourceItemByContainer.Clear();
+            foreach (var item in Items)
+            {
+                UnhookItem(item);
+                clone.Items.Add(item);
+            }
+
+            clone.CopySourceItemMappingsFrom(this, Items);
+        }
+        finally
+        {
+            clone._suppressPopupRebuild = false;
+            clone._isRebuildingItemsSource = false;
+        }
+
+        var restoredSelection = clone.FindSelectionContainer(selected) is not null
+            ? selected
+            : FindSelectionContainer(SelectedItem) is not null
+                ? SelectedItem
+                : null;
+        if (!ReferenceEquals(clone.SelectedItem, restoredSelection)
+            && !Equals(clone.SelectedItem, restoredSelection))
+        {
+            clone.SelectedItem = restoredSelection;
+        }
+        else
+        {
+            clone.RefreshSelectionContainerState();
+        }
+        clone.RebuildPopupSupplementalContent();
         clone.ApplyCurrentFilter();
     }
 
@@ -1340,6 +1532,10 @@ public partial class InRibbonGallery :
 
         DetachFromParent(panel);
         ConfigurePanel(panel, MinItemsInDropDownRow, MaxItemsInDropDownRow);
+        panel.ConfigureGrouping(
+            !string.IsNullOrWhiteSpace(GroupBy) || GroupByAdvanced is not null
+                ? GetItemGroup
+                : null);
         _popupScroller.Content = panel;
         _borrowedOwnerPanel = panel;
     }
@@ -1361,6 +1557,7 @@ public partial class InRibbonGallery :
         }
 
         DetachFromParent(panel);
+        panel.ConfigureGrouping(null);
         owner.ConfigurePanel(panel, owner.MinItemsInRow, owner.GetCurrentItemsInRow());
         if (owner._scrollViewer is not null)
         {
@@ -1376,11 +1573,13 @@ public partial class InRibbonGallery :
         }
 
         var selected = clone.SelectedItem;
+        owner._activeQuickAccessClone = null;
 
         // Hand the borrowed panel (with the shared items still parented in it) back to the owner as a
         // single container BEFORE clearing the clone's logical Items — never reparent the elements.
         clone.ReturnOwnerGalleryPanel(owner);
 
+        clone._isRebuildingItemsSource = true;
         clone._suppressPopupRebuild = true;
         try
         {
@@ -1394,9 +1593,13 @@ public partial class InRibbonGallery :
         finally
         {
             clone._suppressPopupRebuild = false;
+            clone._isRebuildingItemsSource = false;
         }
 
-        owner.SelectedItem = selected;
+        clone._sourceItemByContainer.Clear();
+        owner.SelectedItem = owner.FindSelectionContainer(selected) is not null
+            ? selected
+            : null;
         owner.SelectedFilter = clone.SelectedFilter;
         owner.IsFrozen = false;
         owner.IsSnapped = false;

@@ -1,6 +1,8 @@
 namespace Fluent.Modern.Automation;
 
+using Fluent.Automation.Peers;
 using Fluent.Modern.Controls;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 
@@ -38,7 +40,7 @@ public partial class RibbonSearchBoxAutomationPeer : FrameworkElementAutomationP
         }
 
         return string.IsNullOrWhiteSpace(OwnerSearchBox.PlaceholderText)
-            ? "Ribbon search"
+            ? RibbonLocalization.Current.Localization.RibbonSearchName
             : OwnerSearchBox.PlaceholderText;
     }
 
@@ -54,6 +56,9 @@ public partial class RibbonSearchBoxAutomationPeer : FrameworkElementAutomationP
     public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore() => [];
+
+    /// <inheritdoc/>
     public bool IsReadOnly => OwnerSearchBox.IsAutomationReadOnly;
 
     /// <inheritdoc/>
@@ -62,7 +67,22 @@ public partial class RibbonSearchBoxAutomationPeer : FrameworkElementAutomationP
     /// <inheritdoc/>
     public void SetValue(string value)
     {
+        AutomationProviderGuard.Validate(
+            this,
+            !OwnerSearchBox.IsAutomationReadOnly,
+            "The search box value is read-only.");
         ArgumentNullException.ThrowIfNull(value);
         OwnerSearchBox.SetAutomationValue(value);
+    }
+
+    internal void RaiseValueChanged(string oldValue, string newValue)
+    {
+        if (!string.Equals(oldValue, newValue, StringComparison.Ordinal))
+        {
+            RaisePropertyChangedEvent(
+                ValuePatternIdentifiers.ValueProperty,
+                oldValue,
+                newValue);
+        }
     }
 }

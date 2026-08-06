@@ -35,7 +35,7 @@ public partial class RibbonSearchBox : Control
             nameof(PlaceholderText),
             typeof(string),
             typeof(RibbonSearchBox),
-            new PropertyMetadata("Tell me what you want to do…", OnPlaceholderTextChanged));
+            new PropertyMetadata(string.Empty, OnPlaceholderTextChanged));
 
     /// <summary>Identifies the <see cref="Text"/> dependency property.</summary>
     public static readonly DependencyProperty TextProperty =
@@ -106,6 +106,7 @@ public partial class RibbonSearchBox : Control
         GotFocus += OnGotFocus;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedDefaults);
     }
 
     #endregion
@@ -127,9 +128,13 @@ public partial class RibbonSearchBox : Control
         _autoSuggestBox = GetTemplateChild(PART_AutoSuggestBox) as AutoSuggestBox;
         if (_autoSuggestBox is not null)
         {
+            _autoSuggestBox.IsTabStop = false;
+            _autoSuggestBox.UseSystemFocusVisuals = true;
             _autoSuggestBox.PlaceholderText = PlaceholderText;
             _autoSuggestBox.Text = Text;
             AutomationProperties.SetAccessibilityView(_autoSuggestBox, AccessibilityView.Raw);
+            _autoSuggestBox.ApplyTemplate();
+            MarkImplementationTreeRaw(_autoSuggestBox);
             var automationId = AutomationProperties.GetAutomationId(this);
             if (!string.IsNullOrWhiteSpace(automationId))
             {
@@ -139,6 +144,25 @@ public partial class RibbonSearchBox : Control
             _autoSuggestBox.TextChanged += OnTextChanged;
             _autoSuggestBox.SuggestionChosen += OnSuggestionChosen;
             _autoSuggestBox.QuerySubmitted += OnQuerySubmitted;
+        }
+    }
+
+    private static void MarkImplementationTreeRaw(DependencyObject root)
+    {
+        var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < childCount; index++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, index);
+            if (child is FrameworkElement element)
+            {
+                AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
+                if (element is Control control)
+                {
+                    control.IsTabStop = false;
+                }
+            }
+
+            MarkImplementationTreeRaw(child);
         }
     }
 
@@ -154,6 +178,18 @@ public partial class RibbonSearchBox : Control
     #endregion
 
     #region Methods
+
+    private void RefreshLocalizedDefaults()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetValueIfUnsetOrGenerated(
+            this,
+            PlaceholderTextProperty,
+            localization.RibbonSearchPlaceholder);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+            this,
+            localization.RibbonSearchName);
+    }
 
     private static void OnRibbonChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -180,11 +216,18 @@ public partial class RibbonSearchBox : Control
     private static void OnTextPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var searchBox = (RibbonSearchBox)d;
-        var text = (string)e.NewValue;
+        var oldText = e.OldValue as string ?? string.Empty;
+        var text = e.NewValue as string ?? string.Empty;
         if (searchBox._autoSuggestBox is not null
             && !string.Equals(searchBox._autoSuggestBox.Text, text, StringComparison.Ordinal))
         {
             searchBox._autoSuggestBox.Text = text;
+        }
+
+        if (FrameworkElementAutomationPeer.FromElement(searchBox)
+            is RibbonSearchBoxAutomationPeer peer)
+        {
+            peer.RaiseValueChanged(oldText, text);
         }
     }
 
@@ -211,7 +254,32 @@ public partial class RibbonSearchBox : Control
             return;
         }
 
-        _autoSuggestBox?.Focus(FocusState.Programmatic);
+        var focusState = FocusState switch
+        {
+            Microsoft.UI.Xaml.FocusState.Keyboard => Microsoft.UI.Xaml.FocusState.Keyboard,
+            Microsoft.UI.Xaml.FocusState.Pointer => Microsoft.UI.Xaml.FocusState.Pointer,
+            _ => Microsoft.UI.Xaml.FocusState.Programmatic,
+        };
+        FocusEditor(focusState);
+    }
+
+    private bool FocusEditor(FocusState focusState)
+    {
+        if (_autoSuggestBox is null)
+        {
+            return false;
+        }
+
+        var isTabStop = _autoSuggestBox.IsTabStop;
+        try
+        {
+            _autoSuggestBox.IsTabStop = true;
+            return _autoSuggestBox.Focus(focusState);
+        }
+        finally
+        {
+            _autoSuggestBox.IsTabStop = isTabStop;
+        }
     }
 
     private void OnTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -318,15 +386,11 @@ public partial class RibbonSearchBox : Control
 
     internal string AutomationValue => _autoSuggestBox?.Text ?? Text;
 
-    internal bool IsAutomationReadOnly => !IsEnabled || _autoSuggestBox is { IsEnabled: false };
+    internal bool IsAutomationReadOnly =>
+        !IsEnabled || _autoSuggestBox is { IsEnabled: false };
 
     internal void SetAutomationValue(string value)
     {
-        if (IsAutomationReadOnly)
-        {
-            return;
-        }
-
         Text = value;
         if (_autoSuggestBox is not null)
         {

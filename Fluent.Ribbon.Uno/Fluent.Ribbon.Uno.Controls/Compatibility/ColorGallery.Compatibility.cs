@@ -217,6 +217,7 @@ public partial class ColorGallery
 
     private void UpdateSelectionCompatibility(Color? color)
     {
+        var selectedColorText = RibbonLocalization.Current.Localization.SelectedColor;
         _selectedSwatch = null;
         foreach (var swatch in _colorSwatches)
         {
@@ -224,7 +225,8 @@ public partial class ColorGallery
                              && color.HasValue
                              && swatchColor.Equals(color.Value);
             swatch.BorderThickness = new Thickness(isSelected ? 3 : 1);
-            AutomationProperties.SetHelpText(swatch, isSelected ? "Selected color" : string.Empty);
+            AutomationProperties.SetHelpText(swatch, isSelected ? selectedColorText : string.Empty);
+            AutomationProperties.SetItemStatus(swatch, isSelected ? selectedColorText : string.Empty);
             if (isSelected)
             {
                 _selectedSwatch = swatch;
@@ -235,14 +237,20 @@ public partial class ColorGallery
         {
             AutomationProperties.SetHelpText(
                 _automaticButton,
-                color.HasValue ? string.Empty : "Selected color");
+                color.HasValue ? string.Empty : selectedColorText);
+            AutomationProperties.SetItemStatus(
+                _automaticButton,
+                color.HasValue ? string.Empty : selectedColorText);
         }
 
         if (_noColorButton is not null)
         {
             AutomationProperties.SetHelpText(
                 _noColorButton,
-                color == Microsoft.UI.Colors.Transparent ? "Selected color" : string.Empty);
+                color == Microsoft.UI.Colors.Transparent ? selectedColorText : string.Empty);
+            AutomationProperties.SetItemStatus(
+                _noColorButton,
+                color == Microsoft.UI.Colors.Transparent ? selectedColorText : string.Empty);
         }
     }
 

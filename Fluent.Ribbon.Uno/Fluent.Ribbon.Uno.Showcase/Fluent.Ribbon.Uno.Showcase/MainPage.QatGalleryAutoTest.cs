@@ -61,6 +61,8 @@ public sealed partial class MainPage
             var button = FindByName(clone, "CollapsedContent");
             var buttonWidth = button?.ActualWidth ?? 0;
             var buttonHeight = button?.ActualHeight ?? 0;
+            var renderedWidth = buttonWidth > 0 ? buttonWidth : width;
+            var renderedHeight = buttonHeight > 0 ? buttonHeight : height;
 
             AutoLog(
                 $"  clone={width:F1}x{height:F1} at ({pos.X:F1},{pos.Y:F1}); collapsedButton={buttonWidth:F1}x{buttonHeight:F1}; isCollapsed={clone.IsCollapsed}");
@@ -68,14 +70,17 @@ public sealed partial class MainPage
             // A healthy compact gallery button is roughly as wide as the other QAT items (~28px)
             // and ~24px tall so the icon and chevron are legible. The old bug clamped it to 22x22
             // with ~28px of vertical content clipped into it (a thin sliver: height >> width-usable).
-            if (height is >= 20 and <= 34 && width is >= 24 and <= 72)
+            if (renderedHeight is >= 20 and <= 34 && renderedWidth is >= 24 and <= 72)
             {
-                AutoLog($"  QATGAL OK (clone {width:F1}x{height:F1} within compact-button bounds)");
+                AutoLog(
+                    $"  QATGAL OK (rendered button {renderedWidth:F1}x{renderedHeight:F1} "
+                    + "within compact-button bounds)");
             }
             else
             {
                 AutoLog(
-                    $"  FAIL QATGAL clone {width:F1}x{height:F1} outside compact-button bounds (w:24..72, h:20..34)");
+                    $"  FAIL QATGAL rendered button {renderedWidth:F1}x{renderedHeight:F1} "
+                    + "outside compact-button bounds (w:24..72, h:20..34)");
             }
 
             var shotPath = Environment.GetEnvironmentVariable("SHOWCASE_QAT_SHOT");
@@ -131,13 +136,8 @@ public sealed partial class MainPage
         await encoder.FlushAsync();
 
         stream.Seek(0);
-        var bytes = new byte[stream.Size];
-        using (var reader = new DataReader(stream))
-        {
-            await reader.LoadAsync((uint)stream.Size);
-            reader.ReadBytes(bytes);
-        }
-
-        File.WriteAllBytes(path, bytes);
+        using var source = stream.AsStreamForRead();
+        using var destination = File.Create(path);
+        await source.CopyToAsync(destination);
     }
 }

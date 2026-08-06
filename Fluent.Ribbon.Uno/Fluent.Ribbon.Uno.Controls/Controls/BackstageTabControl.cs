@@ -217,6 +217,7 @@ public partial class BackstageTabControl : Selector, ILogicalChildSupport
         Items.VectorChanged += HandleItemsVectorChanged;
         SelectionChanged += HandleSelectionChanged;
         OnInitialized(EventArgs.Empty);
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
     /// <summary>Provides the WPF-compatible initialization hook.</summary>
@@ -249,14 +250,25 @@ public partial class BackstageTabControl : Selector, ILogicalChildSupport
                     BackButtonUid);
             }
 
-            if (string.IsNullOrWhiteSpace(
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(backButton)))
-            {
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(backButton, "Back");
-            }
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                backButton,
+                RibbonLocalization.Current.Localization.BackstageBackButtonUid);
         }
 
+        RefreshLocalizedTemplateMetadata();
         UpdateSelectedContent();
+    }
+
+    private void RefreshLocalizedTemplateMetadata()
+    {
+        if (backButton is null)
+        {
+            return;
+        }
+
+        var name = RibbonLocalization.Current.Localization.BackstageBackButtonUid;
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(backButton, name);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(backButton, name);
     }
 
     /// <inheritdoc />
@@ -327,6 +339,9 @@ public partial class BackstageTabControl : Selector, ILogicalChildSupport
     /// <inheritdoc />
     protected virtual void OnSelectionChanged(SelectionChangedEventArgs e)
     {
+        var oldItem = e.RemovedItems.FirstOrDefault();
+        var newItem = e.AddedItems.FirstOrDefault();
+
         foreach (var item in Items)
         {
             if (GetTabItem(item) is { } tabItem)
@@ -337,6 +352,11 @@ public partial class BackstageTabControl : Selector, ILogicalChildSupport
         }
 
         UpdateSelectedContent();
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonBackstageTabControlAutomationPeer peer)
+        {
+            peer.RaiseSelectionChanged(oldItem, newItem);
+        }
     }
 
     /// <inheritdoc />

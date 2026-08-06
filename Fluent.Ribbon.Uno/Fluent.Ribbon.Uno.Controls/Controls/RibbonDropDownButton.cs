@@ -439,8 +439,18 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
 
         if (_button is not null)
         {
+            _button.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                _button,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             _button.Click += OnButtonClick;
-            _buttonClickFallback = ButtonPointerClickFallback.Attach(_button, ShowDropDown);
+            _buttonClickFallback = ButtonPointerClickFallback.Attach(
+                _button,
+                () =>
+                {
+                    Focus(FocusState.Pointer);
+                    ToggleDropDown();
+                });
         }
 
 
@@ -465,11 +475,30 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     private void OnButtonClick(object sender, RoutedEventArgs e)
     {
         PopupDiag.Log($"RibbonDropDownButton PART_Button Click (Header={Header})");
-        ShowDropDown();
+        Focus(FocusState.Pointer);
+        ToggleDropDown();
     }
 
-    private void ShowDropDown()
+    private void ToggleDropDown()
     {
+        if (IsDropDownOpen)
+        {
+            CloseDropDown();
+        }
+        else
+        {
+            ShowDropDown();
+        }
+    }
+
+    private protected virtual void ShowDropDown()
+    {
+        if (!IsDropDownOpen)
+        {
+            IsDropDownOpen = true;
+            return;
+        }
+
         if (_flyout is null)
         {
             var panel = new StackPanel { MinWidth = 200 };
@@ -514,6 +543,14 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
                 item.SetDropDownOwner(this);
             }
 
+            foreach (var colorGallery in dropDownItems.OfType<ColorGallery>())
+            {
+                Fluent.Helpers.TouchTargetGeometry.PropagateCompactTargetSize(
+                    this,
+                    colorGallery);
+                colorGallery.RefreshTouchTargetGeometry();
+            }
+
             var itemsHost = new ItemsControl
             {
                 ItemsSource = dropDownItems,
@@ -521,6 +558,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
                 ItemTemplateSelector = ItemTemplateSelector,
                 ItemContainerStyle = ItemContainerStyle,
                 ItemsPanel = ItemsPanel,
+                FlowDirection = FlowDirection,
             };
             panel.Children.Add(itemsHost);
 
@@ -568,8 +606,12 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
             };
         }
 
+        var requestedFlyout = _flyout;
         PopupDiag.Log($"RibbonDropDownButton.ShowDropDown -> ShowDeferred (Header={Header})");
-        FlyoutShowHelper.ShowDeferred(_flyout, (FrameworkElement?)_button ?? this);
+        FlyoutShowHelper.ShowDeferred(
+            requestedFlyout,
+            (FrameworkElement?)_button ?? this,
+            () => IsDropDownOpen && ReferenceEquals(_flyout, requestedFlyout));
     }
 
     internal void OpenDropDownForAutomation() => ShowDropDown();
@@ -587,9 +629,13 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     /// </summary>
     public virtual void CloseDropDown()
     {
-        if (_flyout is not null && IsDropDownOpen)
+        if (IsDropDownOpen)
         {
-            _flyout.Hide();
+            IsDropDownOpen = false;
+        }
+        else
+        {
+            HideDropDownPopup();
         }
     }
 
@@ -601,6 +647,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         if ((bool)args.NewValue)
         {
             PopupService.RegisterOpenDropDown(button);
+            button.ShowDropDown();
         }
         else
         {
@@ -609,6 +656,14 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
             // Unlike WPF, IsDropDownOpen is not bound to the popup here, so a dismissal
             // that sets it to false must also hide the flyout that backs this control.
             button.HideDropDownPopup();
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(button)
+            is Fluent.Automation.Peers.RibbonDropDownButtonAutomationPeer peer)
+        {
+            peer.RaiseIsDropDownOpenChanged(
+                (bool)args.OldValue,
+                (bool)args.NewValue);
         }
     }
 
@@ -732,6 +787,35 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         UpdateCommonVisualState();
     }
 
+    /// <inheritdoc/>
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Handled || !IsEnabled)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Enter:
+            case Windows.System.VirtualKey.Space:
+                ToggleDropDown();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Down:
+            case Windows.System.VirtualKey.Up:
+                ShowDropDown();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Escape when IsDropDownOpen:
+                CloseDropDown();
+                e.Handled = true;
+                break;
+        }
+    }
+
     private void UpdateCurrentIcon()
     {
         var smallIcon = Icon as ImageSource;
@@ -747,6 +831,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     /// <inheritdoc />
     public virtual KeyTipPressedResult OnKeyTipPressed()
     {
+        Focus(FocusState.Programmatic);
         ShowDropDown();
         return new KeyTipPressedResult(true, true);
     }

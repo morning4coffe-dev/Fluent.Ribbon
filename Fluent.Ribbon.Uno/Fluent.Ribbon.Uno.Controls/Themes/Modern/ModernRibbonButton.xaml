@@ -9,6 +9,7 @@
     <converters:BoolToVisibilityConverter x:Key="ModernInverseBoolToVisibilityConverter" Invert="True" />
 
     <Style TargetType="modernControls:ModernRibbonButton">
+        <Setter Property="IsTabStop" Value="True" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
@@ -19,6 +20,8 @@
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="modernControls:ModernRibbonButton">
@@ -29,11 +32,17 @@
                         BorderThickness="{TemplateBinding BorderThickness}"
                         CornerRadius="3"
                         MinWidth="44"
-                        Padding="{TemplateBinding Padding}">
+                        Padding="{TemplateBinding Padding}"
+                        Control.IsTemplateFocusTarget="True">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_ModernIcon.IconForegroundOverride" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="PART_GlyphIcon.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                        <Setter Target="PART_Label.Foreground" Value="{ThemeResource RibbonHoverForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonHoverBrush}" />
@@ -44,6 +53,11 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_ModernIcon.IconForegroundOverride" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="PART_GlyphIcon.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                        <Setter Target="PART_Label.Foreground" Value="{ThemeResource RibbonPressedForegroundBrush}" />
+                                    </VisualState.Setters>
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource RibbonPressedBrush}" />
@@ -54,13 +68,12 @@
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
-                                    <Storyboard>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="ContentPanel"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0.5"
-                                            Duration="0" />
-                                    </Storyboard>
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_ModernIcon.IconForegroundOverride" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_GlyphIcon.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_Label.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_Icon.Opacity" Value="0.5" />
+                                    </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="SizeStates">
@@ -114,6 +127,7 @@
                                 <modernControls:ModernIconPresenter
                                     x:Name="PART_ModernIcon"
                                     Source="{TemplateBinding CurrentIconSource}"
+                                    Foreground="{TemplateBinding Foreground}"
                                     Visibility="{Binding HasIconSource, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ModernBoolToVisibilityConverter}, FallbackValue=Collapsed}" />
                                 <Grid Visibility="{Binding HasIconSource, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ModernInverseBoolToVisibilityConverter}, FallbackValue=Visible}">
                                     <FontIcon

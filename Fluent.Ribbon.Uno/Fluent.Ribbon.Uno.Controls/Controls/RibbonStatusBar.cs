@@ -58,6 +58,15 @@ public partial class RibbonStatusBar : StatusBarBase
         Items.CollectionChanged += OnItemsChanged;
         RightItems.CollectionChanged += OnRightItemsChanged;
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedMetadata);
+    }
+
+    private void RefreshLocalizedMetadata()
+    {
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+            this,
+            RibbonLocalization.Current.Localization.StatusBarName);
+        RebuildCustomizationMenu();
     }
 
     #endregion

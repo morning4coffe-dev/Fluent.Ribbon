@@ -21,14 +21,27 @@ internal static class FlyoutShowHelper
     /// Shows <paramref name="flyout"/> anchored to <paramref name="target"/> after the current
     /// input event has finished processing.
     /// </summary>
-    internal static void ShowDeferred(FlyoutBase? flyout, FrameworkElement? target)
+    internal static void ShowDeferred(
+        FlyoutBase? flyout,
+        FrameworkElement? target,
+        Func<bool>? shouldShow = null)
     {
         if (flyout is null || target is null)
         {
             return;
         }
 
-        Defer(target, () => ShowIfStillLive(target, () => flyout.ShowAt(target)));
+        Defer(
+            target,
+            () =>
+            {
+                if (shouldShow?.Invoke() is false)
+                {
+                    return;
+                }
+
+                ShowIfStillLive(target, () => flyout.ShowAt(target));
+            });
     }
 
     /// <summary>

@@ -31,6 +31,7 @@ public partial class RibbonMenu : MenuBase
     #region Fields
 
     private StackPanel? _itemsPanel;
+    private string? localizedAutomationName;
 
     #endregion
 
@@ -44,6 +45,7 @@ public partial class RibbonMenu : MenuBase
         DefaultStyleKey = typeof(RibbonMenu);
         Items = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedAutomationName);
     }
 
     #endregion
@@ -79,6 +81,20 @@ public partial class RibbonMenu : MenuBase
         }
     }
 
+    private void RefreshLocalizedAutomationName()
+    {
+        var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = RibbonLocalization.Current.Localization.RibbonMenuName;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.UpdatePeerName(
+            this,
+            ref localizedAutomationName,
+            name);
+    }
+
     /// <summary>Creates the default ribbon menu-item container.</summary>
     protected override DependencyObject GetContainerForItemOverride()
     {
@@ -86,4 +102,8 @@ public partial class RibbonMenu : MenuBase
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonMenuAutomationPeer(this);
 }

@@ -49,6 +49,17 @@ public partial class Ribbon : ILogicalChildSupport
     static Ribbon()
     {
         SelectedTabItemProperty = SelectedTabProperty;
+        RibbonLocalization.Current.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(RibbonLocalization.Localization)
+                or nameof(RibbonLocalization.Culture)
+                or null
+                or "")
+            {
+                RefreshCommandLabels();
+            }
+        };
+        RefreshCommandLabels();
     }
 
     /// <summary>Gets or sets the selected WPF-compatible tab item.</summary>
@@ -258,37 +269,49 @@ public partial class Ribbon : ILogicalChildSupport
 
     /// <summary>Gets the command that moves the quick access toolbar above the ribbon.</summary>
     public static readonly XamlUICommand ShowQuickAccessAboveCommand =
-        CreateRibbonCommand("Show Quick Access Toolbar Above", ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = true);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = true);
 
     /// <summary>Gets the command that moves the quick access toolbar below the ribbon.</summary>
     public static readonly XamlUICommand ShowQuickAccessBelowCommand =
-        CreateRibbonCommand("Show Quick Access Toolbar Below", ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = false);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = false);
 
     /// <summary>Gets the command that toggles ribbon minimization.</summary>
     public static readonly XamlUICommand ToggleMinimizeTheRibbonCommand =
-        CreateRibbonCommand("Toggle Ribbon Minimized", ribbon => ribbon.ToggleMinimize(), ribbon => ribbon.CanMinimize);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.ToggleMinimize(), ribbon => ribbon.CanMinimize);
 
     /// <summary>Gets the command that switches to the classic ribbon.</summary>
     public static readonly XamlUICommand SwitchToTheClassicRibbonCommand =
-        CreateRibbonCommand("Use Classic Ribbon", ribbon => ribbon.IsSimplified = false, ribbon => ribbon.CanUseSimplified);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.IsSimplified = false, ribbon => ribbon.CanUseSimplified);
 
     /// <summary>Gets the command that switches to the simplified ribbon.</summary>
     public static readonly XamlUICommand SwitchToTheSimplifiedRibbonCommand =
-        CreateRibbonCommand("Use Simplified Ribbon", ribbon => ribbon.IsSimplified = true, ribbon => ribbon.CanUseSimplified);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.IsSimplified = true, ribbon => ribbon.CanUseSimplified);
 
     /// <summary>Gets the command that requests quick access toolbar customization.</summary>
     public static readonly XamlUICommand CustomizeQuickAccessToolbarCommand =
         CreateRibbonCommand(
-            "Customize Quick Access Toolbar",
+            string.Empty,
             ribbon => ribbon.CustomizeQuickAccessToolbar?.Invoke(ribbon, EventArgs.Empty),
             ribbon => ribbon.CanCustomizeQuickAccessToolBar);
 
     /// <summary>Gets the command that requests ribbon customization.</summary>
     public static readonly XamlUICommand CustomizeTheRibbonCommand =
         CreateRibbonCommand(
-            "Customize the Ribbon",
+            string.Empty,
             ribbon => ribbon.CustomizeTheRibbon?.Invoke(ribbon, EventArgs.Empty),
             ribbon => ribbon.CanCustomizeRibbon);
+
+    private static void RefreshCommandLabels()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        ShowQuickAccessAboveCommand.Label = localization.RibbonContextMenuShowAbove;
+        ShowQuickAccessBelowCommand.Label = localization.RibbonContextMenuShowBelow;
+        ToggleMinimizeTheRibbonCommand.Label = localization.RibbonContextMenuMinimizeRibbon;
+        SwitchToTheClassicRibbonCommand.Label = localization.UseClassicRibbon;
+        SwitchToTheSimplifiedRibbonCommand.Label = localization.UseSimplifiedRibbon;
+        CustomizeQuickAccessToolbarCommand.Label = localization.QuickAccessToolBarMenuHeader;
+        CustomizeTheRibbonCommand.Label = localization.RibbonContextMenuCustomizeRibbon;
+    }
 
     /// <summary>Gets or sets whether the default ribbon context menu is enabled.</summary>
     public bool IsDefaultContextMenuEnabled

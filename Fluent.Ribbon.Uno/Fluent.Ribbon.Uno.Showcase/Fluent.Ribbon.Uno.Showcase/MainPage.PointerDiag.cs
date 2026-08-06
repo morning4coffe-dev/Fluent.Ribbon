@@ -126,7 +126,7 @@ public sealed partial class MainPage
     {
         try
         {
-            var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot);
+            var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot!);
             return Describe(focused as DependencyObject);
         }
         catch

@@ -31,7 +31,10 @@
         </Grid.RowDefinitions>
 
         <!-- Ribbon Control -->
-        <fluent:Ribbon x:Name="MainRibbon" Title="Fluent Ribbon Uno - Showcase"
+        <fluent:Ribbon x:Name="MainRibbon"
+                       AutomationProperties.AutomationId="MainRibbon"
+                       AutomationProperties.Name="Fluent Ribbon Showcase"
+                       Title="Fluent Ribbon Uno - Showcase"
                        IsQuickAccessToolBarVisible="True"
                        ShowQuickAccessToolBarAboveRibbon="True">
             <!-- Application Menu -->
@@ -43,7 +46,7 @@
                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniOpen" Header="Open" IconGlyph="&#xE838;" Description="Open an existing document" />
                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniSave" Header="Save" IconGlyph="&#xE74E;" />
                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniSaveAs" Header="Save As" IconGlyph="&#xE792;" Description="Save to a different file" />
-                        <fluent:RibbonSeparator Orientation="Horizontal" />
+                        <fluent:RibbonSeparator x:Name="SaveAsSeparator" Orientation="Horizontal" />
                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniPrint" Header="Print" IconGlyph="&#xE749;" Description="Print the document" />
                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniExport" Header="Export" IconGlyph="&#xEDE1;" Description="Export to another format" />
                         <fluent:RibbonSeparator Orientation="Horizontal" />
@@ -101,9 +104,9 @@
                     <fluent:RibbonTab.Groups>
 
                         <!-- Clipboard Group -->
-                        <fluent:RibbonGroupBox Header="Clipboard" IconGlyph="&#xE77F;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="C">
+                        <fluent:RibbonGroupBox x:Name="ClipboardGroup" AutomationProperties.AutomationId="GrpClipboard" Header="Clipboard" IconGlyph="&#xE77F;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="C">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonSplitButton x:Name="pasteButton" Header="Paste" Size="Large" IconGlyph="&#xE77F;" fluent:KeyTip.Keys="V">
+                                <fluent:RibbonSplitButton x:Name="pasteButton" AutomationProperties.AutomationId="SpbPaste" Header="Paste" Size="Large" IconGlyph="&#xE77F;" fluent:KeyTip.Keys="V">
                                     <fluent:RibbonSplitButton.Items>
                                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniKeepSourceFormatting" Header="Keep Source Formatting" IconGlyph="&#xE77F;" />
                                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniMergeFormatting" Header="Merge Formatting" IconGlyph="&#xE8D2;" />
@@ -116,10 +119,10 @@
                                         <fluent:ScreenTip Title="Paste (Ctrl+V)" Text="Paste the contents of the clipboard." DisableReason="Copy something first to use Paste." />
                                     </ToolTipService.ToolTip>
                                 </fluent:RibbonSplitButton>
-                                <fluent:RibbonButton x:Name="cutButton" Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" IsEnabled="False" fluent:KeyTip.Keys="X" />
+                                <fluent:RibbonButton x:Name="cutButton" AutomationProperties.AutomationId="BtnCut" Header="Cut" Size="Medium" IconGlyph="&#xE8C6;" IsEnabled="False" fluent:KeyTip.Keys="X" />
                                 <fluent:RibbonButton x:Name="copyButton" Header="Copy" Size="Medium" IconGlyph="&#xE8C8;" IsEnabled="False" fluent:KeyTip.Keys="C" />
                                 <fluent:RibbonButton AutomationProperties.AutomationId="BtnFormatPainter" Header="Format Painter" Size="Medium" IconGlyph="&#xE790;" fluent:KeyTip.Keys="FP" />
-                                <fluent:RibbonDropDownButton AutomationProperties.AutomationId="DdbDropDownButton" Header="DropDown&#x0A;Button" Size="Large" IconGlyph="&#xE7C1;" HasTriangle="True" fluent:KeyTip.Keys="W">
+                                <fluent:RibbonDropDownButton AutomationProperties.AutomationId="DdbDropDownButton" AutomationProperties.Name="Watermark options" Header="DropDown&#x0A;Button" Size="Large" IconGlyph="&#xE7C1;" HasTriangle="True" fluent:KeyTip.Keys="W">
                                     <fluent:RibbonDropDownButton.Items>
                                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniConfidential" Header="Confidential" IconGlyph="&#xE72E;" />
                                         <fluent:RibbonMenuItem AutomationProperties.AutomationId="MniDoNotCopy" Header="Do Not Copy" IconGlyph="&#xE72E;" />
@@ -174,7 +177,7 @@
                                             </fluent:RibbonDropDownButton.Items>
                                         </fluent:RibbonDropDownButton>
                                         <fluent:RibbonButton x:Name="btnClearFormatting" Size="Small" IconGlyph="&#xE894;" ToolTipService.ToolTip="Clear Formatting" />
-                                        <fluent:RibbonToggleButton x:Name="btnBold" Size="Small" IconGlyph="&#xE8DD;" ToolTipService.ToolTip="Bold" />
+                                        <fluent:RibbonToggleButton x:Name="btnBold" AutomationProperties.AutomationId="TglBold" AutomationProperties.Name="Bold" Size="Small" IconGlyph="&#xE8DD;" ToolTipService.ToolTip="Bold" />
                                         <fluent:RibbonToggleButton x:Name="btnItalic" Size="Small" IconGlyph="&#xE8DB;" ToolTipService.ToolTip="Italic" />
                                         <fluent:RibbonToggleButton x:Name="btnUnderline" Size="Small" IconGlyph="&#xE8DC;" ToolTipService.ToolTip="Underline" />
                                         <fluent:RibbonButton x:Name="btnStrikethrough" Size="Small" IconGlyph="&#xEDE0;" ToolTipService.ToolTip="Strikethrough" />
@@ -324,10 +327,10 @@
                         </fluent:RibbonGroupBox>
 
                         <!-- Spinners Group -->
-                        <fluent:RibbonGroupBox x:Name="SpinnersGroup" Header="Spinners" IconGlyph="&#xE8EF;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" SimplifiedStateDefinition="Collapsed" fluent:KeyTip.Keys="ZXB">
+                        <fluent:RibbonGroupBox x:Name="SpinnersGroup" AutomationProperties.AutomationId="GrpSpinners" Header="Spinners" IconGlyph="&#xE8EF;" IsLauncherVisible="True" LauncherClick="OnLauncherClick" SimplifiedStateDefinition="Collapsed" fluent:KeyTip.Keys="ZXB">
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonSpinner AutomationProperties.AutomationId="SpnLeft" Header="Left:" IconGlyph="&#xE8EF;" Value="1" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" IsEnabled="False" />
-                                <fluent:RibbonSpinner AutomationProperties.AutomationId="SpnRight" Header="Right:" IconGlyph="&#xE8EF;" Value="1" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" SelectAllTextOnFocus="True" />
+                                <fluent:RibbonSpinner AutomationProperties.AutomationId="SpnRight" AutomationProperties.Name="Right margin" Header="Right:" IconGlyph="&#xE8EF;" Value="1" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" SelectAllTextOnFocus="True" />
                                 <fluent:RibbonSpinner AutomationProperties.AutomationId="SpnTop" Header="Top:" IconGlyph="&#xE8EF;" Value="0" Minimum="0" Maximum="1000" Increment="1" Format="0 px" InputWidth="75" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
@@ -339,10 +342,10 @@
                 <fluent:RibbonTab AutomationProperties.AutomationId="TabInsert" Header="Insert" fluent:KeyTip.Keys="I"
                                   ReduceOrder="groupLL, groupLL, groupLL">
                     <fluent:RibbonTab.Groups>
-                        <fluent:RibbonGroupBox x:Name="groupLL" Header="Fonts" IconGlyph="&#xE8D2;"
+                        <fluent:RibbonGroupBox x:Name="groupLL" AutomationProperties.AutomationId="GrpInsertFonts" Header="Fonts" IconGlyph="&#xE8D2;"
                                                IsLauncherVisible="False" fluent:KeyTip.Keys="FG">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:RibbonComboBox x:Name="insertFontsCombo1" Header="Fonts"
+                                <fluent:RibbonComboBox x:Name="insertFontsCombo1" AutomationProperties.AutomationId="CmbInsertFonts" AutomationProperties.Name="Insert font" Header="Fonts"
                                                        IconGlyph="&#xE8D2;" InputWidth="120" fluent:KeyTip.Keys="FD" />
                                 <fluent:RibbonComboBox x:Name="insertFontsCombo2" Header="Fonts" InputWidth="120" />
                                 <fluent:RibbonButton AutomationProperties.AutomationId="BtnAddItemToFonts" Header="Add item to fonts" Size="Medium"
@@ -354,7 +357,7 @@
 
                         <fluent:RibbonGroupBox Header="Gallery" IconGlyph="&#xE7BA;">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:InRibbonGallery x:Name="InsertSplitGallery" Header="Split"
+                                <fluent:InRibbonGallery x:Name="InsertSplitGallery" AutomationProperties.AutomationId="GalInsertSplit" AutomationProperties.Name="Insert gallery" Header="Split"
                                                         Width="100" IconGlyph="&#xE7BA;" ItemHeight="55" ItemWidth="40"
                                                         fluent:KeyTip.Keys="S" MaxItemsInRow="2" MinItemsInRow="2" />
                                 <fluent:InRibbonGallery x:Name="InsertManyItemsGallery" Header="Many items"
@@ -444,7 +447,7 @@
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <fluent:RibbonGroupBox Header="Grouped SplitButton" IconGlyph="&#xE713;">
+                        <fluent:RibbonGroupBox x:Name="GroupedSplitGroup" AutomationProperties.AutomationId="GrpGroupedSplit" Header="Grouped SplitButton" IconGlyph="&#xE713;">
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonSplitButton AutomationProperties.AutomationId="SpbSplit1" Header="Split 1" Size="Large" IconGlyph="&#xE713;" IsCheckable="True">
                                     <fluent:RibbonSplitButton.Items>
@@ -458,7 +461,7 @@
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <fluent:RibbonGroupBox Header="Grouped ToggleButton" IconGlyph="&#xE713;">
+                        <fluent:RibbonGroupBox x:Name="GroupedToggleGroup" AutomationProperties.AutomationId="GrpGroupedToggle" Header="Grouped ToggleButton" IconGlyph="&#xE713;">
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonToggleButton AutomationProperties.AutomationId="TglToggle1" Header="Toggle 1" Size="Large" IconGlyph="&#xE713;" GroupName="GroupedToggle" IsChecked="True" fluent:KeyTip.Keys="T1" />
                                 <fluent:RibbonToggleButton AutomationProperties.AutomationId="TglToggle2" Header="Toggle 2" Size="Medium" IconGlyph="&#xE713;" GroupName="GroupedToggle" fluent:KeyTip.Keys="T2" />
@@ -482,10 +485,10 @@
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <fluent:RibbonGroupBox Header="SharedSizeScope">
+                        <fluent:RibbonGroupBox x:Name="SharedSizeGroup" AutomationProperties.AutomationId="GrpSharedSize" Header="SharedSizeScope">
                             <fluent:RibbonGroupBox.Items>
                                 <fluent:RibbonComboBox x:Name="sharedSizeCombo" Header="Many items" InputWidth="120" />
-                                <fluent:RibbonTextBox AutomationProperties.AutomationId="TxtMyShortHeader" Header="My short header" InputWidth="120" />
+                                <fluent:RibbonTextBox AutomationProperties.AutomationId="TxtMyShortHeader" AutomationProperties.Name="Document title" Header="My short header" Text="Draft" InputWidth="120" />
                                 <fluent:RibbonSpinner AutomationProperties.AutomationId="SpnMyLongLongHeader" Header="My long long header" Value="0" InputWidth="60" />
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
@@ -525,10 +528,10 @@
                             </fluent:RibbonGroupBox.Items>
                         </fluent:RibbonGroupBox>
 
-                        <fluent:RibbonGroupBox x:Name="GalleriesLauncherGroup" Header="Galleries" IconGlyph="&#xE80A;"
+                        <fluent:RibbonGroupBox x:Name="GalleriesLauncherGroup" AutomationProperties.AutomationId="GrpGalleries" Header="Galleries" IconGlyph="&#xE80A;"
                                                IsLauncherVisible="True" LauncherClick="OnLauncherClick" fluent:KeyTip.Keys="A">
                             <fluent:RibbonGroupBox.Items>
-                                <fluent:InRibbonGallery x:Name="GalInRibbon" Header="In-Ribbon Gallery" IconGlyph="&#xE80A;"
+                                <fluent:InRibbonGallery x:Name="GalInRibbon" AutomationProperties.AutomationId="GalInRibbon" Header="In-Ribbon Gallery" IconGlyph="&#xE80A;"
                                                         CanCollapseToButton="True" IsCollapsed="False" ItemHeight="56"
                                                         MaxItemsInDropDownRow="5" MaxItemsInRow="10"
                                                         MinItemsInDropDownRow="4" MinItemsInRow="2"
@@ -787,7 +790,9 @@
         </fluent:Ribbon>
 
         <!-- Main Content Area -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1"
+              AutomationProperties.Name="Showcase content"
+              AutomationProperties.LandmarkType="Main">
             <ScrollViewer>
                 <StackPanel Padding="20" Spacing="24">
                     <!-- Hero Section -->
@@ -800,6 +805,8 @@
                         </Border.Background>
                         <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="860">
                             <TextBlock
+                                AutomationProperties.AutomationId="ShowcaseHeading"
+                                AutomationProperties.HeadingLevel="Level1"
                                 Text="Fluent.Ribbon.Uno"
                                 FontSize="30"
                                 FontWeight="Bold"
@@ -845,7 +852,10 @@
                     </Border>
 
                     <!-- Ported Controls Showcase Section -->
-                    <TextBlock Text="Ported Controls Showcase" Style="{StaticResource SectionHeading}" />
+                    <TextBlock AutomationProperties.AutomationId="PortedControlsHeading"
+                               AutomationProperties.HeadingLevel="Level2"
+                               Text="Ported Controls Showcase"
+                               Style="{StaticResource SectionHeading}" />
 
                     <!-- ColorGallery -->
                     <Border Style="{StaticResource ShowcaseCard}">

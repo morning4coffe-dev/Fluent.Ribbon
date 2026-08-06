@@ -20,11 +20,11 @@ public partial class MenuItem
             else
             {
                 IsChecked = true;
-                UncheckGroupPeers();
             }
         }
 
         InvokeItem();
+        RaiseInvokedAutomationEvent();
 
         if (IsDefinitive)
         {
@@ -39,28 +39,16 @@ public partial class MenuItem
             return;
         }
 
-        for (DependencyObject? current = VisualTreeHelper.GetParent(this);
-             current is not null;
-             current = VisualTreeHelper.GetParent(current))
+        foreach (var peer in GetSiblingMenuItems())
         {
-            if (current is not Panel panel)
+            if (!ReferenceEquals(peer, this)
+                && string.Equals(
+                    peer.GroupName,
+                    GroupName,
+                    StringComparison.Ordinal))
             {
-                continue;
+                peer.IsChecked = false;
             }
-
-            foreach (var peer in panel.Children.OfType<MenuItem>())
-            {
-                if (!ReferenceEquals(peer, this)
-                    && string.Equals(
-                        peer.GroupName,
-                        GroupName,
-                        StringComparison.Ordinal))
-                {
-                    peer.IsChecked = false;
-                }
-            }
-
-            return;
         }
     }
 }

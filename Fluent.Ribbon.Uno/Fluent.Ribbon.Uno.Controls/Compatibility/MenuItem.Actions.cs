@@ -1,7 +1,5 @@
 namespace Fluent;
 
-using Microsoft.UI.Xaml.Automation.Provider;
-
 public partial class MenuItem
 {
     /// <inheritdoc />
@@ -28,12 +26,11 @@ public partial class MenuItem
     {
         if (HasSubItems)
         {
-            IsDropDownOpen = true;
-            Focus(FocusState.Programmatic);
+            OpenSubmenuAndFocusFirstItem();
             return new KeyTipPressedResult(true, true);
         }
 
-        ((IInvokeProvider)new RibbonMenuItemAutomationPeer(this)).Invoke();
+        OnClick();
         return KeyTipPressedResult.Empty;
     }
 

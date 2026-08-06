@@ -138,6 +138,7 @@ public partial class QuickAccessToolBar : Control
         Items.CollectionChanged += OnItemsCollectionChanged;
         SizeChanged += OnSizeChanged;
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
     #endregion
@@ -161,7 +162,7 @@ public partial class QuickAccessToolBar : Control
         if (_overflowButton is not null)
         {
             _overflowButton.Click += OnOverflowButtonClick;
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
                 _overflowButton,
                 RibbonLocalization.Current.Localization.QuickAccessToolBarMoreControlsButtonTooltip);
         }
@@ -176,17 +177,43 @@ public partial class QuickAccessToolBar : Control
         if (_menuButton is not null)
         {
             _menuButton.Click += OnMenuButtonClick;
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
                 _menuButton,
                 RibbonLocalization.Current.Localization.QuickAccessToolBarDropDownButtonTooltip);
         }
 
+        RefreshLocalizedTemplateMetadata();
         SyncItems();
     }
 
     #endregion
 
     #region Methods
+
+    private void RefreshLocalizedTemplateMetadata()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+            this,
+            localization.QuickAccessToolBarName);
+        SetLocalizedAction(
+            _overflowButton,
+            localization.QuickAccessToolBarMoreControlsButtonTooltip);
+        SetLocalizedAction(
+            _menuButton,
+            localization.QuickAccessToolBarDropDownButtonTooltip);
+    }
+
+    private static void SetLocalizedAction(DependencyObject? action, string name)
+    {
+        if (action is null)
+        {
+            return;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(action, name);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(action, name);
+    }
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -304,9 +331,19 @@ public partial class QuickAccessToolBar : Control
                 if (child is FrameworkElement fe && _overflowedItems.Contains(fe))
                 {
                     // Create a proxy representation for the overflow item
-                    var header = "Item";
-                    if (child is RibbonButton rb) header = rb.Header?.ToString() ?? "Button";
-                    else if (child is IHeaderedControl hc) header = hc.Header?.ToString() ?? "Item";
+                    var header = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(child);
+                    if (string.IsNullOrWhiteSpace(header) && child is IHeaderedControl headered)
+                    {
+                        header = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(
+                            headered.Header);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(header))
+                    {
+                        header = string.Format(
+                            RibbonLocalization.Current.Localization.QuickAccessToolBarItemFormat,
+                            overflowIndex + 1);
+                    }
 
                     var menuItem = new WinUIButton
                     {

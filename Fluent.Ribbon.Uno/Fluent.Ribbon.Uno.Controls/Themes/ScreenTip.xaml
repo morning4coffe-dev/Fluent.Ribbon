@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:ScreenTip">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Padding" Value="12,8" />
         <Setter Property="MaxWidth" Value="318" />
         <Setter Property="Template">

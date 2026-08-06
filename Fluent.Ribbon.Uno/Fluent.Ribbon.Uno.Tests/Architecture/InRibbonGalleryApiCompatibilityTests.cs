@@ -32,6 +32,7 @@ public class InRibbonGalleryApiCompatibilityTests
             nameof(InRibbonGallery.HeaderTemplateSelectorProperty),
             nameof(InRibbonGallery.IconProperty),
             nameof(InRibbonGallery.IsSimplifiedProperty),
+            nameof(InRibbonGallery.ItemsSourceProperty),
             nameof(InRibbonGallery.MaxDropDownHeightProperty),
             nameof(InRibbonGallery.MaxDropDownWidthProperty),
             nameof(InRibbonGallery.MaxItemsInDropDownRowProperty),

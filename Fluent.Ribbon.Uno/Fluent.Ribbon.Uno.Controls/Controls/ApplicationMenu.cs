@@ -24,6 +24,7 @@ public partial class ApplicationMenu : DropDownButton
     private FrameworkElement? _keyboardRoot;
     private WeakReference<UIElement>? _focusBackup;
     private bool _focusLastItemOnOpen;
+    private string? localizedAutomationName;
 
     #region Dependency Properties
 
@@ -88,8 +89,11 @@ public partial class ApplicationMenu : DropDownButton
     public ApplicationMenu()
     {
         DefaultStyleKey = typeof(ApplicationMenu);
-        Header = "File";
         CanAddToQuickAccessToolBar = false;
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedDefaults);
+        RegisterPropertyChangedCallback(
+            HeaderProperty,
+            static (sender, _) => ((ApplicationMenu)sender).RefreshHeaderMetadata());
         RegisterPropertyChangedCallback(
             ItemsControl.ItemsSourceProperty,
             static (sender, _) => ((ApplicationMenu)sender).RefreshItemsSource());
@@ -119,21 +123,80 @@ public partial class ApplicationMenu : DropDownButton
 
         if (_button is not null)
         {
+            _button.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                _button,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             _button.Click += OnButtonClick;
-            _buttonClickFallback = ButtonPointerClickFallback.Attach(_button, ToggleDropDown);
+            _buttonClickFallback = ButtonPointerClickFallback.Attach(
+                _button,
+                () =>
+                {
+                    Focus(FocusState.Pointer);
+                    ToggleDropDown();
+                });
             var ownerId = Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(this);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(
                 _button,
                 $"{(string.IsNullOrWhiteSpace(ownerId) ? nameof(ApplicationMenu) : ownerId)}.Button");
 
-            if (string.IsNullOrWhiteSpace(
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(_button)))
-            {
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
-                    _button,
-                    Header?.ToString() ?? "Application menu");
-            }
+            RefreshButtonName();
         }
+    }
+
+    private void RefreshLocalizedDefaults()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetValueIfUnsetOrGenerated(
+            this,
+            HeaderProperty,
+            localization.BackstageButtonText);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetValueIfUnsetOrGenerated(
+            this,
+            KeyTipProperty,
+            localization.BackstageButtonKeyTip);
+        RefreshButtonName();
+        RefreshOuterAutomationName();
+    }
+
+    private void RefreshButtonName()
+    {
+        if (_button is null)
+        {
+            return;
+        }
+
+        var name = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+            _button,
+            string.IsNullOrWhiteSpace(name)
+                ? RibbonLocalization.Current.Localization.ApplicationMenuName
+                : name);
+    }
+
+    private void RefreshHeaderMetadata()
+    {
+        RefreshButtonName();
+        RefreshOuterAutomationName();
+    }
+
+    private void RefreshOuterAutomationName()
+    {
+        var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = RibbonLocalization.Current.Localization.ApplicationMenuName;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.UpdatePeerName(
+            this,
+            ref localizedAutomationName,
+            name);
     }
 
     #endregion
@@ -142,6 +205,7 @@ public partial class ApplicationMenu : DropDownButton
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
     {
+        Focus(FocusState.Pointer);
         ToggleDropDown();
     }
 
@@ -179,7 +243,7 @@ public partial class ApplicationMenu : DropDownButton
 
     private protected override void HideDropDownPopup() => _flyout?.Hide();
 
-    private void ShowDropDown()
+    private protected override void ShowDropDown()
     {
         if (IsDropDownOpen)
         {
@@ -202,11 +266,17 @@ public partial class ApplicationMenu : DropDownButton
 
         _focusBackup = FocusRoutingHelper.CaptureFocusedElement(this);
         IsDropDownOpen = true;
-        FlyoutShowHelper.ShowDeferred(_flyout!, (FrameworkElement?)_button ?? this);
+        var requestedFlyout = _flyout;
+        FlyoutShowHelper.ShowDeferred(
+            requestedFlyout,
+            (FrameworkElement?)_button ?? this,
+            () => IsDropDownOpen && ReferenceEquals(_flyout, requestedFlyout));
     }
 
     private void BuildFlyout()
     {
+        ConfigureMenuItemOwners();
+
         // Build the two-pane dropdown content
         var rootPanel = new Grid { MinWidth = 400 };
         rootPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -223,7 +293,8 @@ public partial class ApplicationMenu : DropDownButton
             ItemTemplate = ItemTemplate,
             ItemTemplateSelector = ItemTemplateSelector,
             ItemContainerStyle = ItemContainerStyle,
-            ItemsPanel = ItemsPanel
+            ItemsPanel = ItemsPanel,
+            FlowDirection = FlowDirection,
         };
         _leftPane = leftPane;
 
@@ -293,9 +364,20 @@ public partial class ApplicationMenu : DropDownButton
 
     private void RefreshItemsSource()
     {
+        ConfigureMenuItemOwners();
         if (_leftPane is not null)
         {
             _leftPane.ItemsSource = ItemsSource ?? Items;
+            _leftPane.FlowDirection = FlowDirection;
+        }
+    }
+
+    private void ConfigureMenuItemOwners()
+    {
+        var items = ItemsSource as System.Collections.IEnumerable ?? Items;
+        foreach (var item in items.Cast<object>().OfType<IDropDownItemOwner>())
+        {
+            item.SetDropDownOwner(this);
         }
     }
 
@@ -335,7 +417,7 @@ public partial class ApplicationMenu : DropDownButton
                                 || FocusRoutingHelper.IsDescendantOf(focused, _rootPanel));
         if (shouldRestore)
         {
-            if (_button?.Focus(FocusState.Programmatic) == true)
+            if (Focus(FocusState.Programmatic))
             {
                 _focusBackup = null;
             }

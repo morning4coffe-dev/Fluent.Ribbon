@@ -3,7 +3,7 @@ namespace Fluent;
 /// <summary>
 /// Portable substitute for WPF's headered items control.
 /// </summary>
-public class HeaderedItemsControl : ItemsControl
+public partial class HeaderedItemsControl : ItemsControl
 {
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
     public static readonly DependencyProperty HeaderProperty =

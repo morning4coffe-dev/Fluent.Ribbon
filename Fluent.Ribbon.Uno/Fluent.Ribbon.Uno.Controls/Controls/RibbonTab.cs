@@ -253,6 +253,11 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
             Content = _groupsPanel,
         };
 
+#if !WINDOWS
+        // TODO: Remove this workaround when https://github.com/unoplatform/uno/issues/19504 is fixed.
+        RibbonGroupsContainerScrollViewer.SetEnableHorizontalWheelScrolling(_scrollViewer, true);
+#endif
+
         _scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
 
         Content = _scrollViewer;
@@ -684,9 +689,18 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
     private void SyncGroups()
     {
+        foreach (var existingGroup in _groupsPanel.Children.OfType<RibbonGroupBox>())
+        {
+            if (ReferenceEquals(existingGroup.AutomationOwnerTab, this))
+            {
+                existingGroup.AutomationOwnerTab = null;
+            }
+        }
+
         _groupsPanel.Children.Clear();
         foreach (var group in Groups)
         {
+            group.AutomationOwnerTab = this;
             _groupsPanel.Children.Add(group);
         }
 

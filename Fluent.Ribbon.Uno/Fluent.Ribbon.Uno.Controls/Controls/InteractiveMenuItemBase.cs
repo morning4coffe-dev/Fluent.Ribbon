@@ -32,6 +32,12 @@ public abstract partial class InteractiveMenuItemBase : Control
     /// </summary>
     protected abstract void OnInvoke();
 
+    /// <summary>
+    /// Invokes the item from the keyboard. Menu items with submenus override this
+    /// to transfer focus without changing pointer activation.
+    /// </summary>
+    protected virtual void OnKeyboardInvoke(VirtualKey key) => OnInvoke();
+
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
@@ -110,7 +116,7 @@ public abstract partial class InteractiveMenuItemBase : Control
         {
             case VirtualKey.Enter:
                 e.Handled = true;
-                OnInvoke();
+                OnKeyboardInvoke(e.Key);
                 break;
             case VirtualKey.Space:
                 _isPressed = true;
@@ -134,7 +140,7 @@ public abstract partial class InteractiveMenuItemBase : Control
             if (shouldInvoke)
             {
                 e.Handled = true;
-                OnInvoke();
+                OnKeyboardInvoke(e.Key);
             }
         }
     }

@@ -97,9 +97,9 @@ public sealed class ContentDialogColorGalleryCustomColorPicker : IColorGalleryCu
         var dialog = new ContentDialog
         {
             XamlRoot = context.XamlRoot,
-            Title = "More Colors",
-            PrimaryButtonText = "Select",
-            CloseButtonText = "Cancel",
+            Title = RibbonLocalization.Current.Localization.MoreColors,
+            PrimaryButtonText = RibbonLocalization.Current.Localization.ColorPickerSelect,
+            CloseButtonText = RibbonLocalization.Current.Localization.ColorPickerCancel,
             DefaultButton = ContentDialogButton.Primary,
             Content = picker,
         };

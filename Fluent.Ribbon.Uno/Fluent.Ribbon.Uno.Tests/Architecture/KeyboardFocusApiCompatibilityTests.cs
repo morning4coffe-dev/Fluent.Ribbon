@@ -2,6 +2,7 @@ namespace FluentUno.Tests.Architecture;
 
 using System.Reflection;
 using Fluent;
+using Microsoft.UI.Xaml;
 using NUnit.Framework;
 using Windows.System;
 
@@ -118,6 +119,47 @@ public sealed class KeyboardFocusApiCompatibilityTests
         {
             Assert.That(first, Is.EqualTo(new[] { VirtualKey.Menu, VirtualKey.F10 }));
             Assert.That(second, Is.Not.SameAs(first));
+        });
+    }
+
+    [Test]
+    public void BackstageButtonShouldHandleStandardKeyboardActivation()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                typeof(BackstageButton).GetMethod(
+                    "OnKeyDown",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly),
+                Is.Not.Null);
+            Assert.That(
+                typeof(BackstageButton).GetMethod(
+                    "OnKeyUp",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly),
+                Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void DelegatedFocusStateShouldOverrideAStaleEditorFocusState()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                FocusRoutingHelper.ResolveDelegatedFocusState(
+                    FocusState.Pointer,
+                    FocusState.Keyboard),
+                Is.EqualTo(FocusState.Pointer));
+            Assert.That(
+                FocusRoutingHelper.ResolveDelegatedFocusState(
+                    FocusState.Keyboard,
+                    FocusState.Pointer),
+                Is.EqualTo(FocusState.Keyboard));
+            Assert.That(
+                FocusRoutingHelper.ResolveDelegatedFocusState(
+                    FocusState.Programmatic,
+                    FocusState.Keyboard),
+                Is.EqualTo(FocusState.Keyboard));
         });
     }
 

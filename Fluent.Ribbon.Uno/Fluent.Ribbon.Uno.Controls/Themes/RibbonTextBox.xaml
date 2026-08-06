@@ -8,6 +8,8 @@
         <Setter Property="Padding" Value="{ThemeResource RibbonButtonPadding}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="MinHeight" Value="{ThemeResource RibbonControlMinHeight}" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonTextBox">
@@ -33,6 +35,15 @@
                                     <VisualState.Setters>
                                         <Setter Target="GlyphIcon.FontSize" Value="14" />
                                         <Setter Target="HeaderText.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualState x:Name="Unfocused" />
+                                <VisualState x:Name="PointerFocused" />
+                                <VisualState x:Name="KeyboardFocused">
+                                    <VisualState.Setters>
+                                        <Setter Target="FocusVisual.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -77,20 +88,43 @@
                             </StackPanel>
 
                             <!-- TextBox input area -->
-                            <TextBox
-                                x:Name="PART_TextBox"
+                            <Grid
+                                x:Name="InputRoot"
                                 Grid.Column="1"
                                 MinWidth="{TemplateBinding InputWidth}"
                                 HorizontalAlignment="Stretch"
-                                VerticalAlignment="Center"
-                                Padding="{ThemeResource RibbonButtonPadding}"
-                                FontSize="12"
-                                MinHeight="{ThemeResource RibbonControlMinHeight}"
-                                Background="{ThemeResource TextControlBackground}"
-                                BorderBrush="{ThemeResource TextControlBorderBrush}"
-                                BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
-                                CornerRadius="{ThemeResource ControlCornerRadius}"
-                                Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                                VerticalAlignment="Center">
+                                <TextBox
+                                    x:Name="PART_TextBox"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    Padding="{ThemeResource RibbonButtonPadding}"
+                                    FontSize="12"
+                                    MinHeight="{ThemeResource RibbonControlMinHeight}"
+                                    Background="{ThemeResource TextControlBackground}"
+                                    BorderBrush="{ThemeResource TextControlBorderBrush}"
+                                    BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
+                                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                                    PlaceholderText="{TemplateBinding PlaceholderText}"
+                                    Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                    IsReadOnly="{TemplateBinding IsReadOnly}"
+                                    AcceptsReturn="{TemplateBinding AcceptsReturn}"
+                                    TextWrapping="{TemplateBinding TextWrapping}"
+                                    MaxLength="{TemplateBinding MaxLength}"
+                                    InputScope="{TemplateBinding InputScope}"
+                                    IsSpellCheckEnabled="{TemplateBinding IsSpellCheckEnabled}"
+                                    IsTextPredictionEnabled="{TemplateBinding IsTextPredictionEnabled}"
+                                    IsTabStop="False"
+                                    UseSystemFocusVisuals="False"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                                <Border
+                                    x:Name="FocusVisual"
+                                    BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                                    IsHitTestVisible="False"
+                                    Visibility="Collapsed" />
+                            </Grid>
                         </Grid>
                     </Border>
                 </ControlTemplate>

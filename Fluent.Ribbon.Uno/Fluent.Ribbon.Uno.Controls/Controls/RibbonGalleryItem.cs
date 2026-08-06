@@ -6,6 +6,11 @@ namespace Fluent;
 [ContentProperty(Name = nameof(Content))]
 public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
 {
+    internal object? GalleryOwner { get; set; }
+#if !WINDOWS
+    private bool isCompactHeight;
+#endif
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="IsSelected"/> dependency property.</summary>
@@ -153,7 +158,11 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     /// <summary>
     /// Occurs when the item is clicked.
     /// </summary>
+#if __ANDROID__ || __IOS__
+    public new event RoutedEventHandler? Click;
+#else
     public event RoutedEventHandler? Click;
+#endif
 
     #endregion
 
@@ -167,12 +176,16 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     public RibbonGalleryItem()
     {
         DefaultStyleKey = typeof(RibbonGalleryItem);
+        IsTabStop = true;
         PointerPressed += OnPointerPressedHandler;
         PointerReleased += OnPointerReleasedHandler;
         PointerEntered += OnPointerEnteredHandler;
         PointerExited += OnPointerExitedHandler;
         PointerCanceled += OnPointerExitedHandler;
         PointerCaptureLost += OnPointerExitedHandler;
+#if !WINDOWS
+        SizeChanged += OnSizeChanged;
+#endif
     }
 
     #endregion
@@ -183,15 +196,7 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     {
         IsPressed = true;
         UpdateVisualState();
-
-        IsSelected = true;
-
-        if (Command?.CanExecute(CommandParameter) == true)
-        {
-            Command.Execute(CommandParameter);
-        }
-
-        Click?.Invoke(this, new RoutedEventArgs());
+        Activate();
     }
 
     private void OnPointerReleasedHandler(object sender, PointerRoutedEventArgs e)
@@ -230,14 +235,99 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
             : _isPointerOver ? "PointerOver"
             : "Normal";
         VisualStateManager.GoToState(this, state, true);
+#if !WINDOWS
+        VisualStateManager.GoToState(this, isCompactHeight ? "Compact" : "Regular", true);
+#endif
     }
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        UpdateVisualState();
+    }
+
+#if !WINDOWS
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var compact = CompactRibbonLayoutMath.UsesCompactGalleryItemPadding(
+            e.NewSize.Height);
+        if (isCompactHeight == compact)
+        {
+            return;
+        }
+
+        isCompactHeight = compact;
+        UpdateVisualState();
+    }
+#endif
 
     private static void OnIsSelectedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is RibbonGalleryItem item)
         {
             item.UpdateVisualState();
+            if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(item)
+                is Fluent.Automation.Peers.GalleryItemWrapperAutomationPeer peer)
+            {
+                peer.RaiseIsSelectedChanged((bool)e.OldValue, (bool)e.NewValue);
+            }
         }
+    }
+
+    /// <inheritdoc/>
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        if (!e.Handled
+            && ReferenceEquals(e.OriginalSource, this)
+            && e.Key is Windows.System.VirtualKey.Enter or Windows.System.VirtualKey.Space)
+        {
+            Activate();
+            e.Handled = true;
+            return;
+        }
+
+        if (!e.Handled
+            && (GalleryOwner switch
+                {
+                    RibbonGallery gallery => gallery.HandleGalleryItemKeyDown(this, e),
+                    InRibbonGallery gallery => gallery.HandleGalleryItemKeyDown(this, e),
+                    _ => false,
+                }))
+        {
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    internal void Activate()
+    {
+        if (!IsEnabled
+            || GalleryOwner is Control { IsEnabled: false })
+        {
+            return;
+        }
+
+        switch (GalleryOwner)
+        {
+            case RibbonGallery gallery:
+                gallery.SelectItem(this);
+                break;
+            case InRibbonGallery gallery:
+                gallery.SelectItem(this);
+                break;
+            default:
+                IsSelected = true;
+                break;
+        }
+
+        if (Command?.CanExecute(CommandParameter) == true)
+        {
+            Command.Execute(CommandParameter);
+        }
+
+        Click?.Invoke(this, new RoutedEventArgs());
     }
 
     #endregion
@@ -247,14 +337,7 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     /// <inheritdoc />
     public KeyTipPressedResult OnKeyTipPressed()
     {
-        IsSelected = true;
-
-        if (Command?.CanExecute(CommandParameter) == true)
-        {
-            Command.Execute(CommandParameter);
-        }
-
-        Click?.Invoke(this, new RoutedEventArgs());
+        Activate();
         return KeyTipPressedResult.Empty;
     }
 
@@ -268,4 +351,50 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     /// <inheritdoc/>
     protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
         => new Fluent.Automation.Peers.GalleryItemWrapperAutomationPeer(this);
+}
+
+internal enum GalleryNavigationDirection
+{
+    Previous,
+    Next,
+    PreviousRow,
+    NextRow,
+    First,
+    Last,
+}
+
+internal static class GalleryNavigationMath
+{
+    internal static int GetTargetIndex(
+        int currentIndex,
+        int itemCount,
+        int columns,
+        Orientation orientation,
+        GalleryNavigationDirection direction)
+    {
+        if (itemCount <= 0)
+        {
+            return -1;
+        }
+
+        currentIndex = Math.Clamp(currentIndex, 0, itemCount - 1);
+        columns = Math.Max(1, columns);
+
+        var target = direction switch
+        {
+            GalleryNavigationDirection.First => 0,
+            GalleryNavigationDirection.Last => itemCount - 1,
+            GalleryNavigationDirection.Previous => currentIndex - 1,
+            GalleryNavigationDirection.Next => currentIndex + 1,
+            GalleryNavigationDirection.PreviousRow when orientation == Orientation.Horizontal
+                => currentIndex - columns,
+            GalleryNavigationDirection.NextRow when orientation == Orientation.Horizontal
+                => currentIndex + columns,
+            GalleryNavigationDirection.PreviousRow => currentIndex - 1,
+            GalleryNavigationDirection.NextRow => currentIndex + 1,
+            _ => currentIndex,
+        };
+
+        return Math.Clamp(target, 0, itemCount - 1);
+    }
 }

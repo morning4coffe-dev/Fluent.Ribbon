@@ -351,7 +351,7 @@ public static class RibbonAccelerator
             ?? baseScreenTip?.Title
             ?? GetHeaderText(frameworkElement);
         var text = GetStringProperty(frameworkElement, "ScreenTipText")
-            ?? baseScreenTip?.Text?.ToString()
+            ?? Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(baseScreenTip?.Text)
             ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(text))
@@ -419,14 +419,8 @@ public static class RibbonAccelerator
     private static string? GetHeaderText(object item)
     {
         var value = GetPropertyValue<object>(item, "Header") ?? GetPropertyValue<object>(item, "Content");
-        return value switch
-        {
-            null => null,
-            string text when !string.IsNullOrWhiteSpace(text) => text.Trim(),
-            TextBlock textBlock when !string.IsNullOrWhiteSpace(textBlock.Text) => textBlock.Text.Trim(),
-            ContentControl contentControl => GetHeaderText(contentControl),
-            _ => value.ToString()?.Trim()
-        };
+        var name = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(value);
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     private static T? GetPropertyValue<T>(object source, string propertyName)

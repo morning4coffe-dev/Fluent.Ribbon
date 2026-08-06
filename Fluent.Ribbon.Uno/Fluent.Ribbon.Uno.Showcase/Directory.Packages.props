@@ -9,11 +9,11 @@
     <!--
       Security overrides for transitive Uno desktop (Skia) dependencies flagged
       with known high-severity vulnerabilities (NU1903). Pinned to patched versions
-      (both are upgrades over what Uno.Sdk 6.4.58 resolves, so no downgrade):
+      (both are upgrades over the Uno SDK defaults, so no downgrade):
         - System.Security.Cryptography.Xml: pinned to the current non-vulnerable servicing release
-        - Tmds.DBus.Protocol: CVE-2026-39959, backport-fixed in 0.21.3
+        - Tmds.DBus.Protocol: use the patched version required by the current Uno runtime
     -->
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.10" />
-    <PackageVersion Include="Tmds.DBus.Protocol" Version="0.21.3" />
+    <PackageVersion Include="Tmds.DBus.Protocol" Version="0.92.0" />
   </ItemGroup>
 </Project>

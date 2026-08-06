@@ -111,4 +111,72 @@ public class InRibbonGalleryBehaviorTests
 
         Assert.That(columns, Is.EqualTo(2));
     }
+
+    [TestCase((int)GalleryNavigationDirection.Previous, 5)]
+    [TestCase((int)GalleryNavigationDirection.Next, 7)]
+    [TestCase((int)GalleryNavigationDirection.PreviousRow, 3)]
+    [TestCase((int)GalleryNavigationDirection.NextRow, 9)]
+    [TestCase((int)GalleryNavigationDirection.First, 0)]
+    [TestCase((int)GalleryNavigationDirection.Last, 11)]
+    public void HorizontalGalleryNavigationShouldFollowGridLayout(
+        int direction,
+        int expected)
+    {
+        var target = GalleryNavigationMath.GetTargetIndex(
+            currentIndex: 6,
+            itemCount: 12,
+            columns: 3,
+            orientation: Orientation.Horizontal,
+            (GalleryNavigationDirection)direction);
+
+        Assert.That(target, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void VerticalGalleryRowNavigationShouldMoveOneItem()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                GalleryNavigationMath.GetTargetIndex(
+                    2,
+                    5,
+                    4,
+                    Orientation.Vertical,
+                    GalleryNavigationDirection.PreviousRow),
+                Is.EqualTo(1));
+            Assert.That(
+                GalleryNavigationMath.GetTargetIndex(
+                    2,
+                    5,
+                    4,
+                    Orientation.Vertical,
+                    GalleryNavigationDirection.NextRow),
+                Is.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public void GalleryNavigationShouldClampAtCollectionBoundaries()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                GalleryNavigationMath.GetTargetIndex(
+                    0,
+                    3,
+                    2,
+                    Orientation.Horizontal,
+                    GalleryNavigationDirection.Previous),
+                Is.EqualTo(0));
+            Assert.That(
+                GalleryNavigationMath.GetTargetIndex(
+                    2,
+                    3,
+                    2,
+                    Orientation.Horizontal,
+                    GalleryNavigationDirection.NextRow),
+                Is.EqualTo(2));
+        });
+    }
 }

@@ -11,6 +11,8 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 [TemplatePart(Name = PART_CollapsedButton, Type = typeof(WinUIButton))]
 public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 {
+    internal RibbonTabItem? AutomationOwnerTab { get; set; }
+
     private static readonly RibbonGroupBoxStateDefinition DefaultSimplifiedStateDefinition =
         new("Large,Middle,Collapsed");
 
@@ -77,7 +79,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             nameof(Header),
             typeof(object),
             typeof(RibbonGroupBox),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnLauncherMetadataChanged));
 
     /// <summary>
     /// Gets or sets the header content of the group.
@@ -296,10 +298,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
             foreach (var item in groupBox.Items)
             {
-                if (item is ISimplifiedStateControl simplifiedControl)
-                {
-                    simplifiedControl.UpdateSimplifiedState(isSimplified);
-                }
+                UpdateNestedSimplifiedState(item, isSimplified);
             }
 
             groupBox.UpdateVisualState();
@@ -398,7 +397,10 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         Items = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, UpdateLauncherMetadata);
         QuickAccessHelper.AttachContextMenu(this);
+        GotFocus += OnGroupGotFocus;
+        LostFocus += OnGroupLostFocus;
     }
 
     #endregion
@@ -421,6 +423,10 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
         if (_collapsedButton is not null)
         {
+            _collapsedButton.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                _collapsedButton,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             _collapsedButton.Click += OnCollapsedButtonClick;
         }
 
@@ -479,7 +485,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             {
                 if (old is UIElement element)
                 {
-                    _preferredSizes.Remove(element);
+                    RemovePreferredSizes(element);
                 }
             }
         }
@@ -520,9 +526,56 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     {
         foreach (var item in Items)
         {
-            if (item is IScalableRibbonControl scalable && !_preferredSizes.ContainsKey(item))
+            CapturePreferredSizes(item);
+        }
+    }
+
+    private void CapturePreferredSizes(UIElement item)
+    {
+        if (item is IScalableRibbonControl scalable && !_preferredSizes.ContainsKey(item))
+        {
+            _preferredSizes[item] = scalable.Size;
+        }
+#if !WINDOWS
+        else if (item is IRibbonControl ribbonControl && !_preferredSizes.ContainsKey(item))
+        {
+            _preferredSizes[item] = ribbonControl.Size;
+        }
+#endif
+
+        if (item is Panel panel)
+        {
+            foreach (var child in panel.Children)
             {
-                _preferredSizes[item] = scalable.Size;
+                CapturePreferredSizes(child);
+            }
+        }
+    }
+
+    private void RemovePreferredSizes(UIElement item)
+    {
+        _preferredSizes.Remove(item);
+        if (item is Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                RemovePreferredSizes(child);
+            }
+        }
+    }
+
+    private static void UpdateNestedSimplifiedState(UIElement item, bool isSimplified)
+    {
+        if (item is ISimplifiedStateControl simplifiedControl)
+        {
+            simplifiedControl.UpdateSimplifiedState(isSimplified);
+        }
+
+        if (item is Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                UpdateNestedSimplifiedState(child, isSimplified);
             }
         }
     }
@@ -581,7 +634,10 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     }
 
     private void OnCollapsedButtonClick(object sender, RoutedEventArgs e)
-        => ExpandForAutomation();
+    {
+        Focus(FocusState.Pointer);
+        ExpandForAutomation();
+    }
 
     internal bool IsDropDownOpenForAutomation => _collapsedPopup?.IsOpen == true;
 
@@ -596,7 +652,8 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         // Set header text
         if (_popupHeaderText is not null)
         {
-            _popupHeaderText.Text = Header?.ToString() ?? string.Empty;
+            _popupHeaderText.Text =
+                Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
         }
 
         // Move items from main panel to popup panel at Large size
@@ -605,11 +662,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
         foreach (var item in Items)
         {
-            // Set items to Large size for the popup display
-            if (item is IScalableRibbonControl scalable)
-            {
-                scalable.ScaleTo(RibbonControlSize.Large);
-            }
+            ApplyPopupItemSize(item);
 
             DetachFromParent(item);
             _popupItemsPanel.Children.Add(item);
@@ -721,8 +774,33 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         InvalidateHeaderAlignment();
     }
 
+    internal static void ApplyPopupItemSize(DependencyObject item)
+    {
+        if (item is IScalableRibbonControl scalable)
+        {
+            scalable.ScaleTo(RibbonControlSize.Large);
+            return;
+        }
+#if !WINDOWS
+        if (item is IRibbonControl ribbonControl)
+        {
+            ribbonControl.Size = RibbonControlSize.Large;
+            return;
+        }
+#endif
+        if (item is Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                ApplyPopupItemSize(child);
+            }
+        }
+    }
+
     private void UpdateVisualState()
     {
+        IsTabStop = IsInButtonState;
+
         var stateName = State switch
         {
             RibbonGroupBoxState.Large => "Large",
@@ -734,6 +812,23 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
         VisualStateManager.GoToState(this, stateName, true);
         VisualStateManager.GoToState(this, IsSimplified ? "Simplified" : "Classic", true);
+        UpdateFocusVisualState(false);
+    }
+
+    private void OnGroupGotFocus(object sender, RoutedEventArgs e)
+        => UpdateFocusVisualState(true);
+
+    private void OnGroupLostFocus(object sender, RoutedEventArgs e)
+        => UpdateFocusVisualState(true);
+
+    private void UpdateFocusVisualState(bool useTransitions)
+    {
+        var state = FocusState == Microsoft.UI.Xaml.FocusState.Keyboard && IsInButtonState
+            ? "KeyboardFocused"
+            : FocusState == Microsoft.UI.Xaml.FocusState.Pointer && IsInButtonState
+                ? "PointerFocused"
+                : "Unfocused";
+        VisualStateManager.GoToState(this, state, useTransitions);
     }
 
     private void UpdateItemSizes()
@@ -750,23 +845,29 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
         foreach (var item in Items)
         {
+            UpdateNestedSimplifiedState(item, IsSimplified);
             if (item is IScalableRibbonControl scalable)
             {
                 var preferred = _preferredSizes.TryGetValue(item, out var p) ? p : scalable.Size;
-
-                // RibbonControlSize orders Large(0) < Medium(1) < Small(2), so a larger
-                // enum value means a smaller control. Clamp to the group cap by taking
-                // whichever is the smaller control (the higher enum value).
-                var effective = (RibbonControlSize)System.Math.Max((int)preferred, (int)cap);
+                var effective = ResolveItemSize(item, preferred, cap);
                 scalable.ScaleTo(effective);
             }
+#if !WINDOWS
+            else if (item is IRibbonControl ribbonControl)
+            {
+                var preferred = _preferredSizes.TryGetValue(item, out var p)
+                    ? p
+                    : ribbonControl.Size;
+                ribbonControl.Size = ResolveItemSize(item, preferred, cap);
+            }
+#endif
             else if (item is DependencyObject container)
             {
                 // Items can also be plain layout panels (StackPanel/Grid) that host ribbon
                 // controls. WPF's RibbonGroupBox recurses into such panels and sizes every
                 // nested control from its SizeDefinition; mirror that so controls hosted in
                 // raw panels are not left in their default (Small) visual state.
-                ApplyNestedItemSizes(container);
+                ApplyNestedItemSizes(container, cap);
             }
         }
     }
@@ -777,7 +878,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// <c>SizeDefinition</c> resolved against the current group state, matching the way the
     /// WPF <c>RibbonGroupBox</c> propagates sizes into panel children.
     /// </summary>
-    private void ApplyNestedItemSizes(DependencyObject element)
+    private void ApplyNestedItemSizes(DependencyObject element, RibbonControlSize cap)
     {
         if (element is not Panel panel)
         {
@@ -788,14 +889,121 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         {
             if (child is IScalableRibbonControl scalable)
             {
-                var resolved = RibbonProperties.GetSizeDefinition(child).GetSize(State);
-                scalable.ScaleTo(resolved);
+                var preferred = _preferredSizes.TryGetValue(child, out var size)
+                    ? size
+                    : scalable.Size;
+                var effective = ResolveItemSize(child, preferred, cap);
+                scalable.ScaleTo(effective);
             }
+#if !WINDOWS
+            else if (child is IRibbonControl ribbonControl)
+            {
+                var preferred = _preferredSizes.TryGetValue(child, out var size)
+                    ? size
+                    : ribbonControl.Size;
+                ribbonControl.Size = ResolveItemSize(child, preferred, cap);
+            }
+#endif
             else
             {
-                ApplyNestedItemSizes(child);
+                ApplyNestedItemSizes(child, cap);
             }
         }
+    }
+
+    private RibbonControlSize ResolveItemSize(
+        UIElement item,
+        RibbonControlSize preferred,
+        RibbonControlSize cap)
+    {
+        // InRibbonGallery resolves its own regular/simplified definition inside ScaleTo.
+        if (item is not InRibbonGallery
+            && TryGetExplicitSizeDefinition(item, IsSimplified, out var definition))
+        {
+            return ResolveDefinedOrPreferredSize(
+                hasExplicitDefinition: true,
+                definition,
+                State,
+                preferred,
+                cap);
+        }
+
+        return ResolveDefinedOrPreferredSize(
+            hasExplicitDefinition: false,
+            default,
+            State,
+            preferred,
+            cap);
+    }
+
+    internal static RibbonControlSize ResolveDefinedOrPreferredSize(
+        bool hasExplicitDefinition,
+        RibbonControlSizeDefinition definition,
+        RibbonGroupBoxState state,
+        RibbonControlSize preferred,
+        RibbonControlSize cap)
+        => hasExplicitDefinition
+            ? definition.GetSize(state)
+            // RibbonControlSize orders Large(0) < Medium(1) < Small(2), so the
+            // higher value keeps an authored control at its size or makes it smaller.
+            : (RibbonControlSize)Math.Max((int)preferred, (int)cap);
+
+    internal static bool TryGetExplicitSizeDefinition(
+        DependencyObject item,
+        bool isSimplified,
+        out RibbonControlSizeDefinition definition)
+    {
+        if (!isSimplified)
+        {
+            if (item.GetValue(RibbonProperties.SizeDefinitionProperty) is string regular
+                && !string.IsNullOrWhiteSpace(regular))
+            {
+                definition = new RibbonControlSizeDefinition(regular);
+                return true;
+            }
+
+            if (item is RibbonToolBar toolBar)
+            {
+                definition = toolBar.SizeDefinition;
+                return true;
+            }
+
+            if (item is RibbonControl
+                && RibbonControl.TryGetEffectiveSizeDefinition(
+                    item,
+                    out var localDefinition))
+            {
+                definition = localDefinition;
+                return true;
+            }
+
+            definition = default;
+            return false;
+        }
+
+        var simplified = item switch
+        {
+            RibbonButton button => button.SimplifiedSizeDefinition,
+            RibbonToggleButton toggleButton => toggleButton.SimplifiedSizeDefinition,
+            RibbonDropDownButton dropDownButton => dropDownButton.SimplifiedSizeDefinition,
+            _ => null,
+        };
+        if (!string.IsNullOrWhiteSpace(simplified))
+        {
+            definition = new RibbonControlSizeDefinition(simplified);
+            return true;
+        }
+
+        if (RibbonProperties.TryGetEffectiveSimplifiedSizeDefinition(
+                item,
+                out var attachedDefinition))
+        {
+            definition = attachedDefinition;
+            return true;
+        }
+
+        definition = default;
+        return false;
     }
 
     // WPF aligns the header/label of every input control in a group by placing the header column

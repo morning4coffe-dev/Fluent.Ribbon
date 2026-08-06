@@ -28,7 +28,9 @@ public sealed class RibbonStatusBarAutomationPeer : FrameworkElementAutomationPe
     protected override string GetNameCore()
     {
         var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name) ? "Status Bar" : name;
+        return string.IsNullOrWhiteSpace(name)
+            ? global::Fluent.RibbonLocalization.Current.Localization.StatusBarName
+            : name;
     }
 
     /// <inheritdoc />
@@ -37,7 +39,7 @@ public sealed class RibbonStatusBarAutomationPeer : FrameworkElementAutomationPe
         var children = new List<AutomationPeer>();
         foreach (var item in OwnerStatusBar.Items.Concat(OwnerStatusBar.RightItems))
         {
-            if (item.Visibility != Visibility.Visible)
+            if (!AutomationPeerHelpers.IsEffectivelyVisible(item))
             {
                 continue;
             }
@@ -78,7 +80,8 @@ public sealed class RibbonStatusBarItemAutomationPeer : FrameworkElementAutomati
     {
         var name = base.GetNameCore();
         return string.IsNullOrWhiteSpace(name)
-            ? OwnerStatusItem.Title ?? OwnerStatusItem.Content?.ToString() ?? string.Empty
+            ? AutomationPeerHelpers.GetObjectName(
+                OwnerStatusItem.Title ?? OwnerStatusItem.Content)
             : name;
     }
 }
@@ -111,13 +114,15 @@ public sealed class StatusBarMenuItemAutomationPeer :
     {
         var name = base.GetNameCore();
         return string.IsNullOrWhiteSpace(name)
-            ? OwnerMenuItem.Header?.ToString() ?? string.Empty
+            ? AutomationPeerHelpers.GetObjectName(OwnerMenuItem.Header)
             : name;
     }
 
     /// <inheritdoc />
     protected override object? GetPatternCore(PatternInterface patternInterface)
-        => patternInterface is PatternInterface.Toggle or PatternInterface.Invoke
+        => OwnerMenuItem.StatusBarItem is { } statusBarItem
+           && StatusBarMenuItem.IsStatusItemCheckable(statusBarItem)
+           && patternInterface is PatternInterface.Toggle or PatternInterface.Invoke
             ? this
             : base.GetPatternCore(patternInterface);
 
@@ -125,9 +130,30 @@ public sealed class StatusBarMenuItemAutomationPeer :
     public ToggleState ToggleState =>
         OwnerMenuItem.IsChecked ? ToggleState.On : ToggleState.Off;
 
-    /// <inheritdoc />
-    public void Toggle() => OwnerMenuItem.InvokeForAutomation();
+    internal void RaiseIsCheckedChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            TogglePatternIdentifiers.ToggleStateProperty,
+            oldValue ? ToggleState.On : ToggleState.Off,
+            newValue ? ToggleState.On : ToggleState.Off);
+    }
 
     /// <inheritdoc />
-    public void Invoke() => OwnerMenuItem.InvokeForAutomation();
+    public void Toggle()
+    {
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerMenuItem.StatusBarItem is { } statusBarItem
+            && StatusBarMenuItem.IsStatusItemCheckable(statusBarItem),
+            "This status-bar menu item is not linked to an actionable item.");
+        OwnerMenuItem.InvokeForAutomation();
+    }
+
+    /// <inheritdoc />
+    public void Invoke() => Toggle();
 }

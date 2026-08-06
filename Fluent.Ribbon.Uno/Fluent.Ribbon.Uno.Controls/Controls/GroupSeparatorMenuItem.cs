@@ -36,7 +36,23 @@ public partial class GroupSeparatorMenuItem : MenuItem
     {
         DefaultStyleKey = typeof(GroupSeparatorMenuItem);
         IsTabStop = false;
+        IsEnabled = false;
+        IsEnabledChanged += OnIsEnabledChanged;
     }
 
     #endregion
+
+    private void OnIsEnabledChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        if (IsEnabled)
+        {
+            IsEnabled = false;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.GroupSeparatorMenuItemAutomationPeer(this);
 }

@@ -15,11 +15,19 @@
 
   <Style x:Key="Fluent.Compatibility.GalleryItemRegistration"
          TargetType="fluent:GalleryItem" />
+  <Style x:Key="Fluent.Compatibility.ComboBoxRegistration"
+         TargetType="fluent:ComboBox" />
+  <Style x:Key="Fluent.Compatibility.GalleryRegistration"
+         TargetType="fluent:Gallery" />
+  <Style x:Key="Fluent.Compatibility.RadioButtonRegistration"
+         TargetType="fluent:RadioButton" />
   <Style x:Key="Fluent.Compatibility.SpinnerRegistration"
          TargetType="fluent:Spinner" />
   <Style x:Key="Fluent.Compatibility.SplitButtonRegistration"
          TargetType="fluent:SplitButton" />
   <Style x:Key="Fluent.Compatibility.StatusBarRegistration"
          TargetType="fluent:StatusBar" />
+  <Style x:Key="Fluent.Compatibility.TextBoxRegistration"
+         TargetType="fluent:TextBox" />
 
 </ResourceDictionary>

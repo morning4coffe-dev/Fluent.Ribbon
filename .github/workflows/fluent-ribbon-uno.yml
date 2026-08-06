@@ -100,6 +100,27 @@ jobs:
           RUN_UNO_UI_TESTS: '1'
         run: dotnet test Fluent.Ribbon.Uno.UITests/Fluent.Ribbon.Uno.UITests.csproj -c Release --filter TestCategory=UI
 
+      - name: Build Windows external UIA tests
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Windows.UITests\Fluent.Ribbon.Uno.Windows.UITests.csproj -f net10.0-windows -c Release
+
+      - name: Run Skia Win32 external UIA tests
+        working-directory: Fluent.Ribbon.Uno
+        timeout-minutes: 10
+        env:
+          SHOWCASE_UIA_APP: '${{ github.workspace }}\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\bin\Release\net10.0-desktop\Fluent.Ribbon.Uno.Showcase.dll'
+        run: dotnet test Fluent.Ribbon.Uno.Windows.UITests\Fluent.Ribbon.Uno.Windows.UITests.csproj -f net10.0-windows -c Release --no-build --filter TestCategory=WindowsExternalUIA --results-directory .\TestResults --logger "trx;LogFileName=skia-uia.trx"
+
+      - name: Verify Skia Win32 external UIA test execution
+        working-directory: Fluent.Ribbon.Uno
+        shell: pwsh
+        run: |
+          [xml]$results = Get-Content .\TestResults\skia-uia.trx
+          $executed = [int]$results.TestRun.ResultSummary.Counters.executed
+          if ($executed -lt 1) {
+            throw "No Skia Win32 external UIA tests executed."
+          }
+
   winui3:
     name: Build WinUI 3 (net10.0-windows10.0.26100)
     runs-on: windows-latest
@@ -128,7 +149,28 @@ jobs:
 
       - name: Build Showcase (WinUI 3)
         working-directory: Fluent.Ribbon.Uno
-        run: msbuild Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100 /p:TargetFrameworks=net10.0-windows10.0.26100
+        run: msbuild Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100 /p:TargetFrameworks=net10.0-windows10.0.26100 /p:ShowcaseExternalUia=true
+
+      - name: Build Windows external UIA tests
+        working-directory: Fluent.Ribbon.Uno
+        run: dotnet build Fluent.Ribbon.Uno.Windows.UITests\Fluent.Ribbon.Uno.Windows.UITests.csproj -f net10.0-windows -c Release
+
+      - name: Run Windows external UIA tests
+        working-directory: Fluent.Ribbon.Uno
+        timeout-minutes: 10
+        env:
+          SHOWCASE_WINUI_EXE: '${{ github.workspace }}\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\bin\Release\net10.0-windows10.0.26100\Fluent.Ribbon.Uno.Showcase.exe'
+        run: dotnet test Fluent.Ribbon.Uno.Windows.UITests\Fluent.Ribbon.Uno.Windows.UITests.csproj -f net10.0-windows -c Release --no-build --filter TestCategory=WindowsExternalUIA --results-directory .\TestResults --logger "trx;LogFileName=winui-uia.trx"
+
+      - name: Verify Windows external UIA test execution
+        working-directory: Fluent.Ribbon.Uno
+        shell: pwsh
+        run: |
+          [xml]$results = Get-Content .\TestResults\winui-uia.trx
+          $executed = [int]$results.TestRun.ResultSummary.Counters.executed
+          if ($executed -lt 1) {
+            throw "No Windows external UIA tests executed."
+          }
 
   desktop-cross-platform:
     name: Build Desktop (${{ matrix.os }})
@@ -172,7 +214,7 @@ jobs:
         run: dotnet test ApiCompatibility/Fluent.Ribbon.ApiCompatibility.Tests/Fluent.Ribbon.ApiCompatibility.Tests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release
 
   browserwasm:
-    name: Build WebAssembly
+    name: Build and test WebAssembly accessibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -200,6 +242,85 @@ jobs:
       - name: Build Showcase
         working-directory: Fluent.Ribbon.Uno
         run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-browserwasm -p:TargetFrameworks=net10.0-browserwasm -c Release
+
+      - name: Discover Showcase web root
+        id: showcase-web-root
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_root='Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/bin/Release/net10.0-browserwasm'
+          mapfile -t indexes < <(find "$build_root" -type f -name index.html -print)
+          if [[ ${#indexes[@]} -ne 1 ]]; then
+            printf 'Expected exactly one generated index.html under %s, found %s:\n' "$build_root" "${#indexes[@]}" >&2
+            printf '  %s\n' "${indexes[@]}" >&2
+            exit 1
+          fi
+
+          web_root="$(dirname "${indexes[0]}")"
+          test -d "$web_root/_framework"
+          test -n "$(find "$web_root/_framework" -maxdepth 1 -type f -name '*.wasm' -print -quit)"
+          echo "path=$web_root" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests/package-lock.json
+
+      - name: Install browser test dependencies
+        working-directory: Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve Showcase and run accessibility tests
+        shell: bash
+        timeout-minutes: 10
+        env:
+          SHOWCASE_BASE_URL: http://127.0.0.1:4173
+          SHOWCASE_WEB_ROOT: ${{ steps.showcase-web-root.outputs.path }}
+        run: |
+          set -euo pipefail
+          server_log="$RUNNER_TEMP/fluent-ribbon-uno-wasm-server.log"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$SHOWCASE_WEB_ROOT" >"$server_log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error "$SHOWCASE_BASE_URL/" >/dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat "$server_log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then
+            cat "$server_log" >&2
+            exit 1
+          fi
+
+          npm --prefix Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests test -- --forbid-only
+
+      - name: Upload WebAssembly accessibility failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webassembly-accessibility-failures
+          if-no-files-found: ignore
+          path: |
+            Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests/playwright-report
+            Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests/test-results
 
   android:
     name: Build Android
@@ -231,8 +352,75 @@ jobs:
         working-directory: Fluent.Ribbon.Uno
         run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-android -p:TargetFrameworks=net10.0-android -c Release
 
+  android-accessibility:
+    name: Test Android native accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Build self-contained x86_64 Showcase APK
+        working-directory: Fluent.Ribbon.Uno
+        run: >
+          dotnet build
+          Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj
+          -f net10.0-android
+          -p:TargetFrameworks=net10.0-android
+          -c Debug
+          -p:RuntimeIdentifier=android-x64
+          -p:SelfContained=true
+          -p:EmbedAssembliesIntoApk=true
+          -p:AndroidUseSharedRuntime=false
+          -p:AndroidPackageFormat=apk
+          -p:RunAOTCompilation=false
+
+      - name: Discover native Showcase APK
+        id: android-apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_root='Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/bin/Debug/net10.0-android/android-x64'
+          mapfile -t apks < <(find "$build_root" -maxdepth 1 -type f -name '*-Signed.apk' -print)
+          if [[ ${#apks[@]} -ne 1 ]]; then
+            printf 'Expected exactly one signed native x86_64 APK under %s, found %s:\n' "$build_root" "${#apks[@]}" >&2
+            printf '  %s\n' "${apks[@]}" >&2
+            exit 1
+          fi
+          echo "path=${apks[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Android accessibility hierarchy tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on
+          script: >-
+            python3
+            Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.MobileAccessibility.Tests/Android/run_android_accessibility.py
+            "${{ steps.android-apk.outputs.path }}"
+            --artifact-directory
+            Fluent.Ribbon.Uno/TestResults/AndroidAccessibility
+
+      - name: Upload Android accessibility failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-accessibility-failures
+          if-no-files-found: ignore
+          path: Fluent.Ribbon.Uno/TestResults/AndroidAccessibility
+
   ios:
-    name: Build iOS
+    name: Build and test iOS native accessibility
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -248,6 +436,21 @@ jobs:
       - name: Install iOS workload
         run: dotnet workload install ios
 
+      - name: Select simulator runtime identifier
+        id: simulator-rid
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64) rid='iossimulator-arm64' ;;
+            x86_64) rid='iossimulator-x64' ;;
+            *)
+              echo "Unsupported macOS runner architecture: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+          echo "value=$rid" >> "$GITHUB_OUTPUT"
+
       - name: Build Controls
         working-directory: Fluent.Ribbon.Uno
         run: dotnet build Fluent.Ribbon.Uno.Controls/Fluent.Ribbon.Uno.Controls.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release
@@ -262,4 +465,42 @@ jobs:
 
       - name: Build Showcase
         working-directory: Fluent.Ribbon.Uno
-        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release -p:RuntimeIdentifier=iossimulator-x64
+        run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-ios -p:TargetFrameworks=net10.0-ios -c Release -p:RuntimeIdentifier=${{ steps.simulator-rid.outputs.value }}
+
+      - name: Discover native Showcase app
+        id: ios-app
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_root="Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/bin/Release/net10.0-ios/${{ steps.simulator-rid.outputs.value }}"
+          apps=()
+          while IFS= read -r app; do
+            apps+=("$app")
+          done < <(find "$build_root" -type d -name '*.app' -prune -print)
+          if [[ ${#apps[@]} -ne 1 ]]; then
+            printf 'Expected exactly one native Showcase .app under %s, found %s:\n' "$build_root" "${#apps[@]}" >&2
+            printf '  %s\n' "${apps[@]}" >&2
+            exit 1
+          fi
+          test -f "${apps[0]}/Info.plist"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${apps[0]}/Info.plist")"
+          test -f "${apps[0]}/${executable}"
+          echo "path=${apps[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS accessibility UI tests
+        shell: bash
+        timeout-minutes: 20
+        env:
+          IOS_ACCESSIBILITY_RESULTS_DIR: ${{ github.workspace }}/Fluent.Ribbon.Uno/TestResults/iOSAccessibility
+        run: >
+          bash
+          Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.MobileAccessibility.Tests/iOS/run-ios-accessibility-tests.sh
+          "${{ steps.ios-app.outputs.path }}"
+
+      - name: Upload iOS accessibility failure result
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-native-accessibility-failure
+          if-no-files-found: ignore
+          path: Fluent.Ribbon.Uno/TestResults/iOSAccessibility

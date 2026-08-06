@@ -12,6 +12,7 @@ public partial class RibbonInfoBarHost : Control
 {
     private const string InfoBarPartName = "PART_InfoBar";
     private InfoBar? infoBar;
+    private string? localizedAutomationName;
 
     #region Dependency Properties
 
@@ -114,6 +115,13 @@ public partial class RibbonInfoBarHost : Control
     public RibbonInfoBarHost()
     {
         DefaultStyleKey = typeof(RibbonInfoBarHost);
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedAutomationName);
+        RegisterPropertyChangedCallback(
+            TitleProperty,
+            static (sender, _) => ((RibbonInfoBarHost)sender).RefreshLocalizedAutomationName());
+        RegisterPropertyChangedCallback(
+            MessageProperty,
+            static (sender, _) => ((RibbonInfoBarHost)sender).RefreshLocalizedAutomationName());
     }
 
     #endregion
@@ -150,6 +158,24 @@ public partial class RibbonInfoBarHost : Control
     private void OnInfoBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
     {
         IsOpen = false;
+    }
+
+    private void RefreshLocalizedAutomationName()
+    {
+        var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = !string.IsNullOrWhiteSpace(Title)
+                ? Title
+                : !string.IsNullOrWhiteSpace(Message)
+                    ? Message
+                    : RibbonLocalization.Current.Localization.RibbonNotificationName;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.UpdatePeerName(
+            this,
+            ref localizedAutomationName,
+            name);
     }
 
     internal InfoBar? InfoBarForTesting => infoBar;

@@ -5,6 +5,7 @@
 
     <Style TargetType="fluent:GroupSeparatorMenuItem">
         <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="IsEnabled" Value="False" />
         <Setter Property="Margin" Value="0,4,0,0" />
         <Setter Property="Template">
             <Setter.Value>
@@ -25,6 +26,7 @@
                         <!-- Group Header -->
                         <TextBlock
                             Grid.Row="1"
+                            AutomationProperties.HeadingLevel="Level3"
                             Text="{TemplateBinding Header}"
                             FontSize="11"
                             FontWeight="SemiBold"

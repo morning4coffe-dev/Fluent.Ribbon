@@ -73,6 +73,19 @@ public sealed partial class MainPage
                 AutoLog("  DEFECTSHOTS panel tab not found");
             }
 
+            // ---- Defect C: disabled Backstage item contrast on the dark surface ----
+            var originalTheme = RequestedTheme;
+            ApplyShowcaseTheme(ElementTheme.Dark);
+            BackstageView.IsOpen = true;
+            await SettleAsync(4, 120);
+            await CaptureElementPngAsync(BackstageView, Path.Combine(dir, "C-backstage-dark.png"));
+            MeasureDisabledBackstageItem();
+            AutoLog(SaveAsSeparator.Visibility == Visibility.Collapsed
+                ? "  FILEMENU Save As separator collapsed"
+                : $"  FAIL FILEMENU Save As separator visibility={SaveAsSeparator.Visibility}");
+            BackstageView.IsOpen = false;
+            ApplyShowcaseTheme(originalTheme);
+
             MainRibbon.SelectedTabIndex = 0;
             await SettleAsync(4, 120);
         }
@@ -87,6 +100,9 @@ public sealed partial class MainPage
     private void MeasureContextual(RibbonTabItem? designTab)
     {
         AutoLog($"  MainRibbon size={MainRibbon.ActualWidth:F1}x{MainRibbon.ActualHeight:F1}");
+        var toolbarHost = FindByName(MainRibbon, "PART_ToolBarItemsHost");
+        var toolbarLeft = toolbarHost?.TransformToVisual(MainRibbon)
+            .TransformPoint(new Point()).X;
 
         foreach (var container in EnumerateDescendants<RibbonContextualGroupsContainer>(MainRibbon))
         {
@@ -101,6 +117,13 @@ public sealed partial class MainPage
                     var gpos = group.TransformToVisual(MainRibbon).TransformPoint(new Point(0, 0));
                     AutoLog(
                         $"    group '{group.Header}' at ({gpos.X:F1},{gpos.Y:F1}) size={group.ActualWidth:F1}x{group.ActualHeight:F1} innerVis={group.InnerVisibility} vis={group.Visibility}");
+                    if (toolbarLeft is { } left && group.InnerVisibility == Visibility.Visible)
+                    {
+                        var groupRight = gpos.X + group.ActualWidth;
+                        AutoLog(groupRight <= left + 0.5
+                            ? $"    CTXHEADER clear of toolbar (right={groupRight:F1}, toolbarLeft={left:F1})"
+                            : $"    FAIL CTXHEADER overlaps toolbar (right={groupRight:F1}, toolbarLeft={left:F1})");
+                    }
                 }
             }
         }
@@ -111,6 +134,23 @@ public sealed partial class MainPage
             AutoLog(
                 $"  designTab at ({tpos.X:F1},{tpos.Y:F1}) size={designTab.ActualWidth:F1}x{designTab.ActualHeight:F1} vis={designTab.Visibility}");
         }
+    }
+
+    private void MeasureDisabledBackstageItem()
+    {
+        var disabledItem = EnumerateDescendants<BackstageTabItem>(BackstageView)
+            .FirstOrDefault(item => string.Equals(item.Header?.ToString(), "Disabled", StringComparison.Ordinal));
+        var header = disabledItem is null
+            ? null
+            : FindByName(disabledItem, "PART_Header") as ContentPresenter;
+        var color = (header?.Foreground as Microsoft.UI.Xaml.Media.SolidColorBrush)?.Color;
+        var colorText = color is { } value
+            ? $"#{value.R:X2}{value.G:X2}{value.B:X2}"
+            : "<none>";
+
+        AutoLog(colorText == "#C7DDF0"
+            ? $"  BACKSTAGE-DISABLED foreground={colorText}"
+            : $"  FAIL BACKSTAGE-DISABLED expected #C7DDF0, actual {colorText}");
     }
 
     private void MeasurePanelGroups()

@@ -4,6 +4,7 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:RibbonScrollViewer">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonScrollViewer">
@@ -18,13 +19,15 @@
                         <Button
                             x:Name="PART_LeftButton"
                             Grid.Column="0"
-                            Width="16"
+                            Width="{ThemeResource RibbonCompactTargetSize}"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             Padding="0"
                             VerticalAlignment="Stretch"
                             Visibility="Collapsed"
                             Background="{ThemeResource RibbonBackgroundBrush}"
+                            Foreground="{ThemeResource RibbonIconBrush}"
                             BorderThickness="0">
-                            <TextBlock Text="&#x2039;" FontSize="14" Foreground="{ThemeResource RibbonIconBrush}" />
+                            <TextBlock Text="&#x2039;" FontSize="14" />
                         </Button>
 
                         <ScrollViewer
@@ -40,13 +43,15 @@
                         <Button
                             x:Name="PART_RightButton"
                             Grid.Column="2"
-                            Width="16"
+                            Width="{ThemeResource RibbonCompactTargetSize}"
+                            MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             Padding="0"
                             VerticalAlignment="Stretch"
                             Visibility="Collapsed"
                             Background="{ThemeResource RibbonBackgroundBrush}"
+                            Foreground="{ThemeResource RibbonIconBrush}"
                             BorderThickness="0">
-                            <TextBlock Text="&#x203A;" FontSize="14" Foreground="{ThemeResource RibbonIconBrush}" />
+                            <TextBlock Text="&#x203A;" FontSize="14" />
                         </Button>
                     </Grid>
                 </ControlTemplate>

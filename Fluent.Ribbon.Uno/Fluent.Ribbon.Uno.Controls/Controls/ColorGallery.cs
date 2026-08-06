@@ -1,5 +1,6 @@
 namespace Fluent;
 
+using Fluent.Helpers;
 using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 
 using Microsoft.UI.Xaml.Automation;
@@ -17,9 +18,12 @@ using Microsoft.UI.Xaml.Automation;
 [TemplatePart(Name = PART_NoColorButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_MoreColorsButton, Type = typeof(WinUIButton))]
 [TemplatePart(Name = PART_ThemeColorsSection, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = PART_ThemeColorsHeader, Type = typeof(TextBlock))]
 [TemplatePart(Name = PART_ThemeColorsPanel, Type = typeof(Panel))]
+[TemplatePart(Name = PART_StandardColorsHeader, Type = typeof(TextBlock))]
 [TemplatePart(Name = PART_StandardColorsPanel, Type = typeof(Panel))]
 [TemplatePart(Name = PART_RecentColorsSection, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = PART_RecentColorsHeader, Type = typeof(TextBlock))]
 [TemplatePart(Name = PART_RecentColorsPanel, Type = typeof(Panel))]
 public partial class ColorGallery : Control
 {
@@ -27,9 +31,12 @@ public partial class ColorGallery : Control
     private const string PART_NoColorButton = "PART_NoColorButton";
     private const string PART_MoreColorsButton = "PART_MoreColorsButton";
     private const string PART_ThemeColorsSection = "PART_ThemeColorsSection";
+    private const string PART_ThemeColorsHeader = "PART_ThemeColorsHeader";
     private const string PART_ThemeColorsPanel = "PART_ThemeColorsPanel";
+    private const string PART_StandardColorsHeader = "PART_StandardColorsHeader";
     private const string PART_StandardColorsPanel = "PART_StandardColorsPanel";
     private const string PART_RecentColorsSection = "PART_RecentColorsSection";
+    private const string PART_RecentColorsHeader = "PART_RecentColorsHeader";
     private const string PART_RecentColorsPanel = "PART_RecentColorsPanel";
 
     private Panel? _themeColorsPanel;
@@ -37,6 +44,9 @@ public partial class ColorGallery : Control
     private Panel? _recentColorsPanel;
     private FrameworkElement? _themeColorsSection;
     private FrameworkElement? _recentColorsSection;
+    private TextBlock? _themeColorsHeader;
+    private TextBlock? _standardColorsHeader;
+    private TextBlock? _recentColorsHeader;
     private WinUIButton? _automaticButton;
     private WinUIButton? _noColorButton;
     private WinUIButton? _moreColorsButton;
@@ -275,6 +285,7 @@ public partial class ColorGallery : Control
         MutableStandardColors.CollectionChanged += OnColorsCollectionChanged;
         RecentColors.CollectionChanged += OnColorsCollectionChanged;
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedValues);
     }
 
     #endregion
@@ -302,9 +313,12 @@ public partial class ColorGallery : Control
         }
 
         _themeColorsSection = GetTemplateChild(PART_ThemeColorsSection) as FrameworkElement;
+        _themeColorsHeader = GetTemplateChild(PART_ThemeColorsHeader) as TextBlock;
         _themeColorsPanel = GetTemplateChild(PART_ThemeColorsPanel) as Panel;
+        _standardColorsHeader = GetTemplateChild(PART_StandardColorsHeader) as TextBlock;
         _standardColorsPanel = GetTemplateChild(PART_StandardColorsPanel) as Panel;
         _recentColorsSection = GetTemplateChild(PART_RecentColorsSection) as FrameworkElement;
+        _recentColorsHeader = GetTemplateChild(PART_RecentColorsHeader) as TextBlock;
         _recentColorsPanel = GetTemplateChild(PART_RecentColorsPanel) as Panel;
         _automaticButton = GetTemplateChild(PART_AutomaticButton) as WinUIButton;
         _noColorButton = GetTemplateChild(PART_NoColorButton) as WinUIButton;
@@ -326,6 +340,7 @@ public partial class ColorGallery : Control
         }
 
         ApplyCompatibilityTemplateParts();
+        RefreshLocalizedValues();
         RebuildSwatches();
     }
 
@@ -427,6 +442,67 @@ public partial class ColorGallery : Control
         UpdateSelectionCompatibility(SelectedColor);
     }
 
+    private void RefreshLocalizedValues()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        SetLocalizedContent(_automaticButton, localization.Automatic);
+        SetLocalizedContent(_noColorButton, localization.NoColor);
+        SetLocalizedContent(_moreColorsButton, localization.MoreColors);
+        SetLocalizedText(_themeColorsHeader, localization.ThemeColors);
+        SetLocalizedText(_standardColorsHeader, localization.StandardColors);
+        SetLocalizedText(_recentColorsHeader, localization.RecentColors);
+        RefreshSwatchLocalization();
+        UpdateSelectionCompatibility(SelectedColor);
+    }
+
+    private static void SetLocalizedContent(ContentControl? control, string value)
+    {
+        if (control is null)
+        {
+            return;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetValueIfUnsetOrGenerated(
+            control,
+            ContentControl.ContentProperty,
+            value);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(control, value);
+    }
+
+    private static void SetLocalizedText(TextBlock? textBlock, string value)
+    {
+        if (textBlock is not null)
+        {
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetValueIfUnsetOrGenerated(
+                textBlock,
+                TextBlock.TextProperty,
+                value);
+        }
+    }
+
+    private void RefreshSwatchLocalization()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        foreach (var swatch in _colorSwatches)
+        {
+            if (swatch.Tag is not Windows.UI.Color color)
+            {
+                continue;
+            }
+
+            var description =
+                Fluent.Automation.Peers.AutomationPeerHelpers.GetColorDescription(
+                    color,
+                    localization);
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                swatch,
+                description);
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(
+                swatch,
+                description);
+        }
+    }
+
     private void BuildSwatches(
         Panel? host,
         IReadOnlyList<Windows.UI.Color>? colors,
@@ -447,6 +523,8 @@ public partial class ColorGallery : Control
         var columns = Math.Max(1, Columns);
         var chipWidth = ChipWidth > 0 ? ChipWidth : 13.0;
         var chipHeight = ChipHeight > 0 ? ChipHeight : 13.0;
+        var targetSize = TouchTargetGeometry.ResolveCompactTargetSize(this);
+        var hitSize = TouchTargetGeometry.GetSwatchHitSize(chipWidth, chipHeight, targetSize);
         StackPanel? row = null;
 
         for (var i = 0; i < colors.Count; i++)
@@ -458,28 +536,46 @@ public partial class ColorGallery : Control
             }
 
             var color = colors[i];
-            var swatch = new WinUIButton
+            var chip = new Border
             {
                 Width = chipWidth,
                 Height = chipHeight,
-                MinWidth = 0,
-                MinHeight = 0,
-                Margin = new Thickness(1),
-                Padding = new Thickness(0),
                 BorderThickness = new Thickness(1),
                 BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 200, 200, 200)),
                 Background = new SolidColorBrush(color),
+            };
+            var swatch = new WinUIButton
+            {
+                MinWidth = hitSize.Width,
+                MinHeight = hitSize.Height,
+                Margin = new Thickness(1),
+                Padding = new Thickness(0),
+                BorderThickness = new Thickness(0),
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Content = chip,
                 Tag = color,
             };
 
-            ToolTipService.SetToolTip(swatch, color.ToString());
+            var colorDescription =
+                Fluent.Automation.Peers.AutomationPeerHelpers.GetColorDescription(
+                    color,
+                    RibbonLocalization.Current.Localization);
             AutomationProperties.SetAutomationId(swatch, $"ColorGallery{automationPrefix}Color{i}");
-            AutomationProperties.SetName(swatch, color.ToString());
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(
+                swatch,
+                colorDescription);
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                swatch,
+                colorDescription);
             swatch.Click += OnSwatchClick;
             row!.Children.Add(swatch);
             _colorSwatches.Add(swatch);
         }
     }
+
+    internal void RefreshTouchTargetGeometry() => RebuildSwatches();
 
     private void OnSwatchClick(object sender, RoutedEventArgs e)
     {

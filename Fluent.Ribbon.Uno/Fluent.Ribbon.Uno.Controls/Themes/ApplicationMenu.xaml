@@ -4,38 +4,76 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:ApplicationMenu">
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="Foreground" Value="{ThemeResource RibbonBackstageForegroundBrush}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:ApplicationMenu">
                     <Button
                         x:Name="PART_Button"
                         Background="{ThemeResource RibbonBackstageBackgroundBrush}"
-                        Foreground="White"
+                        Foreground="{TemplateBinding Foreground}"
                         BorderThickness="0"
                         Padding="12,4"
                         MinWidth="56"
-                        Height="26"
+                        MinHeight="{ThemeResource RibbonCompactTargetSize}"
                         VerticalAlignment="Center"
-                        CornerRadius="4">
+                        CornerRadius="4"
+                        IsTabStop="False"
+                        AllowFocusOnInteraction="False"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Control.IsTemplateFocusTarget="True">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border
+                                    x:Name="RootBorder"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Padding="{TemplateBinding Padding}">
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup x:Name="CommonStates">
+                                            <VisualState x:Name="Normal" />
+                                            <VisualState x:Name="PointerOver">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource RibbonBackstageBackgroundHoverBrush}" />
+                                                    <Setter Target="ApplicationMenuContent.Foreground" Value="{ThemeResource RibbonBackstageForegroundHoverBrush}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Pressed">
+                                                <VisualState.Setters>
+                                                    <Setter Target="RootBorder.Background" Value="{ThemeResource RibbonBackstageBackgroundPressedBrush}" />
+                                                    <Setter Target="ApplicationMenuContent.Foreground" Value="{ThemeResource RibbonBackstageForegroundPressedBrush}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                            <VisualState x:Name="Disabled">
+                                                <VisualState.Setters>
+                                                    <Setter Target="ApplicationMenuContent.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                                </VisualState.Setters>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+
+                                    <ContentPresenter
+                                        x:Name="ApplicationMenuContent"
+                                        Content="{TemplateBinding Content}"
+                                        Foreground="{TemplateBinding Foreground}"
+                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <!-- Optional icon glyph -->
                             <FontIcon
                                 Glyph="{TemplateBinding IconGlyph}"
                                 FontSize="12"
-                                Foreground="White"
                                 Visibility="{Binding IconGlyph, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyStringToCollapsedConverter}}" />
                             <ContentPresenter
                                 Content="{TemplateBinding Header}"
-                                VerticalAlignment="Center">
-                                <ContentPresenter.ContentTemplate>
-                                    <DataTemplate>
-                                        <TextBlock
-                                            Text="{Binding}"
-                                            FontSize="12"
-                                            FontWeight="SemiBold" />
-                                    </DataTemplate>
-                                </ContentPresenter.ContentTemplate>
-                            </ContentPresenter>
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                 </ControlTemplate>

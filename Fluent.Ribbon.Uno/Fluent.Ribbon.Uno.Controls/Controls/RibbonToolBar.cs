@@ -70,6 +70,9 @@ public partial class RibbonToolBar : RibbonControl
 
     private RibbonToolBarPanel? _layoutPanel;
     private bool _templateApplied;
+    private string? localizedAutomationName;
+
+    internal FrameworkElement? AutomationContentRoot => _layoutPanel;
 
     #endregion
 
@@ -87,6 +90,10 @@ public partial class RibbonToolBar : RibbonControl
         Items.CollectionChanged += (_, _) => InvalidateLayout();
         LayoutDefinitions.CollectionChanged += (_, _) => InvalidateLayout();
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedAutomationName);
+        RegisterPropertyChangedCallback(
+            HeaderProperty,
+            static (sender, _) => ((RibbonToolBar)sender).RefreshLocalizedAutomationName());
     }
 
     #endregion
@@ -123,6 +130,25 @@ public partial class RibbonToolBar : RibbonControl
     private void InvalidateLayout()
     {
         RebuildLayout();
+    }
+
+    private void RefreshLocalizedAutomationName()
+    {
+        var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = RibbonLocalization.Current.Localization.RibbonToolBarName;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.UpdatePeerName(
+            this,
+            ref localizedAutomationName,
+            name);
     }
 
     private void RebuildLayout()
@@ -213,12 +239,45 @@ public partial class RibbonToolBar : RibbonControl
         foreach (var item in Items)
         {
             DetachFromParent(item);
+#if WINDOWS
             RibbonProperties.SetAppropriateSize(item, toolBarSize);
+#else
+            var regularSizeDefinition = RibbonProperties.GetSizeDefinition(item);
+            var simplifiedSizeDefinition = item is ISimplifiedRibbonControl simplifiedControl
+                ? simplifiedControl.SimplifiedSizeDefinition
+                : regularSizeDefinition;
+            var itemSize = ResolveWrapItemSize(
+                toolBarSize,
+                regularSizeDefinition,
+                simplifiedSizeDefinition,
+                IsSimplified);
+            if (item is IScalableRibbonControl scalable)
+            {
+                scalable.ScaleTo(itemSize);
+            }
+            else
+            {
+                RibbonProperties.SetSize(item, itemSize);
+            }
+#endif
+
             _layoutPanel!.Children.Add(item);
         }
 
+#if WINDOWS
         _layoutPanel!.ConfigureWrapLayout();
+#else
+        _layoutPanel!.ConfigureWrapLayout(IsSimplified);
+#endif
     }
+
+    internal static RibbonControlSize ResolveWrapItemSize(
+        RibbonControlSize toolBarSize,
+        RibbonControlSizeDefinition regularSizeDefinition,
+        RibbonControlSizeDefinition simplifiedSizeDefinition,
+        bool isSimplified)
+        => (isSimplified ? simplifiedSizeDefinition : regularSizeDefinition)
+            .GetSize(toolBarSize);
 
     private void BuildDefinedLayout(RibbonToolBarLayoutDefinition definition)
     {
@@ -305,7 +364,15 @@ public partial class RibbonToolBar : RibbonControl
             rows.Add(rowElements);
         }
 
+#if WINDOWS
         _layoutPanel!.ConfigureCustomLayout(rows, definition.RowCount, separators);
+#else
+        _layoutPanel!.ConfigureCustomLayout(
+            rows,
+            definition.RowCount,
+            separators,
+            centerRowItems: IsSimplified);
+#endif
     }
 
     private FrameworkElement? FindItemByName(string? name)
@@ -332,4 +399,8 @@ public partial class RibbonToolBar : RibbonControl
     }
 
     #endregion
+
+    /// <inheritdoc/>
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonToolBarAutomationPeer(this);
 }

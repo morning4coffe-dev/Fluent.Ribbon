@@ -4,9 +4,11 @@
     xmlns:fluent="using:Fluent">
 
     <Style TargetType="fluent:Ribbon">
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="{ThemeResource RibbonBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="ContentHeight" Value="{ThemeResource RibbonContentHeight}" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Top" />
         <Setter Property="Template">

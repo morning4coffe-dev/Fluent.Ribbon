@@ -12,7 +12,11 @@ public partial class BackstageButton : Control
     /// <summary>
     /// Occurs when this button is clicked.
     /// </summary>
+#if __ANDROID__ || __IOS__
+    public new event RoutedEventHandler? Click;
+#else
     public event RoutedEventHandler? Click;
+#endif
 
     #endregion
 
@@ -194,13 +198,62 @@ public partial class BackstageButton : Control
         UpdateVisualState();
     }
 
+    /// <inheritdoc/>
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Handled || !IsEnabled)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Enter:
+                InvokeForAutomation();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Space:
+                _isPressed = true;
+                UpdateVisualState();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void OnKeyUp(KeyRoutedEventArgs e)
+    {
+        base.OnKeyUp(e);
+
+        if (e.Key != Windows.System.VirtualKey.Space)
+        {
+            return;
+        }
+
+        var shouldInvoke = _isPressed && IsEnabled;
+        _isPressed = false;
+        UpdateVisualState();
+        if (shouldInvoke)
+        {
+            InvokeForAutomation();
+            e.Handled = true;
+        }
+    }
+
     private void UpdateVisualState(bool useTransitions = true)
     {
+#if WINDOWS
+        const string disabledState = "Disabled";
+#else
+        const string disabledState = "DisabledPortable";
+#endif
         string state;
 
         if (!IsEnabled)
         {
-            state = "Disabled";
+            state = disabledState;
         }
         else if (_isPressed)
         {

@@ -31,16 +31,22 @@ public class AutomationPeerTests
         nameof(RibbonGroupBoxAutomationPeer),
         nameof(RibbonGroupHeaderAutomationPeer),
         nameof(RibbonHeaderedControlAutomationPeer),
+        nameof(RibbonGalleryAutomationPeer),
         nameof(RibbonInRibbonGalleryAutomationPeer),
         nameof(RibbonQuickAccessToolBarAutomationPeer),
         nameof(RibbonRadioButtonAutomationPeer),
         nameof(RibbonScreenTipAutomationPeer),
+        nameof(RibbonMenuAutomationPeer),
         nameof(RibbonSplitButtonAutomationPeer),
+        nameof(RibbonSpinnerAutomationPeer),
+        nameof(RibbonStartScreenAutomationPeer),
+        nameof(RibbonStartScreenTabControlAutomationPeer),
         nameof(RibbonTabControlAutomationPeer),
         nameof(RibbonTabItemAutomationPeer),
         nameof(RibbonTabItemDataAutomationPeer),
         nameof(RibbonTextBoxAutomationPeer),
         nameof(RibbonTitleBarAutomationPeer),
+        nameof(RibbonToolBarAutomationPeer),
         nameof(RibbonToggleButtonAutomationPeer),
         nameof(TwoLineLabelAutomationPeer),
     ];
@@ -68,11 +74,12 @@ public class AutomationPeerTests
             Assert.That(typeof(RibbonComboBoxAutomationPeer).BaseType, Is.EqualTo(typeof(ComboBoxAutomationPeer)));
             Assert.That(
                 typeof(RibbonComboBoxAccessibleAutomationPeer).BaseType,
-                Is.EqualTo(typeof(FrameworkElementAutomationPeer)));
+                Is.EqualTo(typeof(RibbonComboBoxAutomationPeer)));
             Assert.That(
                 typeof(RibbonBackstageButtonAutomationPeer).BaseType,
                 Is.EqualTo(typeof(FrameworkElementAutomationPeer)));
             Assert.That(typeof(RibbonRadioButtonAutomationPeer).BaseType, Is.EqualTo(typeof(RadioButtonAutomationPeer)));
+            Assert.That(typeof(RibbonSpinnerAutomationPeer).BaseType, Is.EqualTo(typeof(FrameworkElementAutomationPeer)));
             Assert.That(typeof(RibbonTextBoxAutomationPeer).BaseType, Is.EqualTo(typeof(TextBoxAutomationPeer)));
             Assert.That(typeof(RibbonToggleButtonAutomationPeer).BaseType, Is.EqualTo(typeof(ToggleButtonAutomationPeer)));
             Assert.That(typeof(RibbonTabControlAutomationPeer).BaseType, Is.EqualTo(typeof(TabViewAutomationPeer)));
@@ -96,15 +103,21 @@ public class AutomationPeerTests
         AssertOwnerConstructor<RibbonDropDownButtonAutomationPeer, RibbonDropDownButton>();
         AssertOwnerConstructor<RibbonGroupBoxAutomationPeer, RibbonGroupBox>();
         AssertOwnerConstructor<RibbonGroupHeaderAutomationPeer, FrameworkElement>();
+        AssertOwnerConstructor<RibbonGalleryAutomationPeer, RibbonGallery>();
         AssertOwnerConstructor<RibbonInRibbonGalleryAutomationPeer, InRibbonGallery>();
         AssertOwnerConstructor<RibbonQuickAccessToolBarAutomationPeer, QuickAccessToolBar>();
         AssertOwnerConstructor<RibbonRadioButtonAutomationPeer, RibbonRadioButton>();
         AssertOwnerConstructor<RibbonScreenTipAutomationPeer, ScreenTip>();
+        AssertOwnerConstructor<RibbonMenuAutomationPeer, RibbonMenu>();
         AssertOwnerConstructor<RibbonSplitButtonAutomationPeer, RibbonSplitButton>();
+        AssertOwnerConstructor<RibbonSpinnerAutomationPeer, RibbonSpinner>();
+        AssertOwnerConstructor<RibbonStartScreenAutomationPeer, StartScreen>();
+        AssertOwnerConstructor<RibbonStartScreenTabControlAutomationPeer, StartScreenTabControl>();
         AssertOwnerConstructor<RibbonTabControlAutomationPeer, RibbonTabControl>();
         AssertOwnerConstructor<RibbonTabItemAutomationPeer, RibbonTab>();
         AssertOwnerConstructor<RibbonTextBoxAutomationPeer, RibbonTextBox>();
         AssertOwnerConstructor<RibbonTitleBarAutomationPeer, RibbonTitleBar>();
+        AssertOwnerConstructor<RibbonToolBarAutomationPeer, RibbonToolBar>();
         AssertOwnerConstructor<RibbonToggleButtonAutomationPeer, RibbonToggleButton>();
         AssertOwnerConstructor<TwoLineLabelAutomationPeer, TwoLineLabel>();
 
@@ -134,6 +147,20 @@ public class AutomationPeerTests
     }
 
     [Test]
+    public void RibbonSpinnerCreatesItsSpecificPeer()
+    {
+        var method = typeof(RibbonSpinner).GetMethod(
+            "OnCreateAutomationPeer",
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(method, Is.Not.Null);
+            Assert.That(method!.ReturnType, Is.EqualTo(typeof(AutomationPeer)));
+        });
+    }
+
+    [Test]
     public void RepresentativePatternsAreDeclared()
     {
         Assert.Multiple(() =>
@@ -148,8 +175,15 @@ public class AutomationPeerTests
             Assert.That(typeof(ISelectionItemProvider).IsAssignableFrom(typeof(RibbonComboBoxItemDataAutomationPeer)), Is.True);
             Assert.That(typeof(IInvokeProvider).IsAssignableFrom(typeof(RibbonBackstageButtonAutomationPeer)), Is.True);
             Assert.That(typeof(IExpandCollapseProvider).IsAssignableFrom(typeof(RibbonGroupBoxAutomationPeer)), Is.True);
+            Assert.That(typeof(IExpandCollapseProvider).IsAssignableFrom(typeof(RibbonStartScreenAutomationPeer)), Is.True);
+            Assert.That(typeof(ISelectionProvider).IsAssignableFrom(typeof(RibbonStartScreenTabControlAutomationPeer)), Is.True);
             Assert.That(typeof(IInvokeProvider).IsAssignableFrom(typeof(RibbonSplitButtonAutomationPeer)), Is.True);
+            Assert.That(typeof(IRangeValueProvider).IsAssignableFrom(typeof(RibbonSpinnerAutomationPeer)), Is.True);
             Assert.That(typeof(IInvokeProvider).IsAssignableFrom(typeof(GalleryItemWrapperAutomationPeer)), Is.True);
+            Assert.That(typeof(ISelectionProvider).IsAssignableFrom(typeof(RibbonGalleryAutomationPeer)), Is.True);
+            Assert.That(typeof(ISelectionProvider).IsAssignableFrom(typeof(RibbonInRibbonGalleryAutomationPeer)), Is.True);
+            Assert.That(typeof(ISelectionItemProvider).IsAssignableFrom(typeof(GalleryItemAutomationPeer)), Is.True);
+            Assert.That(typeof(ISelectionItemProvider).IsAssignableFrom(typeof(GalleryItemWrapperAutomationPeer)), Is.True);
             Assert.That(typeof(ISelectionProvider).IsAssignableFrom(typeof(RibbonTabControlAutomationPeer)), Is.True);
             Assert.That(typeof(ISelectionItemProvider).IsAssignableFrom(typeof(RibbonTabItemDataAutomationPeer)), Is.True);
             Assert.That(typeof(IScrollItemProvider).IsAssignableFrom(typeof(GalleryItemAutomationPeer)), Is.True);
@@ -160,7 +194,9 @@ public class AutomationPeerTests
         AssertPatternOverride<RibbonComboBoxAccessibleAutomationPeer>();
         AssertPatternOverride<RibbonBackstageButtonAutomationPeer>();
         AssertPatternOverride<RibbonSplitButtonAutomationPeer>();
+        AssertPatternOverride<RibbonSpinnerAutomationPeer>();
         AssertPatternOverride<RibbonTabControlAutomationPeer>();
+        AssertPatternOverride<RibbonGalleryAutomationPeer>();
         AssertPatternOverride<GalleryItemWrapperAutomationPeer>();
     }
 
@@ -173,7 +209,14 @@ public class AutomationPeerTests
             AssertCoreOverride<RibbonScreenTipAutomationPeer>("GetNameCore");
             AssertCoreOverride<RibbonScreenTipAutomationPeer>("GetHelpTextCore");
             AssertCoreOverride<RibbonScreenTipAutomationPeer>("GetAutomationControlTypeCore");
+            AssertCoreOverride<RibbonScreenTipAutomationPeer>("GetAcceleratorKeyCore");
+            AssertCoreOverride<RibbonSpinnerAutomationPeer>("GetAutomationControlTypeCore");
+            AssertCoreOverride<RibbonSpinnerAutomationPeer>("GetNameCore");
+            AssertCoreOverride<RibbonSpinnerAutomationPeer>("GetAccessKeyCore");
+            AssertCoreOverride<RibbonSpinnerAutomationPeer>("SetFocusCore");
             AssertCoreOverride<RibbonTabItemAutomationPeer>("GetAccessKeyCore");
+            AssertCoreOverride<RibbonGalleryAutomationPeer>("GetChildrenCore");
+            AssertCoreOverride<RibbonInRibbonGalleryAutomationPeer>("GetChildrenCore");
             AssertCoreOverride<TwoLineLabelAutomationPeer>("GetNameCore");
         });
     }

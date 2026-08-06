@@ -21,6 +21,7 @@ public partial class StartScreenTabControl : BackstageTabControl
 
     private StackPanel? _itemsPanel;
     private ContentPresenter? _rightContentPresenter;
+    private bool isSelectionUpdateInProgress;
 
     #region Dependency Properties
 
@@ -161,26 +162,74 @@ public partial class StartScreenTabControl : BackstageTabControl
             _itemsPanel.Children.Add(item);
         }
 
-        // Select first tab by default
-        var firstTab = Items.OfType<BackstageTabItem>().FirstOrDefault();
-        if (firstTab is not null)
+        var selectedTab = Items
+            .OfType<BackstageTabItem>()
+            .FirstOrDefault(static item => item.IsSelected);
+        var tabToSelect = selectedTab
+                          ?? Items.OfType<BackstageTabItem>().FirstOrDefault();
+        if (tabToSelect is not null)
         {
-            SelectTab(firstTab);
+            SelectTab(tabToSelect);
+        }
+        else
+        {
+            SelectedContent = null;
         }
     }
 
     private void SelectTab(BackstageTabItem tab)
     {
-        foreach (var item in Items.OfType<BackstageTabItem>())
+        if (isSelectionUpdateInProgress
+            || Items.Contains(tab) is false)
         {
-            item.IsSelected = false;
+            return;
         }
 
-        tab.IsSelected = true;
-        SelectedContent = tab.Content as UIElement;
+        var oldTab = Items
+            .OfType<BackstageTabItem>()
+            .FirstOrDefault(static item => item.IsSelected);
+        if (ReferenceEquals(oldTab, tab))
+        {
+            SelectedContent = tab.Content as UIElement;
+            return;
+        }
+
+        isSelectionUpdateInProgress = true;
+        try
+        {
+            foreach (var item in Items.OfType<BackstageTabItem>())
+            {
+                if (ReferenceEquals(item, tab) is false
+                    && item.IsSelected)
+                {
+                    item.IsSelected = false;
+                }
+            }
+
+            if (tab.IsSelected is false)
+            {
+                tab.IsSelected = true;
+            }
+
+            SelectedContent = tab.Content as UIElement;
+        }
+        finally
+        {
+            isSelectionUpdateInProgress = false;
+        }
+
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            is Fluent.Automation.Peers.RibbonStartScreenTabControlAutomationPeer peer)
+        {
+            peer.RaiseSelectionChanged(oldTab, tab);
+        }
     }
 
     internal new void SelectTabForAutomation(BackstageTabItem tab) => SelectTab(tab);
+
+    /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()
+        => new Fluent.Automation.Peers.RibbonStartScreenTabControlAutomationPeer(this);
 
     /// <inheritdoc />
     protected override IEnumerator LogicalChildren

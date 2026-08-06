@@ -1,5 +1,6 @@
 namespace Fluent;
 
+using System.Collections;
 using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 
 /// <summary>
@@ -33,7 +34,10 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private bool _suppressPopupRebuild;
     private bool _isChangingIsCollapsedInternally;
     private bool _isCollapsedExplicitlySet;
+    private bool _isRebuildingItemsSource;
     private int _currentItemsInRow = -1;
+    private INotifyCollectionChanged? _subscribedItemsSource;
+    private readonly Dictionary<UIElement, object?> _sourceItemByContainer = new();
 #pragma warning disable CS0169
     private int _scrollOffset;
 #pragma warning restore CS0169
@@ -79,6 +83,23 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     {
         get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
         private set => SetValue(ItemsProperty, value);
+    }
+
+    /// <summary>Identifies the <see cref="ItemsSource"/> dependency property.</summary>
+    public new static readonly DependencyProperty ItemsSourceProperty =
+        DependencyProperty.Register(
+            nameof(ItemsSource),
+            typeof(IEnumerable),
+            typeof(InRibbonGallery),
+            new PropertyMetadata(null, OnItemsSourceChanged));
+
+    /// <summary>
+    /// Gets or sets the data source used to populate gallery items.
+    /// </summary>
+    public new IEnumerable? ItemsSource
+    {
+        get => (IEnumerable?)GetValue(ItemsSourceProperty);
+        set => SetValue(ItemsSourceProperty, value);
     }
 
     /// <summary>Identifies the <see cref="ItemWidth"/> dependency property.</summary>
@@ -299,7 +320,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             nameof(Selectable),
             typeof(bool),
             typeof(InRibbonGallery),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnSelectableChanged));
 
     /// <summary>
     /// Gets or sets whether items in the gallery can be selected.
@@ -362,11 +383,15 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     public InRibbonGallery()
     {
         DefaultStyleKey = typeof(InRibbonGallery);
+        IsTabStop = false;
         Items = new ObservableCollection<UIElement>();
         MenuItems = new ObservableCollection<UIElement>();
         Items.CollectionChanged += OnItemsCollectionChanged;
+        Loaded += OnGalleryLoaded;
+        Unloaded += OnGalleryUnloaded;
         QuickAccessHelper.AttachContextMenu(this);
         InitializeCompatibility();
+        RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
     #endregion
@@ -389,6 +414,9 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         if (_expandButton is not null)
         {
             _expandButton.Click += OnExpandButtonClick;
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                _expandButton,
+                RibbonLocalization.Current.Localization.OpenGalleryOptions);
         }
 
         if (_upButton is not null)
@@ -400,6 +428,9 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         if (_upButton is not null)
         {
             _upButton.Click += OnUpButtonClick;
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                _upButton,
+                RibbonLocalization.Current.Localization.ScrollGalleryUp);
         }
 
         if (_downButton is not null)
@@ -411,6 +442,9 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         if (_downButton is not null)
         {
             _downButton.Click += OnDownButtonClick;
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                _downButton,
+                RibbonLocalization.Current.Localization.ScrollGalleryDown);
         }
 
         if (_collapsedButton is not null)
@@ -422,10 +456,27 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         if (_collapsedButton is not null)
         {
             _collapsedButton.Click += OnExpandButtonClick;
+            Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
+                _collapsedButton,
+                RibbonLocalization.Current.Localization.OpenGallery);
         }
 
-        _scrollViewer = GetTemplateChild(PART_ScrollViewer) as ScrollViewer;
+#if !WINDOWS
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.SizeChanged -= OnInlineViewportSizeChanged;
+        }
+#endif
 
+        _scrollViewer = GetTemplateChild(PART_ScrollViewer) as ScrollViewer;
+#if !WINDOWS
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.SizeChanged += OnInlineViewportSizeChanged;
+        }
+#endif
+
+        RefreshLocalizedTemplateMetadata();
         SetupGalleryPanel();
         UpdateVisualState();
         UpdateCompatibilityTemplate();
@@ -443,6 +494,26 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     }
 
     #endregion
+
+    private void RefreshLocalizedTemplateMetadata()
+    {
+        var localization = RibbonLocalization.Current.Localization;
+        SetLocalizedAction(_expandButton, localization.OpenGalleryOptions);
+        SetLocalizedAction(_upButton, localization.ScrollGalleryUp);
+        SetLocalizedAction(_downButton, localization.ScrollGalleryDown);
+        SetLocalizedAction(_collapsedButton, localization.OpenGallery);
+    }
+
+    private static void SetLocalizedAction(DependencyObject? action, string name)
+    {
+        if (action is null)
+        {
+            return;
+        }
+
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(action, name);
+        Fluent.Automation.Peers.AutomationPeerHelpers.SetToolTipIfUnsetOrGenerated(action, name);
+    }
 
     #region IScalableRibbonControl
 
@@ -516,7 +587,244 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnCompatibilityItemsChanged(e);
+        PruneSourceItemMappings();
         SyncInlineChildren();
+        if (!_isRebuildingItemsSource)
+        {
+            SyncActiveQuickAccessClone();
+        }
+    }
+
+    private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is InRibbonGallery gallery)
+        {
+            gallery.ReplaceItemsSource(
+                e.OldValue as IEnumerable,
+                e.NewValue as IEnumerable);
+        }
+    }
+
+    private void ReplaceItemsSource(IEnumerable? oldSource, IEnumerable? newSource)
+    {
+        UnsubscribeItemsSource();
+        RebuildItemsFromSource();
+
+        if (newSource is INotifyCollectionChanged newNotify && IsLoaded)
+        {
+            SubscribeItemsSource(newNotify);
+        }
+    }
+
+    private void OnGalleryLoaded(object sender, RoutedEventArgs e)
+    {
+        if (ItemsSource is INotifyCollectionChanged notify
+            && !ReferenceEquals(_subscribedItemsSource, notify))
+        {
+            RebuildItemsFromSource();
+            SubscribeItemsSource(notify);
+        }
+    }
+
+    private void OnGalleryUnloaded(object sender, RoutedEventArgs e)
+    {
+        IsDropDownOpen = false;
+        UnsubscribeItemsSource();
+    }
+
+    private void SubscribeItemsSource(INotifyCollectionChanged source)
+    {
+        if (ReferenceEquals(_subscribedItemsSource, source))
+        {
+            return;
+        }
+
+        UnsubscribeItemsSource();
+        source.CollectionChanged += OnItemsSourceCollectionChanged;
+        _subscribedItemsSource = source;
+    }
+
+    private void UnsubscribeItemsSource()
+    {
+        if (_subscribedItemsSource is null)
+        {
+            return;
+        }
+
+        _subscribedItemsSource.CollectionChanged -= OnItemsSourceCollectionChanged;
+        _subscribedItemsSource = null;
+    }
+
+    private void OnItemsSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                var insertIndex = e.NewStartingIndex >= 0 ? e.NewStartingIndex : Items.Count;
+                foreach (var item in e.NewItems)
+                {
+                    Items.Insert(insertIndex++, CreateItemContainer(item));
+                }
+
+                break;
+            case NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                for (var index = 0; index < e.OldItems.Count; index++)
+                {
+                    if (e.OldStartingIndex >= 0 && e.OldStartingIndex < Items.Count)
+                    {
+                        Items.RemoveAt(e.OldStartingIndex);
+                    }
+                }
+
+                break;
+            case NotifyCollectionChangedAction.Replace:
+                if (e.NewItems is not null
+                    && e.NewStartingIndex >= 0
+                    && e.NewStartingIndex + e.NewItems.Count <= Items.Count)
+                {
+                    for (var index = 0; index < e.NewItems.Count; index++)
+                    {
+                        Items[e.NewStartingIndex + index] =
+                            CreateItemContainer(e.NewItems[index]);
+                    }
+                }
+                else
+                {
+                    RebuildItemsFromSource();
+                }
+
+                break;
+            case NotifyCollectionChangedAction.Move:
+                if (e.OldItems?.Count == 1
+                    && e.OldStartingIndex >= 0
+                    && e.NewStartingIndex >= 0
+                    && e.OldStartingIndex < Items.Count
+                    && e.NewStartingIndex < Items.Count)
+                {
+                    Items.Move(e.OldStartingIndex, e.NewStartingIndex);
+                }
+                else
+                {
+                    RebuildItemsFromSource();
+                }
+
+                break;
+            default:
+                RebuildItemsFromSource();
+
+                break;
+        }
+
+    }
+
+    internal void RebuildItemsFromSource()
+    {
+        var selectedValue = SelectedItem;
+        _isRebuildingItemsSource = true;
+        try
+        {
+            Items.Clear();
+            if (ItemsSource is not null)
+            {
+                foreach (var item in ItemsSource)
+                {
+                    Items.Add(CreateItemContainer(item));
+                }
+            }
+        }
+        finally
+        {
+            _isRebuildingItemsSource = false;
+        }
+
+        if (selectedValue is not null
+            && FindSelectionContainer(selectedValue) is null)
+        {
+            SelectedItem = null;
+        }
+        else
+        {
+            RefreshSelectionContainerState();
+        }
+
+        SyncActiveQuickAccessClone();
+    }
+
+    private UIElement CreateItemContainer(object? item)
+    {
+        if (item is UIElement element)
+        {
+            _sourceItemByContainer.Remove(element);
+            return element;
+        }
+
+        var container = new RibbonGalleryItem
+        {
+            Content = item,
+            ContentTemplate = ItemTemplate,
+            DataContext = item,
+        };
+        _sourceItemByContainer[container] = item;
+        return container;
+    }
+
+    private void PruneSourceItemMappings()
+    {
+        foreach (var container in _sourceItemByContainer.Keys
+                     .Where(container => !Items.Contains(container))
+                     .ToArray())
+        {
+            _sourceItemByContainer.Remove(container);
+        }
+    }
+
+    internal object? GetSelectionValue(UIElement container)
+        => _sourceItemByContainer.TryGetValue(container, out var sourceItem)
+            ? sourceItem
+            : container;
+
+    internal UIElement? FindSelectionContainer(
+        object? selectionValue,
+        bool requireCurrentItem = true)
+    {
+        if (selectionValue is UIElement element
+            && (!requireCurrentItem || Items.Contains(element)))
+        {
+            return element;
+        }
+
+        foreach (var (container, sourceItem) in _sourceItemByContainer)
+        {
+            if ((!requireCurrentItem || Items.Contains(container))
+                && ReferenceEquals(sourceItem, selectionValue))
+            {
+                return container;
+            }
+        }
+
+        foreach (var (container, sourceItem) in _sourceItemByContainer)
+        {
+            if ((!requireCurrentItem || Items.Contains(container))
+                && Equals(sourceItem, selectionValue))
+            {
+                return container;
+            }
+        }
+
+        return null;
+    }
+
+    internal void CopySourceItemMappingsFrom(
+        InRibbonGallery source,
+        IEnumerable<UIElement> containers)
+    {
+        foreach (var container in containers)
+        {
+            if (source._sourceItemByContainer.TryGetValue(container, out var sourceItem))
+            {
+                _sourceItemByContainer[container] = sourceItem;
+            }
+        }
     }
 
     // Hosts the live gallery UIElements directly as panel children (non-virtualizing). While the
@@ -545,8 +853,6 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
             return;
         }
 
-        _galleryPanel.ItemWidth = ItemWidth;
-        _galleryPanel.ItemHeight = ItemHeight;
         ConfigurePanel(
             _galleryPanel,
             MinItemsInRow,
@@ -618,11 +924,41 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private void ConfigurePanel(UniformItemsPanel panel, int minItemsInRow, int maxItemsInRow)
     {
         panel.ItemWidth = ItemWidth;
-        panel.ItemHeight = ItemHeight;
+        panel.ItemHeight = GetEffectiveItemHeight(panel);
         panel.MinColumns = GalleryLayoutMath.NormalizeCount(minItemsInRow);
         panel.MaxColumns = GalleryLayoutMath.NormalizeCount(maxItemsInRow);
         panel.Orientation = Orientation;
     }
+
+    private double GetEffectiveItemHeight(UniformItemsPanel panel)
+    {
+#if WINDOWS
+        return ItemHeight;
+#else
+        if (!ReferenceEquals(panel, _galleryPanel)
+            || _isPopupOpen
+            || !IsSimplified
+            || double.IsNaN(ItemHeight)
+            || _scrollViewer is not { ActualHeight: > 0 } scrollViewer)
+        {
+            return ItemHeight;
+        }
+
+        return CompactRibbonLayoutMath.FitInlineGalleryItemHeight(
+            ItemHeight,
+            scrollViewer.ActualHeight);
+#endif
+    }
+
+#if !WINDOWS
+    private void OnInlineViewportSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (IsSimplified && !_isPopupOpen && !IsCollapsed)
+        {
+            UpdateGalleryLayout();
+        }
+    }
+#endif
 
     private int GetCurrentItemsInRow()
     {
@@ -902,19 +1238,21 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     private void UpdateVisualState()
     {
-        if (!IsCollapsed)
-        {
-            VisualStateManager.GoToState(this, "Inline", true);
-            return;
-        }
-
-        // A Small collapsed gallery (e.g. the Quick Access Toolbar clone) uses a compact
-        // horizontal icon+chevron button; larger collapsed galleries keep the tall icon/header
-        // button. This mirrors WPF's size-driven Small gallery presentation.
-        VisualStateManager.GoToState(
-            this,
-            Size == RibbonControlSize.Small ? "CollapsedToButtonCompact" : "CollapsedToButton",
-            true);
+#if WINDOWS
+        var displayState = CompactRibbonLayoutMath.ResolveInRibbonGalleryDisplayState(
+            IsCollapsed,
+            isSimplified: false,
+            Size);
+#else
+        var displayState = CompactRibbonLayoutMath.ResolveInRibbonGalleryDisplayState(
+            IsCollapsed,
+            IsSimplified,
+            Size);
+#endif
+        VisualStateManager.GoToState(this, displayState, true);
+#if !WINDOWS
+        VisualStateManager.GoToState(this, IsSimplified ? "Simplified" : "Classic", true);
+#endif
     }
 
     private static void OnSelectedItemChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -931,6 +1269,157 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         {
             gallery.HandleSelectedIndexChanged((int)e.NewValue);
         }
+    }
+
+    private static void OnSelectableChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is InRibbonGallery gallery && !(bool)e.NewValue)
+        {
+            gallery.SelectedItem = null;
+        }
+    }
+
+    internal bool SelectItem(UIElement item)
+    {
+        if (!Selectable || !IsEnabled || !IsItemEnabled(item) || !Items.Contains(item))
+        {
+            return false;
+        }
+
+        SelectedItem = GetSelectionValue(item);
+        return ReferenceEquals(FindSelectionContainer(SelectedItem), item);
+    }
+
+    internal bool RemoveItemFromSelection(UIElement item)
+    {
+        if (!IsEnabled
+            || !IsItemEnabled(item)
+            || !ReferenceEquals(FindSelectionContainer(SelectedItem), item))
+        {
+            return false;
+        }
+
+        SelectedItem = null;
+        return SelectedItem is null;
+    }
+
+    internal IEnumerable<UIElement> GetAutomationItems()
+    {
+        if (IsCollapsed && !IsDropDownOpen)
+        {
+            return [];
+        }
+
+        return Items.Where(
+            Fluent.Automation.Peers.AutomationPeerHelpers.IsEffectivelyVisible);
+    }
+
+    internal bool HandleGalleryItemKeyDown(UIElement source, KeyRoutedEventArgs e)
+        => HandleNavigationKey(source, e);
+
+    internal bool HandleNavigationKey(UIElement? source, KeyRoutedEventArgs e)
+    {
+        if (!TryGetNavigationDirection(e.Key, out var direction))
+        {
+            return false;
+        }
+
+        if (Orientation == Orientation.Vertical
+            && e.Key is Windows.System.VirtualKey.Left or Windows.System.VirtualKey.Right)
+        {
+            return false;
+        }
+
+        var items = GetAutomationItems().Where(IsItemEnabled).ToList();
+        if (items.Count == 0)
+        {
+            return false;
+        }
+
+        var current = source is null ? null : FindContainingItem(source, items);
+        current ??= FindSelectionContainer(SelectedItem);
+        var currentIndex = current is null ? 0 : Math.Max(0, items.IndexOf(current));
+        var columns = Orientation == Orientation.Vertical
+            ? 1
+            : Math.Max(
+                1,
+                IsDropDownOpen
+                    ? GalleryLayoutMath.NormalizeCount(MaxItemsInDropDownRow)
+                    : GetCurrentItemsInRow());
+        var targetIndex = GalleryNavigationMath.GetTargetIndex(
+            currentIndex,
+            items.Count,
+            columns,
+            Orientation,
+            direction);
+        if (targetIndex < 0)
+        {
+            return false;
+        }
+
+        var target = items[targetIndex];
+        SelectItem(target);
+        SetRovingFocus(target);
+        target.Focus(FocusState.Keyboard);
+        target.StartBringIntoView();
+        e.Handled = true;
+        return true;
+    }
+
+    internal void UpdateItemTabStops()
+    {
+        var focusTarget = FindSelectionContainer(SelectedItem)
+                          ?? GetAutomationItems().FirstOrDefault(IsItemEnabled);
+        SetRovingFocus(focusTarget);
+    }
+
+    private void SetRovingFocus(UIElement? focusTarget)
+    {
+        foreach (var item in Items.OfType<Control>())
+        {
+            item.IsTabStop = ReferenceEquals(item, focusTarget);
+        }
+    }
+
+    private static UIElement? FindContainingItem(UIElement source, IReadOnlyCollection<UIElement> items)
+    {
+        DependencyObject? current = source;
+        while (current is not null)
+        {
+            if (current is UIElement element && items.Contains(element))
+            {
+                return element;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static bool IsItemEnabled(UIElement item)
+        => item is not Control control || control.IsEnabled;
+
+    private static bool TryGetNavigationDirection(
+        Windows.System.VirtualKey key,
+        out GalleryNavigationDirection direction)
+    {
+        direction = key switch
+        {
+            Windows.System.VirtualKey.Left => GalleryNavigationDirection.Previous,
+            Windows.System.VirtualKey.Right => GalleryNavigationDirection.Next,
+            Windows.System.VirtualKey.Up => GalleryNavigationDirection.PreviousRow,
+            Windows.System.VirtualKey.Down => GalleryNavigationDirection.NextRow,
+            Windows.System.VirtualKey.Home => GalleryNavigationDirection.First,
+            Windows.System.VirtualKey.End => GalleryNavigationDirection.Last,
+            _ => default,
+        };
+        return key is Windows.System.VirtualKey.Left
+            or Windows.System.VirtualKey.Right
+            or Windows.System.VirtualKey.Up
+            or Windows.System.VirtualKey.Down
+            or Windows.System.VirtualKey.Home
+            or Windows.System.VirtualKey.End;
     }
 
     private static void OnIsCollapsedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -952,4 +1441,33 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         => new Fluent.Automation.Peers.RibbonInRibbonGalleryAutomationPeer(this);
 
     #endregion
+}
+
+internal static class CompactRibbonLayoutMath
+{
+    internal const double CompactGalleryItemHeightThreshold = 48;
+
+    internal static double FitInlineGalleryItemHeight(
+        double configuredHeight,
+        double viewportHeight)
+        => viewportHeight > 0 && !double.IsNaN(configuredHeight)
+            ? Math.Min(configuredHeight, viewportHeight)
+            : configuredHeight;
+
+    internal static bool UsesCompactGalleryItemPadding(double actualHeight)
+        => actualHeight is > 0 and <= CompactGalleryItemHeightThreshold;
+
+    internal static string ResolveInRibbonGalleryDisplayState(
+        bool isCollapsed,
+        bool isSimplified,
+        RibbonControlSize size)
+        => !isCollapsed
+            ? "Inline"
+            : isSimplified
+                ? "CollapsedToButtonSimplified"
+                // A Small collapsed gallery (e.g. the Quick Access Toolbar clone) uses a compact
+                // icon-only button; larger classic galleries keep the tall icon/header button.
+                : size == RibbonControlSize.Small
+                    ? "CollapsedToButtonCompact"
+                    : "CollapsedToButton";
 }

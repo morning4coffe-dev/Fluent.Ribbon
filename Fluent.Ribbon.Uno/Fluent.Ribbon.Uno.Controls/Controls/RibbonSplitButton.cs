@@ -21,7 +21,11 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
     protected FrameworkElement? PrimaryActionTarget => button;
 
     /// <summary>Occurs when the primary button is clicked.</summary>
+#if __ANDROID__ || __IOS__
+    public new event RoutedEventHandler? Click;
+#else
     public event RoutedEventHandler? Click;
+#endif
 
     /// <summary>Occurs when the button becomes checked.</summary>
     public event RoutedEventHandler? Checked;
@@ -178,13 +182,27 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
         if (button is not null)
         {
+            button.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                button,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             button.Click += OnButtonClick;
-            primaryClickFallback = ButtonPointerClickFallback.Attach(button, InvokePrimaryAction);
+            primaryClickFallback = ButtonPointerClickFallback.Attach(
+                button,
+                () =>
+                {
+                    Focus(FocusState.Pointer);
+                    InvokePrimaryAction();
+                });
             button.IsEnabled = IsButtonEnabled;
         }
 
         if (dropDownButton is not null)
         {
+            dropDownButton.IsTabStop = false;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                dropDownButton,
+                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             ToolTipService.SetToolTip(dropDownButton, DropDownToolTip);
         }
 
@@ -193,7 +211,23 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
     {
+        Focus(FocusState.Pointer);
         InvokePrimaryAction(e);
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        // The outer split button is the only tab stop and UIA element. Enter/Space retain
+        // the primary action while Down follows the base drop-down path.
+        if (!e.Handled
+            && e.Key is Windows.System.VirtualKey.Enter or Windows.System.VirtualKey.Space)
+        {
+            InvokePrimaryAction();
+            e.Handled = true;
+        }
+
+        base.OnKeyDown(e);
     }
 
     protected internal void InvokePrimaryAction()
@@ -203,6 +237,11 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
     private void InvokePrimaryAction(RoutedEventArgs e)
     {
+        if (!IsEnabled || !IsButtonEnabled)
+        {
+            return;
+        }
+
         if (IsCheckable)
         {
             IsChecked = !(IsChecked ?? false);
@@ -299,6 +338,10 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
             this,
             IsCheckable && IsChecked == true ? "Checked" : "Unchecked",
             true);
+        if (!IsEnabled)
+        {
+            VisualStateManager.GoToState(this, "Disabled", true);
+        }
     }
 
     /// <inheritdoc />

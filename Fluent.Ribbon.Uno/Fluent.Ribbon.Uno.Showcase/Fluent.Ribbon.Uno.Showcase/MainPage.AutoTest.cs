@@ -8,6 +8,22 @@
 //                               Enlarge/Reduce + Simplified/Minimized toggles, logging each step.
 //   SHOWCASE_AUTOTEST_LOG=path  Append the [AUTOTEST] log lines to this file (also written to stdout).
 //   SHOWCASE_AUTOTEST_EXIT=1    Exit the process once the walk completes (so a runner can detect "done").
+//   SHOWCASE_FOCUS_AUTOTEST_ONLY=1
+//                               Run only focus-visual runtime assertions.
+//   SHOWCASE_INNER_LABEL_AUTOTEST_ONLY=1
+//                               Run only accessible-name/ownership runtime assertions.
+//   SHOWCASE_AUTOMATION_EVENTS_AUTOTEST_ONLY=1
+//                               Run only automation state/event-routing assertions.
+//   SHOWCASE_LOCALIZATION_AUTOTEST_ONLY=1
+//                               Run only runtime localization refresh assertions.
+//   SHOWCASE_HIGH_CONTRAST_AUTOTEST_ONLY=1
+//                               Run only theme resource/state contrast assertions.
+//   SHOWCASE_TOUCH_TARGET_AUTOTEST_ONLY=1
+//                               Run only normal/touch target geometry assertions.
+//   SHOWCASE_COMPACT_LAYOUT_AUTOTEST_ONLY=1
+//                               Run only simplified toolbar/gallery layout assertions.
+//   SHOWCASE_DEFECT_AUTOTEST_ONLY=1
+//                               Run only the contextual-header/panel defect capture.
 //   SHOWCASE_OPEN_SURFACE=name  Leave fontNameCombo or fontSizeCombo open for visual capture.
 //   SHOWCASE_OPEN_DELAY_MS=ms   Delay surface expansion so a harness can resize the window first.
 //   SHOWCASE_STATE=state        Apply comma-separated dark, light, rtl, ltr, simplified,
@@ -22,18 +38,22 @@
 // fires on a dispatcher tick is surfaced either as a "THREW" line here or as an
 // Uno "NativeDispatcher unhandled exception" on stdout, which the runner greps for.
 using System;
+using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Windows.Input;
 using System.Threading.Tasks;
 using Fluent;
+using Fluent.Automation.Peers;
+using Fluent.Modern.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
@@ -157,6 +177,68 @@ public sealed partial class MainPage
         }
 
         if (string.Equals(
+                Environment.GetEnvironmentVariable("SHOWCASE_LOCALIZATION_AUTOTEST_ONLY"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            await RunLocalizationOnlyAutoTestAsync();
+        }
+        else if (string.Equals(
+                Environment.GetEnvironmentVariable("SHOWCASE_INNER_LABEL_AUTOTEST_ONLY"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            await RunInnerLabelOnlyAutoTestAsync();
+        }
+        else if (string.Equals(
+                     Environment.GetEnvironmentVariable("SHOWCASE_AUTOMATION_EVENTS_AUTOTEST_ONLY"),
+                     "1",
+                     StringComparison.Ordinal))
+        {
+            await RunAutomationEventsOnlyAutoTestAsync();
+        }
+        else if (string.Equals(
+                     Environment.GetEnvironmentVariable("SHOWCASE_HIGH_CONTRAST_AUTOTEST_ONLY"),
+                     "1",
+                     StringComparison.Ordinal))
+        {
+            await RunHighContrastOnlyAutoTestAsync();
+        }
+        else if (string.Equals(
+                     Environment.GetEnvironmentVariable("SHOWCASE_TOUCH_TARGET_AUTOTEST_ONLY"),
+                     "1",
+                     StringComparison.Ordinal))
+        {
+            autoTestFailed = false;
+            await VerifyTouchTargetGeometryAsync();
+            await FinishAutoTestAsync();
+        }
+        else if (string.Equals(
+                     Environment.GetEnvironmentVariable("SHOWCASE_COMPACT_LAYOUT_AUTOTEST_ONLY"),
+                     "1",
+                     StringComparison.Ordinal))
+        {
+            autoTestFailed = false;
+            await VerifyCompactLayoutAsync();
+            await FinishAutoTestAsync();
+        }
+        else if (string.Equals(
+                     Environment.GetEnvironmentVariable("SHOWCASE_DEFECT_AUTOTEST_ONLY"),
+                     "1",
+                     StringComparison.Ordinal))
+        {
+            autoTestFailed = false;
+            await CaptureDefectShotsAsync();
+            await FinishAutoTestAsync();
+        }
+        else if (string.Equals(
+                Environment.GetEnvironmentVariable("SHOWCASE_FOCUS_AUTOTEST_ONLY"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            await RunFocusOnlyAutoTestAsync();
+        }
+        else if (string.Equals(
                 Environment.GetEnvironmentVariable("SHOWCASE_KEYBOARD_AUTOTEST_ONLY"),
                 "1",
                 StringComparison.Ordinal))
@@ -334,6 +416,17 @@ public sealed partial class MainPage
         }
     }
 
+    private async Task SettleUntilAsync(
+        Func<bool> condition,
+        int maxCycles = 12,
+        int delayMs = 150)
+    {
+        for (var cycle = 0; cycle < maxCycles && !condition(); cycle++)
+        {
+            await SettleAsync(1, delayMs);
+        }
+    }
+
     // True for the documented, self-healing InRibbonGallery inline-reparent first-chance
     // (COMException 0x800F1000). Walks the InnerException chain so a wrapped throw is still matched.
     // Keyed on the distinctive HRESULT rather than a message string so it is culture-independent.
@@ -386,6 +479,7 @@ public sealed partial class MainPage
             await VerifySpinnerHeaderAlignmentAsync();
 
             await VerifyQatGalleryCloneAsync();
+            await VerifyTouchTargetGeometryAsync();
 
             await ExerciseTogglesAsync();
             await VerifySwatchLayoutParityAsync();
@@ -406,7 +500,13 @@ public sealed partial class MainPage
 
             VerifyRibbonStateStorageLifecycle();
             VerifyCompatibilityRuntimeSmoke();
-
+            await VerifyLocalizationRefreshAsync();
+            await VerifyCompositeOwnershipAsync();
+            await VerifyFocusVisualsAsync();
+            await VerifyResizeAccessibilityAsync();
+            await VerifyStartScreenTabSelectionAsync();
+            await VerifyAutomationEventRoutingAsync();
+            await VerifyHighContrastResourcesAndStatesAsync();
             await RunKeyboardFocusAutoTestAsync();
             await RunModernAutoTestAsync();
             await VerifyPopupDismissParityAsync();
@@ -442,6 +542,1047 @@ public sealed partial class MainPage
             + $"templates={result.AppliedTemplateCount} "
             + $"qat={result.QuickAccessCloneCount} "
             + $"commands={result.CommandExecutionCount}");
+
+        var spinner = new RibbonSpinner();
+        spinner.Increment = 0;
+        Require(spinner.Increment == 0, "RibbonSpinner rejected a zero increment");
+        spinner.Increment = -2;
+        Require(spinner.Increment == -2, "RibbonSpinner rejected a negative increment");
+        spinner.Increment = double.NaN;
+        Require(double.IsNaN(spinner.Increment), "RibbonSpinner rejected a NaN increment");
+    }
+
+    private async Task VerifyLocalizationRefreshAsync()
+    {
+        AutoLog("LOCALIZATION-REFRESH BEGIN");
+        if (Content is not Panel root)
+        {
+            AutoLog("  FAIL LOCALIZATION-REFRESH Showcase content is not a Panel");
+            return;
+        }
+
+        var host = new StackPanel { Opacity = 0.01 };
+        var applicationMenu = new ApplicationMenu();
+        var colorGallery = new ColorGallery();
+        var gallery = new RibbonGallery();
+        gallery.Filters.Add(new GalleryGroupFilter { Title = "All" });
+        var searchBox = new RibbonSearchBox();
+        var quickAccessToolBar = new QuickAccessToolBar();
+        var backstageTabControl = new BackstageTabControl();
+        host.Children.Add(applicationMenu);
+        host.Children.Add(colorGallery);
+        host.Children.Add(gallery);
+        host.Children.Add(searchBox);
+        host.Children.Add(quickAccessToolBar);
+        host.Children.Add(backstageTabControl);
+        root.Children.Add(host);
+
+        var previousLocalization = RibbonLocalization.Current.Localization;
+        try
+        {
+            await SettleAsync(2, 50);
+            foreach (var control in host.Children.OfType<Control>())
+            {
+                control.ApplyTemplate();
+            }
+
+            await SettleAsync(2, 50);
+            var selectedSwatchBeforeLocalization = EnumerateDescendants<Button>(colorGallery)
+                .FirstOrDefault(
+                    button => AutomationProperties.GetAutomationId(button)
+                        .StartsWith("ColorGalleryStandardColor", StringComparison.Ordinal));
+            Require(
+                selectedSwatchBeforeLocalization?.Tag is Windows.UI.Color,
+                "ColorGallery had no swatch to select before localization changed");
+            colorGallery.SelectedColor =
+                (Windows.UI.Color?)selectedSwatchBeforeLocalization!.Tag;
+
+            RibbonLocalization.Current.Localization = new RuntimeGermanLocalization();
+            await SettleAsync(2, 50);
+
+            var automaticButton =
+                FindDescendantByName(colorGallery, "PART_AutomaticButton") as Button;
+            var noColorButton =
+                FindDescendantByName(colorGallery, "PART_NoColorButton") as Button;
+            var moreColorsButton =
+                FindDescendantByName(colorGallery, "PART_MoreColorsButton") as Button;
+            var filterLabel =
+                FindDescendantByName(gallery, "PART_FilterLabel") as TextBlock;
+            var qatOverflow =
+                FindDescendantByName(quickAccessToolBar, "PART_OverflowButton") as FrameworkElement;
+            var qatMenu =
+                FindDescendantByName(quickAccessToolBar, "PART_MenuButton") as FrameworkElement;
+            var backstageBack =
+                FindDescendantByName(backstageTabControl, "PART_BackButton") as FrameworkElement;
+            var swatch = EnumerateDescendants<Button>(colorGallery)
+                .FirstOrDefault(
+                    button => AutomationProperties.GetAutomationId(button)
+                        .StartsWith("ColorGalleryStandardColor", StringComparison.Ordinal));
+
+            Require(
+                automaticButton?.Content as string == "Automatisch"
+                && noColorButton?.Content as string == "Keine Farbe"
+                && moreColorsButton?.Content as string == "Weitere Farben...",
+                "ColorGallery labels did not refresh after localization changed");
+            Require(
+                filterLabel?.Text == "Filtern:",
+                "RibbonGallery filter label did not refresh after localization changed");
+            Require(
+                applicationMenu.Header as string == "Datei"
+                && applicationMenu.KeyTip == "D",
+                "ApplicationMenu generated defaults did not refresh after localization changed");
+            Require(
+                searchBox.PlaceholderText == "Befehle suchen"
+                && AutomationProperties.GetName(searchBox) == "Menübandsuche",
+                "RibbonSearchBox generated defaults did not refresh after localization changed");
+            Require(
+                qatOverflow is not null
+                && qatMenu is not null
+                && backstageBack is not null
+                && AutomationProperties.GetName(qatOverflow) == "Weitere Befehle"
+                && Equals(ToolTipService.GetToolTip(qatOverflow), "Weitere Befehle")
+                && AutomationProperties.GetName(qatMenu)
+                == "Symbolleiste für den Schnellzugriff anpassen"
+                && AutomationProperties.GetName(backstageBack) == "Backstage schließen",
+                "realized template action names/tooltips did not refresh after localization changed");
+            Require(
+                swatch is not null
+                && AutomationProperties.GetName(swatch).StartsWith("Rot ", StringComparison.Ordinal)
+                && Equals(
+                    ToolTipService.GetToolTip(swatch),
+                    AutomationProperties.GetName(swatch)),
+                "ColorGallery swatch did not expose a localized human-readable description");
+#pragma warning disable Uno0001
+            Require(
+                ReferenceEquals(swatch, selectedSwatchBeforeLocalization)
+                && swatch.GetValue(AutomationProperties.HelpTextProperty) as string
+                == RibbonLocalization.Current.Localization.SelectedColor,
+                "ColorGallery selected status did not refresh with localization");
+#pragma warning restore Uno0001
+
+            AutomationProperties.SetName(qatMenu!, "Application QAT name");
+            ToolTipService.SetToolTip(qatMenu!, "Application QAT tooltip");
+            RibbonLocalization.Current.Localization = previousLocalization;
+            await SettleAsync(2, 50);
+            Require(
+                AutomationProperties.GetName(qatMenu!) == "Application QAT name"
+                && Equals(ToolTipService.GetToolTip(qatMenu!), "Application QAT tooltip"),
+                "localization refresh overwrote application-owned name or tooltip values");
+
+            AutoLog("LOCALIZATION-REFRESH PASS");
+        }
+        finally
+        {
+            RibbonLocalization.Current.Localization = previousLocalization;
+            root.Children.Remove(host);
+        }
+    }
+
+    private async Task VerifyCompositeOwnershipAsync()
+    {
+        AutoLog("COMPOSITE-OWNERSHIP BEGIN");
+#if WINDOWS
+        if (Content is not Panel root)
+        {
+            AutoLog("  FAIL COMPOSITE-OWNERSHIP Showcase content is not a Panel");
+            return;
+        }
+
+        var host = new StackPanel { Opacity = 0.01 };
+        var checkBox = new RibbonCheckBox { Header = "Ownership check" };
+        var radioButton = new RibbonRadioButton { Header = "Ownership radio" };
+        var textBox = new RibbonTextBox
+        {
+            Header = "Ownership edit",
+            PlaceholderText = "Edit value",
+            Text = "Editable",
+            Size = RibbonControlSize.Small,
+        };
+        AutomationProperties.SetHelpText(textBox, "Ownership edit help");
+        var comboBox = new RibbonComboBox
+        {
+            Header = "Ownership combo",
+            PlaceholderText = "Choose a value",
+            IsEditable = true,
+            Size = RibbonControlSize.Small,
+        };
+        AutomationProperties.SetHelpText(comboBox, "Ownership combo help");
+        var placeholderComboBox = new RibbonComboBox
+        {
+            PlaceholderText = "Placeholder-owned combo",
+            IsEditable = true,
+            Size = RibbonControlSize.Small,
+        };
+        var spinner = new RibbonSpinner
+        {
+            Header = "Ownership spinner",
+            KeyTip = "OS",
+            Minimum = 0,
+            Maximum = 10,
+            Increment = 2,
+            Value = 4,
+            Format = "F0",
+            Size = RibbonControlSize.Small,
+        };
+        var compatibilitySpinner = new Fluent.Spinner
+        {
+            Header = "Compatibility spinner",
+            Minimum = 0,
+            Maximum = 5,
+            Increment = 1,
+            Value = 2,
+        };
+        var dropDown = new RibbonDropDownButton { Header = "Ownership drop-down" };
+        var applicationMenu = new ApplicationMenu { Header = "Ownership application menu" };
+        var splitButton = new RibbonSplitButton { Header = "Ownership split" };
+        AutomationProperties.SetHelpText(splitButton, "Ownership split help");
+        var collapsedGroup = new RibbonGroupBox
+        {
+            Header = "Ownership group",
+            State = RibbonGroupBoxState.Collapsed,
+        };
+        var launcherGroup = new RibbonGroupBox
+        {
+            Header = "Ownership launcher group",
+            IsLauncherVisible = true,
+            State = RibbonGroupBoxState.Large,
+        };
+        var ribbonScroller = new RibbonScrollViewer
+        {
+            Content = new StackPanel { Orientation = Orientation.Horizontal },
+        };
+        var inlineGallery = new InRibbonGallery { Header = "Ownership gallery" };
+        var quickAccessToolBar = new QuickAccessToolBar();
+        var backstageTabControl = new BackstageTabControl();
+
+        host.Children.Add(checkBox);
+        host.Children.Add(radioButton);
+        host.Children.Add(textBox);
+        host.Children.Add(comboBox);
+        host.Children.Add(placeholderComboBox);
+        host.Children.Add(spinner);
+        host.Children.Add(compatibilitySpinner);
+        host.Children.Add(dropDown);
+        host.Children.Add(applicationMenu);
+        host.Children.Add(splitButton);
+        host.Children.Add(collapsedGroup);
+        host.Children.Add(launcherGroup);
+        host.Children.Add(ribbonScroller);
+        host.Children.Add(inlineGallery);
+        host.Children.Add(quickAccessToolBar);
+        host.Children.Add(backstageTabControl);
+        root.Children.Add(host);
+
+        try
+        {
+            await SettleAsync(2, 75);
+            foreach (var control in host.Children.OfType<Control>())
+            {
+                control.ApplyTemplate();
+            }
+
+            await SettleAsync(2, 75);
+
+            var indicatorCheck = EnumerateDescendants<Microsoft.UI.Xaml.Controls.CheckBox>(checkBox).Single();
+            var indicatorRadio = EnumerateDescendants<Microsoft.UI.Xaml.Controls.RadioButton>(radioButton).Single();
+            AssertRawImplementationPart(indicatorCheck, pointerTransparent: true);
+            AssertRawImplementationPart(indicatorRadio, pointerTransparent: true);
+
+            var editor = FindDescendantByName(textBox, "PART_TextBox") as Microsoft.UI.Xaml.Controls.TextBox;
+            var comboEditor = FindDescendantByName(comboBox, "EditableText") as Microsoft.UI.Xaml.Controls.TextBox;
+            var placeholderComboEditor = FindDescendantByName(placeholderComboBox, "EditableText") as Microsoft.UI.Xaml.Controls.TextBox;
+            var spinnerEditor = FindDescendantByName(spinner, "PART_TextBox") as Microsoft.UI.Xaml.Controls.TextBox;
+            var spinnerUp = FindDescendantByName(spinner, "PART_UpButton") as Button;
+            var spinnerDown = FindDescendantByName(spinner, "PART_DownButton") as Button;
+            var dropDownPart = FindDescendantByName(dropDown, "PART_Button") as Button;
+            var appMenuPart = FindDescendantByName(applicationMenu, "PART_Button") as Button;
+            var splitPrimary = FindDescendantByName(splitButton, "PART_Button") as Button;
+            var splitDropDown = FindDescendantByName(splitButton, "PART_DropDownButton") as Button;
+            var collapsedPart = FindDescendantByName(collapsedGroup, "PART_CollapsedButton") as Button;
+            foreach (var part in new Control?[]
+                     {
+                         editor,
+                         spinnerEditor,
+                         spinnerUp,
+                         spinnerDown,
+                         dropDownPart,
+                         appMenuPart,
+                         splitPrimary,
+                         splitDropDown,
+                         collapsedPart,
+                     })
+            {
+                Require(part is not null, "composite implementation part was not realized");
+                AssertRawImplementationPart(part!, pointerTransparent: false);
+            }
+
+            var spinnerPeer = new RibbonSpinnerAutomationPeer(spinner);
+            Require(
+                spinnerPeer.GetAutomationControlType() == AutomationControlType.Spinner,
+                "RibbonSpinner peer did not expose Spinner control semantics");
+            Require(
+                spinnerPeer.GetName() == "Ownership spinner",
+                "RibbonSpinner peer did not fall back to Header for its name");
+            AutomationProperties.SetName(spinner, "Explicit ownership spinner");
+            Require(
+                spinnerPeer.GetName() == "Explicit ownership spinner",
+                "RibbonSpinner explicit automation name did not take precedence");
+            Require(spinnerPeer.GetAccessKey() == "OS", "RibbonSpinner KeyTip was not exposed as AccessKey");
+
+            var rangeProvider = spinnerPeer.GetPattern(PatternInterface.RangeValue) as IRangeValueProvider;
+            Require(rangeProvider is not null, "RibbonSpinner has no RangeValue provider");
+            Require(
+                rangeProvider!.Value == 4
+                && rangeProvider.Minimum == 0
+                && rangeProvider.Maximum == 10
+                && rangeProvider.SmallChange == 2
+                && rangeProvider.LargeChange == 2
+                && !rangeProvider.IsReadOnly,
+                "RibbonSpinner RangeValue properties do not match its editing contract");
+            rangeProvider.SetValue(6);
+            Require(spinner.Value == 6 && spinner.Text == "6", "RangeValue.SetValue bypassed spinner formatting");
+            spinner.Value = 8;
+            spinner.Maximum = 5;
+            Require(
+                spinner.Value == 5
+                && (double)spinner.GetValue(RibbonSpinner.ValueProperty) == 5,
+                "RibbonSpinner effective Value diverged from ValueProperty after range coercion");
+            spinner.Maximum = 10;
+            spinner.Value = 6;
+
+            var rejectedInvalidValue = false;
+            try
+            {
+                rangeProvider.SetValue(double.NaN);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejectedInvalidValue = true;
+            }
+
+            Require(rejectedInvalidValue, "RibbonSpinner accepted a non-finite automation value");
+
+            spinner.IsEnabled = false;
+            var rejectedDisabledMutation = false;
+            try
+            {
+                rangeProvider.SetValue(8);
+            }
+            catch (ElementNotEnabledException)
+            {
+                rejectedDisabledMutation = true;
+            }
+            finally
+            {
+                spinner.IsEnabled = true;
+            }
+
+            Require(rejectedDisabledMutation, "Disabled RibbonSpinner accepted an automation mutation");
+
+            var textPeer = FrameworkElementAutomationPeer.CreatePeerForElement(textBox);
+            Require(
+                textPeer?.GetName() == "Ownership edit"
+                && textPeer?.GetHelpText() == "Ownership edit help",
+                "RibbonTextBox did not preserve Header/HelpText metadata");
+            AutomationProperties.SetName(textBox, "Explicit ownership edit");
+            Require(
+                textPeer!.GetName() == "Explicit ownership edit",
+                "RibbonTextBox explicit automation name did not take precedence");
+
+            var comboPeer = FrameworkElementAutomationPeer.CreatePeerForElement(comboBox);
+            var placeholderComboPeer = FrameworkElementAutomationPeer.CreatePeerForElement(placeholderComboBox);
+            Require(
+                comboPeer?.GetName() == "Ownership combo"
+                && comboPeer?.GetHelpText() == "Ownership combo help",
+                "Editable RibbonComboBox did not preserve Header/HelpText metadata");
+            AutomationProperties.SetName(comboBox, "Explicit ownership combo");
+            Require(
+                comboPeer!.GetName() == "Explicit ownership combo",
+                "RibbonComboBox explicit automation name did not take precedence");
+            Require(
+                placeholderComboPeer?.GetName() == "Placeholder-owned combo",
+                "RibbonComboBox did not fall back to PlaceholderText");
+            Require(
+                comboEditor is not null
+                && placeholderComboEditor is not null
+                && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(comboEditor))
+                && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(placeholderComboEditor)),
+                "editable RibbonComboBox parts lost their persistent accessible names");
+
+            var splitPeer = new RibbonSplitButtonAutomationPeer(splitButton);
+            Require(
+                splitPeer.GetName() == "Ownership split"
+                && splitPeer.GetHelpText() == "Ownership split help",
+                "RibbonSplitButton outer peer did not preserve Header/HelpText metadata");
+            AutomationProperties.SetName(splitButton, "Explicit ownership split");
+            Require(
+                splitPeer.GetName() == "Explicit ownership split",
+                "RibbonSplitButton explicit automation name did not take precedence");
+
+            var compatibilityRange = new RibbonSpinnerAutomationPeer(compatibilitySpinner)
+                .GetPattern(PatternInterface.RangeValue) as IRangeValueProvider;
+            Require(
+                compatibilityRange is not null
+                && compatibilityRange.Value == 2
+                && compatibilityRange.Maximum == 5,
+                "Compatibility Spinner did not inherit RibbonSpinner RangeValue semantics");
+
+            var launcher = launcherGroup.LauncherButton;
+            Require(launcher is not null, "ribbon group launcher was not realized");
+            Require(launcher!.IsTabStop, "ribbon group launcher is not a separate tab stop");
+            Require(
+                AutomationProperties.GetAccessibilityView(launcher) != AccessibilityView.Raw,
+                "ribbon group launcher was hidden from the control view");
+            Require(
+                AutomationProperties.GetName(launcher)
+                == string.Format(
+                    RibbonLocalization.Current.Localization.OpenGroupDialogFormat,
+                    launcherGroup.Header),
+                "ribbon group launcher name did not incorporate its group header");
+            AutomationProperties.SetName(launcher, "Custom launcher name");
+            launcherGroup.Header = "Renamed launcher group";
+            Require(
+                AutomationProperties.GetName(launcher) == "Custom launcher name",
+                "ribbon group launcher overwrote an explicit automation name");
+
+            var namedActions = new (FrameworkElement? Element, string ExpectedName)[]
+            {
+                (
+                    FindDescendantByName(ribbonScroller, "PART_LeftButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.ScrollRibbonLeft),
+                (
+                    FindDescendantByName(ribbonScroller, "PART_RightButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.ScrollRibbonRight),
+                (
+                    FindDescendantByName(inlineGallery, "PART_UpButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.ScrollGalleryUp),
+                (
+                    FindDescendantByName(inlineGallery, "PART_DownButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.ScrollGalleryDown),
+                (
+                    FindDescendantByName(inlineGallery, "PART_ExpandButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.OpenGalleryOptions),
+                (
+                    FindDescendantByName(inlineGallery, "CollapsedContent") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.OpenGallery),
+                (
+                    FindDescendantByName(quickAccessToolBar, "PART_OverflowButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.QuickAccessToolBarMoreControlsButtonTooltip),
+                (
+                    FindDescendantByName(quickAccessToolBar, "PART_MenuButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.QuickAccessToolBarDropDownButtonTooltip),
+                (
+                    FindDescendantByName(backstageTabControl, "PART_BackButton") as FrameworkElement,
+                    RibbonLocalization.Current.Localization.BackstageBackButtonUid),
+            };
+            foreach (var (element, expectedName) in namedActions)
+            {
+                Require(element is not null, "semantic icon-only action was not realized");
+                Require(
+                    AutomationProperties.GetName(element!) == expectedName,
+                    $"semantic icon-only action '{element!.Name}' did not expose '{expectedName}'");
+            }
+
+            Require(
+                new RibbonSplitButtonAutomationPeer(splitButton).GetPattern(PatternInterface.Invoke) is IInvokeProvider
+                && new RibbonSplitButtonAutomationPeer(splitButton).GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider,
+                "split button outer peer did not own both primary and drop-down actions");
+
+            foreach (var owner in new Control[]
+                     {
+                         checkBox,
+                         radioButton,
+                         dropDown,
+                         applicationMenu,
+                         splitButton,
+                         collapsedGroup,
+                     })
+            {
+                Require(owner.IsTabStop, $"{owner.GetType().Name} outer owner is not a tab stop");
+                Require(owner.Focus(FocusState.Programmatic), $"{owner.GetType().Name} outer owner could not receive focus");
+                await SettleAsync(1, 25);
+                Require(
+                    ReferenceEquals(FocusManager.GetFocusedElement(owner.XamlRoot), owner),
+                    $"{owner.GetType().Name} did not retain outer focus ownership");
+            }
+
+            Require(textBox.IsTabStop, "RibbonTextBox outer owner is not a tab stop");
+            Require(textBox.Focus(FocusState.Programmatic), "RibbonTextBox outer owner could not initiate focus");
+            await SettleAsync(1, 25);
+            Require(
+                ReferenceEquals(FocusManager.GetFocusedElement(textBox.XamlRoot), editor),
+                "RibbonTextBox did not redirect outer focus to its raw editor");
+            Require(textBox.Text == editor!.Text, "RibbonTextBox editor text was not synchronized");
+
+            Require(spinner.IsTabStop, "RibbonSpinner outer owner is not a tab stop");
+            Require(spinner.Focus(FocusState.Programmatic), "RibbonSpinner outer owner could not initiate focus");
+            await SettleAsync(1, 25);
+            Require(
+                ReferenceEquals(FocusManager.GetFocusedElement(spinner.XamlRoot), spinnerEditor),
+                "RibbonSpinner did not redirect outer focus to its raw editor");
+
+            spinnerEditor!.Text = "8";
+            Require(checkBox.Focus(FocusState.Programmatic), "Could not move focus away from RibbonSpinner editor");
+            await SettleAsync(1, 25);
+            Require(spinner.Value == 8 && spinner.Text == "8", "RibbonSpinner text editing no longer commits");
+
+            var incrementProvider = new ButtonAutomationPeer(spinnerUp!)
+                .GetPattern(PatternInterface.Invoke) as IInvokeProvider;
+            var decrementProvider = new ButtonAutomationPeer(spinnerDown!)
+                .GetPattern(PatternInterface.Invoke) as IInvokeProvider;
+            Require(
+                incrementProvider is not null && decrementProvider is not null,
+                "RibbonSpinner step buttons lost their actions");
+            incrementProvider!.Invoke();
+            await SettleAsync(1, 25);
+            Require(spinner.Value == 10, "RibbonSpinner increment action no longer works");
+            decrementProvider!.Invoke();
+            await SettleAsync(1, 25);
+            Require(spinner.Value == 8, "RibbonSpinner decrement action no longer works");
+
+            AutoLog("COMPOSITE-OWNERSHIP PASS outer peers own tab/UIA; raw editors retain focus");
+        }
+        finally
+        {
+            root.Children.Remove(host);
+        }
+#else
+        await Task.CompletedTask;
+        AutoLog("COMPOSITE-OWNERSHIP SKIP external WinUI focus verification requires the Windows head");
+#endif
+    }
+
+    private async Task VerifyFocusVisualsAsync()
+    {
+        AutoLog("FOCUS-VISUALS BEGIN");
+        if (Content is not Panel root)
+        {
+            AutoLog("  FAIL FOCUS-VISUALS Showcase content is not a Panel");
+            return;
+        }
+
+        var host = new StackPanel { Opacity = 0.01 };
+        var focusProbe = new Button { Content = "Focus visual probe" };
+        var systemFocusButton = new RibbonButton { Header = "System focus visual" };
+        var textBox = new RibbonTextBox { Header = "Focus text", Text = "Editable" };
+        var spinner = new RibbonSpinner { Header = "Focus spinner", Value = 1 };
+        var searchBox = new RibbonSearchBox { PlaceholderText = "Focus search" };
+        host.Children.Add(focusProbe);
+        host.Children.Add(systemFocusButton);
+        host.Children.Add(textBox);
+        host.Children.Add(spinner);
+        host.Children.Add(searchBox);
+        root.Children.Add(host);
+
+        try
+        {
+            await SettleAsync(2, 50);
+            foreach (var control in host.Children.OfType<Control>())
+            {
+                control.ApplyTemplate();
+            }
+
+            await SettleAsync(2, 50);
+            Require(
+                systemFocusButton.UseSystemFocusVisuals,
+                "RibbonButton did not retain system focus visuals");
+            Require(
+                systemFocusButton.Focus(FocusState.Keyboard),
+                "RibbonButton could not receive keyboard focus");
+            await SettleAsync(1, 25);
+            Require(
+                systemFocusButton.FocusState == FocusState.Keyboard,
+                "RibbonButton keyboard focus state was not preserved");
+
+            await AssertDelegatedFocusRingAsync(textBox, "RibbonTextBox");
+            await AssertDelegatedFocusRingAsync(spinner, "RibbonSpinner");
+
+            focusProbe.Focus(FocusState.Programmatic);
+            Require(searchBox.IsTabStop, "RibbonSearchBox outer owner is not a tab stop");
+            Require(searchBox.Focus(FocusState.Keyboard), "RibbonSearchBox could not initiate keyboard focus");
+            await SettleAsync(1, 25);
+            var autoSuggestBox = FindDescendantByName(searchBox, "PART_AutoSuggestBox") as AutoSuggestBox;
+            Require(autoSuggestBox is not null, "RibbonSearchBox editor was not realized");
+            Require(!autoSuggestBox!.IsTabStop, "RibbonSearchBox raw editor is a duplicate tab stop");
+            if (autoSuggestBox.FocusState == FocusState.Unfocused)
+            {
+                Require(
+                    autoSuggestBox.Focus(FocusState.Keyboard),
+                    "RibbonSearchBox native editor could not receive keyboard focus");
+                await SettleAsync(1, 25);
+            }
+
+            Require(
+                autoSuggestBox.UseSystemFocusVisuals,
+                "RibbonSearchBox raw editor lost its native system focus visual");
+            Require(
+                autoSuggestBox.FocusState != FocusState.Unfocused,
+                "RibbonSearchBox did not delegate focus into its native editor");
+
+            AutoLog("FOCUS-VISUALS PASS system owner and delegated editor strategies");
+        }
+        finally
+        {
+            root.Children.Remove(host);
+        }
+
+        async Task AssertDelegatedFocusRingAsync(Control owner, string controlName)
+        {
+            focusProbe.Focus(FocusState.Programmatic);
+            Require(owner.Focus(FocusState.Keyboard), $"{controlName} could not initiate keyboard focus");
+            await SettleAsync(1, 25);
+
+            var editor = FindDescendantByName(owner, "PART_TextBox") as Microsoft.UI.Xaml.Controls.TextBox;
+            var focusVisual = FindDescendantByName(owner, "FocusVisual") as Border;
+            Require(editor is not null, $"{controlName} editor was not realized");
+            Require(focusVisual is not null, $"{controlName} focus visual was not realized");
+            if (editor!.FocusState == FocusState.Unfocused)
+            {
+                Require(
+                    editor.Focus(FocusState.Keyboard),
+                    $"{controlName} raw editor could not receive keyboard focus");
+                await SettleAsync(1, 25);
+            }
+
+            Require(
+                editor!.FocusState != FocusState.Unfocused,
+                $"{controlName} did not delegate focus to its raw editor");
+            Require(
+                focusVisual!.Visibility == Visibility.Visible
+                && focusVisual.BorderThickness.Left >= 2
+                && focusVisual.BorderBrush is not null,
+                $"{controlName} keyboard focus ring was not visible and at least 2 DIP");
+
+            focusProbe.Focus(FocusState.Programmatic);
+            Require(owner.Focus(FocusState.Pointer), $"{controlName} could not initiate pointer focus");
+            await SettleAsync(1, 25);
+            Require(
+                focusVisual.Visibility == Visibility.Collapsed,
+                $"{controlName} showed the keyboard focus ring for pointer focus");
+        }
+    }
+
+    private async Task VerifyResizeAccessibilityAsync()
+    {
+        AutoLog("RESIZE-ACCESSIBILITY BEGIN");
+        if (Content is not Panel root)
+        {
+            AutoLog("  FAIL RESIZE-ACCESSIBILITY Showcase content is not a Panel");
+            return;
+        }
+
+        var host = new StackPanel { Opacity = 0.01 };
+        var focusProbe = new Button { Content = "Resize focus probe" };
+        var resizeControl = new ResizeableContentControl
+        {
+            Width = 300,
+            Height = 120,
+            MinWidth = 200,
+            MinHeight = 80,
+            MaxWidth = 340,
+            MaxHeight = 160,
+            ResizeMode = ContextMenuResizeMode.Vertical,
+            Content = new Border(),
+        };
+        host.Children.Add(focusProbe);
+        host.Children.Add(resizeControl);
+        root.Children.Add(host);
+
+        try
+        {
+            await SettleAsync(2, 50);
+            resizeControl.ApplyTemplate();
+            await SettleAsync(2, 50);
+
+            var verticalHandle = FindDescendantByName(
+                resizeControl,
+                "PART_ResizeVerticalThumb") as Control;
+            var bothHandle = FindDescendantByName(
+                resizeControl,
+                "PART_ResizeBothThumb") as Control;
+            if (verticalHandle is null || bothHandle is null)
+            {
+                Require(false, "resize handles were not realized");
+                return;
+            }
+
+            Require(
+                verticalHandle.ActualWidth >= 24 && verticalHandle.ActualHeight >= 24,
+                "vertical resize handle hit target is smaller than 24 DIP");
+            Require(
+                verticalHandle.Visibility == Visibility.Visible
+                && verticalHandle.IsTabStop
+                && bothHandle.Visibility == Visibility.Collapsed
+                && !bothHandle.IsTabStop,
+                "Vertical mode did not expose exactly one vertical tab stop");
+
+            focusProbe.Focus(FocusState.Programmatic);
+            Require(verticalHandle.Focus(FocusState.Keyboard), "vertical resize handle could not receive keyboard focus");
+            await SettleAsync(1, 25);
+            Require(
+                verticalHandle.FocusState == FocusState.Keyboard
+                && verticalHandle.UseSystemFocusVisuals,
+                "vertical resize handle did not retain visible keyboard focus");
+            Require(
+                InvokeResizeHandleKey(verticalHandle, Windows.System.VirtualKey.Down, shiftDown: false),
+                "vertical resize handle did not handle Down");
+            Require(resizeControl.Height == 130, "vertical keyboard resize did not use the 10 DIP step");
+            Require(
+                !InvokeResizeHandleKey(verticalHandle, Windows.System.VirtualKey.Left, shiftDown: false),
+                "vertical resize handle incorrectly handled Left");
+
+            resizeControl.ResizeMode = ContextMenuResizeMode.Both;
+            await SettleAsync(1, 25);
+            Require(
+                bothHandle.Visibility == Visibility.Visible
+                && bothHandle.IsTabStop
+                && verticalHandle.Visibility == Visibility.Collapsed
+                && !verticalHandle.IsTabStop,
+                "Both mode did not expose exactly one two-dimensional tab stop");
+            Require(
+                ReferenceEquals(
+                    FocusManager.GetFocusedElement(resizeControl.XamlRoot!),
+                    bothHandle),
+                "focus did not move to the replacement resize handle");
+            Require(
+                InvokeResizeHandleKey(bothHandle, Windows.System.VirtualKey.Right, shiftDown: true),
+                "two-dimensional resize handle did not handle Shift+Right");
+            Require(resizeControl.Width == 340, "keyboard resize did not clamp through MaxWidth");
+
+            resizeControl.ResizeMode = ContextMenuResizeMode.None;
+            await SettleAsync(1, 25);
+            Require(
+                verticalHandle.Visibility == Visibility.Collapsed
+                && bothHandle.Visibility == Visibility.Collapsed
+                && !verticalHandle.IsTabStop
+                && !bothHandle.IsTabStop,
+                "None mode retained a resize handle tab stop");
+            Require(
+                !ReferenceEquals(
+                    FocusManager.GetFocusedElement(resizeControl.XamlRoot!),
+                    bothHandle),
+                "focus remained trapped on a hidden resize handle");
+
+            AutoLog("RESIZE-ACCESSIBILITY PASS focus, keyboard steps, clamping, and mode tab stops");
+        }
+        finally
+        {
+            root.Children.Remove(host);
+        }
+    }
+
+    private static bool InvokeResizeHandleKey(
+        Control handle,
+        Windows.System.VirtualKey key,
+        bool shiftDown)
+    {
+        var method = handle.GetType().GetMethod(
+            "TryHandleKey",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        return method?.Invoke(handle, new object[] { key, shiftDown }) as bool? == true;
+    }
+
+    private async Task RunFocusOnlyAutoTestAsync()
+    {
+        try
+        {
+            await VerifyFocusVisualsAsync();
+            AutoLog("COMPLETE");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"FATAL {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
+
+        await FinishAutoTestAsync();
+    }
+
+    private async Task RunInnerLabelOnlyAutoTestAsync()
+    {
+        try
+        {
+            await VerifyLocalizationRefreshAsync();
+            await VerifyCompositeOwnershipAsync();
+            await RunModernAutoTestAsync();
+            AutoLog("COMPLETE");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"FATAL {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
+
+        await FinishAutoTestAsync();
+    }
+
+    private async Task RunLocalizationOnlyAutoTestAsync()
+    {
+        autoTestFailed = false;
+        AutoLog("START");
+        try
+        {
+            await VerifyLocalizationRefreshAsync();
+            AutoLog("COMPLETE");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"FATAL {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
+
+        await FinishAutoTestAsync();
+    }
+
+    private async Task RunAutomationEventsOnlyAutoTestAsync()
+    {
+        autoTestFailed = false;
+        AutoLog("START");
+        try
+        {
+            await VerifyAutomationEventRoutingAsync();
+            AutoLog("COMPLETE");
+        }
+        catch (Exception ex)
+        {
+            AutoLog($"FATAL {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
+
+        await FinishAutoTestAsync();
+    }
+
+    private async Task VerifyAutomationEventRoutingAsync()
+    {
+        AutoLog("AUTOMATION-EVENTS BEGIN");
+
+        var ribbonPeer = FrameworkElementAutomationPeer.CreatePeerForElement(MainRibbon);
+        Require(
+            ribbonPeer is RibbonAutomationPeer
+            && ReferenceEquals(
+                ribbonPeer,
+                FrameworkElementAutomationPeer.FromElement(MainRibbon)),
+            "Ribbon automation callbacks did not retain the existing peer");
+
+        var originalMinimized = MainRibbon.IsMinimized;
+        var minimizedCallbackCount = 0;
+        var minimizedToken = MainRibbon.RegisterPropertyChangedCallback(
+            Ribbon.IsMinimizedProperty,
+            (_, _) => minimizedCallbackCount++);
+        try
+        {
+            MainRibbon.IsMinimized = !originalMinimized;
+            MainRibbon.IsMinimized = !originalMinimized;
+            await SettleAsync();
+            Require(
+                minimizedCallbackCount == 1,
+                $"Ribbon minimized callback count was {minimizedCallbackCount}, expected 1");
+            Require(
+                ((IExpandCollapseProvider)ribbonPeer!).ExpandCollapseState
+                == (!originalMinimized
+                    ? ExpandCollapseState.Collapsed
+                    : ExpandCollapseState.Expanded),
+                "Ribbon ExpandCollapse state did not follow IsMinimized");
+        }
+        finally
+        {
+            MainRibbon.IsMinimized = originalMinimized;
+            MainRibbon.UnregisterPropertyChangedCallback(
+                Ribbon.IsMinimizedProperty,
+                minimizedToken);
+            await SettleAsync();
+        }
+
+        var tabControl = FindDescendant<RibbonTabControl>(MainRibbon);
+        Require(tabControl is not null, "RibbonTabControl was unavailable");
+        var tabControlPeer = FrameworkElementAutomationPeer.CreatePeerForElement(tabControl!);
+        Require(
+            tabControlPeer is RibbonTabControlAutomationPeer
+            && ReferenceEquals(
+                tabControlPeer,
+                FrameworkElementAutomationPeer.FromElement(tabControl!)),
+            "RibbonTabControl automation callbacks did not retain the existing peer");
+
+        var originalTab = tabControl!.SelectedItem as RibbonTabItem;
+        var replacementTab = tabControl.TabItems
+            .OfType<RibbonTabItem>()
+            .FirstOrDefault(tab => !ReferenceEquals(tab, originalTab));
+        if (originalTab is not null && replacementTab is not null)
+        {
+            FrameworkElementAutomationPeer.CreatePeerForElement(originalTab);
+            FrameworkElementAutomationPeer.CreatePeerForElement(replacementTab);
+            var oldSelectionCallbackCount = 0;
+            var newSelectionCallbackCount = 0;
+            var oldToken = originalTab.RegisterPropertyChangedCallback(
+                RibbonTabItem.IsSelectedProperty,
+                (_, _) => oldSelectionCallbackCount++);
+            var newToken = replacementTab.RegisterPropertyChangedCallback(
+                RibbonTabItem.IsSelectedProperty,
+                (_, _) => newSelectionCallbackCount++);
+            try
+            {
+                tabControl.SelectedItem = replacementTab;
+                tabControl.SelectedItem = replacementTab;
+                await SettleAsync();
+                Require(
+                    oldSelectionCallbackCount == 1
+                    && newSelectionCallbackCount == 1,
+                    "Ribbon tab selection did not produce exactly one old/new state callback");
+                Require(
+                    ((ISelectionProvider)tabControlPeer!).GetSelection().Length == 1,
+                    "Ribbon tab Selection provider did not expose the replacement tab");
+            }
+            finally
+            {
+                tabControl.SelectedItem = originalTab;
+                originalTab.UnregisterPropertyChangedCallback(
+                    RibbonTabItem.IsSelectedProperty,
+                    oldToken);
+                replacementTab.UnregisterPropertyChangedCallback(
+                    RibbonTabItem.IsSelectedProperty,
+                    newToken);
+                await SettleAsync();
+            }
+        }
+
+        var statusItem = new RibbonStatusBarItem
+        {
+            Title = "Automation event status",
+            Content = "Ready",
+        };
+        var statusMenuItem = new StatusBarMenuItem(statusItem);
+        var statusPeer = FrameworkElementAutomationPeer.CreatePeerForElement(statusMenuItem);
+        Require(
+            statusPeer is StatusBarMenuItemAutomationPeer
+            && ReferenceEquals(
+                statusPeer,
+                FrameworkElementAutomationPeer.FromElement(statusMenuItem)),
+            "StatusBarMenuItem automation callbacks did not retain the existing peer");
+        var toggleCallbackCount = 0;
+        var toggleToken = statusMenuItem.RegisterPropertyChangedCallback(
+            StatusBarMenuItem.IsCheckedProperty,
+            (_, _) => toggleCallbackCount++);
+        try
+        {
+            ((IToggleProvider)statusPeer!).Toggle();
+            Require(
+                toggleCallbackCount == 1
+                && ((IToggleProvider)statusPeer).ToggleState == ToggleState.Off,
+                "StatusBar toggle provider did not synchronize exactly once");
+            statusItem.IsChecked = true;
+            statusItem.IsChecked = true;
+            Require(
+                toggleCallbackCount == 2
+                && ((IToggleProvider)statusPeer).ToggleState == ToggleState.On,
+                "StatusBar item-to-menu synchronization did not notify exactly once");
+        }
+        finally
+        {
+            statusMenuItem.UnregisterPropertyChangedCallback(
+                StatusBarMenuItem.IsCheckedProperty,
+                toggleToken);
+        }
+
+#if WINDOWS
+        AutoLog(
+            AutomationPeer.ListenerExists(AutomationEvents.PropertyChanged)
+                ? "  OK external UIA property listener detected; automation notifications exercised"
+                : "  INFO no external UIA property listener detected; callback counts and provider states verified");
+#else
+        AutoLog(
+            "  INFO UIA listener inspection is unavailable on this Uno head; callback counts and provider states verified");
+#endif
+        AutoLog("AUTOMATION-EVENTS OK");
+    }
+
+#if WINDOWS
+    private static void AssertRawImplementationPart(Control part, bool pointerTransparent)
+    {
+        Require(!part.IsTabStop, $"{part.GetType().Name} implementation part is a tab stop");
+        Require(
+            AutomationProperties.GetAccessibilityView(part) == AccessibilityView.Raw,
+            $"{part.GetType().Name} implementation part is not Raw");
+        if (pointerTransparent)
+        {
+            Require(!part.IsHitTestVisible, $"{part.GetType().Name} indicator intercepts pointer input");
+        }
+        else
+        {
+            Require(part.IsHitTestVisible, $"{part.GetType().Name} implementation part cannot receive pointer input");
+        }
+    }
+#endif
+
+    private async Task VerifyStartScreenTabSelectionAsync()
+    {
+        AutoLog("STARTSCREEN-SELECTION BEGIN");
+        if (Content is not Panel root)
+        {
+            AutoLog("  FAIL STARTSCREEN-SELECTION Showcase content is not a Panel");
+            return;
+        }
+
+        var firstContent = new Border();
+        var secondContent = new Border();
+        var firstTab = new BackstageTabItem
+        {
+            Header = "First",
+            Content = firstContent,
+        };
+        var secondTab = new BackstageTabItem
+        {
+            Header = "Second",
+            Content = secondContent,
+        };
+        var tabControl = new StartScreenTabControl
+        {
+            Width = 600,
+            Height = 300,
+            Opacity = 0.01,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        tabControl.Items.Add(firstTab);
+        tabControl.Items.Add(secondTab);
+        Grid.SetRowSpan(tabControl, 3);
+        Canvas.SetZIndex(tabControl, 40);
+        root.Children.Add(tabControl);
+
+        try
+        {
+            await SettleAsync(2, 75);
+            tabControl.ApplyTemplate();
+            await SettleAsync(2, 75);
+
+            Require(firstTab.IsSelected, "StartScreen did not select the first tab");
+            Require(!secondTab.IsSelected, "StartScreen selected more than one initial tab");
+            Require(
+                ReferenceEquals(tabControl.SelectedContent, firstContent),
+                "StartScreen initial selected content was incorrect");
+
+            secondTab.IsSelected = true;
+            await SettleAsync(1, 25);
+
+            Require(!firstTab.IsSelected, "StartScreen did not deselect the previous tab");
+            Require(secondTab.IsSelected, "StartScreen did not retain the requested tab");
+            Require(
+                ReferenceEquals(tabControl.SelectedContent, secondContent),
+                "StartScreen selected content did not follow direct selection");
+
+            var selectionProvider = new RibbonBackstageTabItemAutomationPeer(firstTab)
+                .GetPattern(PatternInterface.SelectionItem) as ISelectionItemProvider;
+            Require(selectionProvider is not null, "StartScreen tab has no SelectionItem provider");
+            selectionProvider!.Select();
+            await SettleAsync(1, 25);
+
+            Require(firstTab.IsSelected, "StartScreen automation did not select the requested tab");
+            Require(!secondTab.IsSelected, "StartScreen automation left multiple tabs selected");
+            Require(
+                ReferenceEquals(tabControl.SelectedContent, firstContent),
+                "StartScreen selected content did not follow automation selection");
+
+            AutoLog("STARTSCREEN-SELECTION PASS");
+        }
+        finally
+        {
+            root.Children.Remove(tabControl);
+        }
     }
 
     private async Task RunKeyboardOnlyAutoTestAsync()
@@ -588,13 +1729,15 @@ public sealed partial class MainPage
                         InvokePrivate(gallery, "ShowPopup");
                     }
 
-                    await SettleAsync(3);
+                    await SettleUntilAsync(
+                        () => gallery.IsDropDownOpen
+                              && GetPrivateFieldValue<Popup>(gallery, "_popup")?.IsOpen == true);
                     Require(gallery.IsDropDownOpen, "gallery popup did not open");
                     Require(
                         GetPrivateFieldValue<Popup>(gallery, "_popup")?.IsOpen == true,
                         "gallery popup was not visible");
                     HidePrivateFlyout(gallery, "_popup");
-                    await SettleAsync(1);
+                    await SettleUntilAsync(() => !gallery.IsDropDownOpen);
                     Require(!gallery.IsDropDownOpen, "gallery popup did not close");
                     AutoLog($"  ENLARGE/REDUCE {kind} '{name}'");
                     gallery.Enlarge();
@@ -608,18 +1751,33 @@ public sealed partial class MainPage
                     break;
 
                 case RibbonDropDownButton dropDown:
-                    dropDown.OnKeyTipPressed();
+                    if (dropDown.Items.Count == 0
+                        && dropDown.ItemsSource is null
+                        && dropDown.Gallery is null)
+                    {
+                        dropDown.OnKeyTipPressed();
+                        await SettleAsync(1);
+                        dropDown.CloseDropDown();
+                        await SettleAsync(1);
+                        break;
+                    }
+
+                    var partName = dropDown is RibbonSplitButton
+                        ? "PART_DropDownButton"
+                        : "PART_Button";
+                    var dropDownPart = FindDescendantByName(dropDown, partName) as Button;
+                    Require(dropDownPart is not null, "drop-down implementation button was not connected");
+                    var dropDownPeer = new ButtonAutomationPeer(dropDownPart!);
+                    var dropDownInvoker = dropDownPeer.GetPattern(PatternInterface.Invoke) as IInvokeProvider;
+                    Require(dropDownInvoker is not null, "drop-down implementation button was not invokable");
+
+                    dropDownInvoker!.Invoke();
                     await SettleAsync(3);
-#if WINDOWS
                     Require(dropDown.IsDropDownOpen, "drop-down flyout did not open");
-#endif
-                    dropDown.CloseDropDown();
-#if WINDOWS
+
+                    dropDownInvoker.Invoke();
                     await SettleAsync(3);
-                    Require(!dropDown.IsDropDownOpen, "drop-down flyout did not close");
-#else
-                    await SettleAsync(1);
-#endif
+                    Require(!dropDown.IsDropDownOpen, "second activation did not close the drop-down");
                     break;
 
                 case RibbonComboBox combo:
@@ -876,6 +2034,32 @@ public sealed partial class MainPage
             Require(FontToolBar.IsSimplified, "font toolbar did not enter simplified mode");
             Require(ColorToolBar.IsSimplified, "color toolbar did not enter simplified mode");
             Require(SpinnersGroup.State == RibbonGroupBoxState.Collapsed, "custom simplified group state was not applied");
+            MainRibbon.SelectedTabIndex = 6;
+            await SettleAsync();
+            var stackPanelButtons = EnumerateDescendants<RibbonButton>(PanelGroup12)
+                .Where(static button => AutomationProperties.GetAutomationId(button).StartsWith("BtnFull", StringComparison.Ordinal))
+                .ToArray();
+            var gridButtons = EnumerateDescendants<RibbonButton>(PanelGroup13)
+                .Where(static button => AutomationProperties.GetAutomationId(button).StartsWith("BtnFull", StringComparison.Ordinal))
+                .ToArray();
+            Require(
+                stackPanelButtons.All(static button => button.IsSimplified),
+                $"StackPanel-hosted controls did not enter simplified mode "
+                + $"(ribbon={MainRibbon.IsSimplified}, tab={MainRibbon.Tabs[6].IsSimplified}, "
+                + $"group={PanelGroup12.IsSimplified}, buttons={string.Join(",", stackPanelButtons.Select(static button => button.IsSimplified))})");
+            Require(
+                gridButtons.All(static button => button.IsSimplified),
+                "Grid-hosted controls did not enter simplified mode");
+            Require(
+                stackPanelButtons.All(static button => button.Size == RibbonControlSize.Medium),
+                $"StackPanel-hosted controls were not sized to Medium "
+                + $"({string.Join(",", stackPanelButtons.Select(static button => button.Size))})");
+            Require(
+                gridButtons.All(static button => button.Size == RibbonControlSize.Medium),
+                $"Grid-hosted controls were not sized to Medium "
+                + $"({string.Join(",", gridButtons.Select(static button => button.Size))})");
+            MainRibbon.SelectedTabIndex = 0;
+            await SettleAsync();
 
             MainRibbon.ContentHeight = regularContentHeight + 8;
             await SettleAsync();
@@ -1645,6 +2829,67 @@ public sealed partial class MainPage
             gallery.Items.Add(alpha);
             gallery.Items.Add(beta);
 
+            var boundItems = new ObservableCollection<string>
+            {
+                "Bound Alpha",
+                "Bound Beta",
+            };
+            var boundGallery = new InRibbonGallery
+            {
+                ItemsSource = boundItems,
+            };
+            boundGallery.SelectedItem = boundItems[1];
+            Require(
+                ReferenceEquals(boundGallery.SelectedItem, boundItems[1])
+                && boundGallery.SelectedIndex == 1,
+                "data-bound gallery did not preserve source-item selection identity");
+            boundGallery.SelectedIndex = 0;
+            Require(
+                ReferenceEquals(boundGallery.SelectedItem, boundItems[0]),
+                "data-bound gallery index selection returned a generated container");
+            InvokePrivate(
+                boundGallery,
+                "OnGalleryUnloaded",
+                boundGallery,
+                new RoutedEventArgs());
+            boundItems.Add("Bound Gamma");
+            InvokePrivate(
+                boundGallery,
+                "OnGalleryLoaded",
+                boundGallery,
+                new RoutedEventArgs());
+            Require(
+                ReferenceEquals(boundGallery.SelectedItem, boundItems[0])
+                && boundGallery.SelectedIndex == 0,
+                "data-bound gallery reload cleared an existing source selection");
+            var quickAccessGallery =
+                (InRibbonGallery)boundGallery.CreateQuickAccessItem();
+            InvokePrivate(
+                quickAccessGallery,
+                "OnQuickAccessCloneOpened",
+                quickAccessGallery,
+                EventArgs.Empty);
+            Require(
+                ReferenceEquals(quickAccessGallery.SelectedItem, boundItems[0]),
+                "Quick Access gallery clone lost source-item selection identity");
+            boundItems.Add("Bound Delta");
+            Require(
+                quickAccessGallery.Items.Count == boundItems.Count
+                && ReferenceEquals(quickAccessGallery.SelectedItem, boundItems[0]),
+                "Quick Access gallery clone did not track live ItemsSource changes");
+            InvokePrivate(
+                quickAccessGallery,
+                "OnQuickAccessCloneClosed",
+                quickAccessGallery,
+                EventArgs.Empty);
+            Require(
+                ReferenceEquals(boundGallery.SelectedItem, boundItems[0]),
+                "Quick Access gallery close wrote a generated container to the owner");
+            boundItems.RemoveAt(0);
+            Require(
+                boundGallery.SelectedItem is null && boundGallery.SelectedIndex == -1,
+                "data-bound gallery retained a removed source selection");
+
             var alphaFilter = new GalleryGroupFilter { Title = "Alpha only", Groups = "Alpha" };
             var betaFilter = new GalleryGroupFilter { Title = "Beta only", Groups = "Beta" };
             gallery.Filters.Add(alphaFilter);
@@ -1711,6 +2956,41 @@ public sealed partial class MainPage
             gallery.Reduce();
             Require(gallery.IsCollapsed, "clearing an explicit expanded state did not restore automatic collapse");
             gallery.ResetScale();
+
+            MainRibbon.SelectedTabIndex = 3;
+            await SettleAsync(2, 75);
+            GalGrouped.IsDropDownOpen = true;
+            await SettleAsync(2, 75);
+            var groupedPopup = GalGrouped.DropDownPopup?.Child;
+            Require(groupedPopup is not null, "grouped gallery popup was not created");
+            var groupHeaders = EnumerateDescendants<TextBlock>(groupedPopup!)
+                .Select(static text => text.Text)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Require(
+                groupHeaders.Contains("Group A") && groupHeaders.Contains("Group B"),
+                "grouped gallery popup did not render group headers");
+            GalGrouped.IsDropDownOpen = false;
+
+            var qatClone = GalGrouped.CreateQuickAccessItem() as InRibbonGallery;
+            Require(qatClone is not null, "grouped gallery QAT clone was not created");
+            MainRibbon.QuickAccessToolBarItems.Add(qatClone!);
+            await SettleAsync(2, 75);
+            try
+            {
+                qatClone!.IsDropDownOpen = true;
+                await SettleAsync(2, 75);
+                var qatGroupHeaders = EnumerateDescendants<TextBlock>(qatClone.DropDownPopup!.Child)
+                    .Select(static text => text.Text)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                Require(
+                    qatGroupHeaders.Contains("Group A") && qatGroupHeaders.Contains("Group B"),
+                    "grouped gallery QAT popup did not render group headers");
+                qatClone.IsDropDownOpen = false;
+            }
+            finally
+            {
+                MainRibbon.QuickAccessToolBarItems.Remove(qatClone!);
+            }
 
             await SettleAsync(2, 75);
             AutoLog("  IRGTEST OK");
@@ -1932,6 +3212,21 @@ public sealed partial class MainPage
                 CornerRadius = new CornerRadius(3),
             },
         };
+    }
+
+    private sealed class RuntimeGermanLocalization
+        : Fluent.Localization.Languages.German
+    {
+        public override string GalleryFilter => "Filtern:";
+
+        public override string RibbonSearchName => "Menübandsuche";
+
+        public override string RibbonSearchPlaceholder => "Befehle suchen";
+
+        public override string ColorDescriptionFormat => "Rot {0}, Grün {1}, Blau {2}";
+
+        public override string ColorDescriptionWithAlphaFormat
+            => "Alpha {0}, Rot {1}, Grün {2}, Blau {3}";
     }
 
     private static Windows.UI.Color HsvToColor(double hue)

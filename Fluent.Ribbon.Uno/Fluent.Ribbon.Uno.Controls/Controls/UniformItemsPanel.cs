@@ -17,6 +17,10 @@ namespace Fluent;
 /// </remarks>
 public partial class UniformItemsPanel : Panel
 {
+    private readonly Dictionary<string, TextBlock> groupHeaders =
+        new(StringComparer.OrdinalIgnoreCase);
+    private Func<UIElement, string>? groupSelector;
+
     /// <summary>Identifies the <see cref="ItemWidth"/> dependency property.</summary>
     public static readonly DependencyProperty ItemWidthProperty =
         DependencyProperty.Register(
@@ -108,6 +112,52 @@ public partial class UniformItemsPanel : Panel
             MaxColumns,
             Orientation);
 
+    internal void ConfigureGrouping(Func<UIElement, string>? selector)
+    {
+        foreach (var header in groupHeaders.Values)
+        {
+            Children.Remove(header);
+        }
+
+        groupHeaders.Clear();
+        groupSelector = selector;
+        if (selector is not null)
+        {
+            var groups = GetItemChildren()
+                .Select(selector)
+                .Where(static group => !string.IsNullOrEmpty(group))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var group in groups)
+            {
+                var header = new TextBlock
+                {
+                    Text = group,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Margin = new Thickness(6, 6, 6, 2),
+                };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(header, group);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(
+                    header,
+                    Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level3);
+                groupHeaders.Add(group, header);
+                Children.Add(header);
+            }
+        }
+
+        InvalidateMeasure();
+    }
+
+    private IEnumerable<UIElement> GetItemChildren() =>
+        Children.Where(child => child is not TextBlock header || !groupHeaders.ContainsValue(header));
+
+    private IEnumerable<IGrouping<string, UIElement>> GetVisibleGroups() =>
+        GetItemChildren()
+            .Where(static child => child.Visibility != Visibility.Collapsed)
+            .GroupBy(
+                child => groupSelector?.Invoke(child) ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase);
+
     /// <inheritdoc/>
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -124,6 +174,10 @@ public partial class UniformItemsPanel : Panel
         foreach (var child in Children)
         {
             child.Measure(childConstraint);
+            if (child is TextBlock header && groupHeaders.ContainsValue(header))
+            {
+                continue;
+            }
 
             // Collapsed children are filtered out (e.g. gallery group filtering) and take no cell.
             if (child.Visibility == Visibility.Collapsed)
@@ -146,6 +200,28 @@ public partial class UniformItemsPanel : Panel
         var effW = cellW > 0 ? cellW : maxChildW;
         var effH = cellH > 0 ? cellH : maxChildH;
 
+        if (groupSelector is not null)
+        {
+            double desiredWidth = 0;
+            double desiredHeight = 0;
+            foreach (var group in GetVisibleGroups())
+            {
+                if (groupHeaders.TryGetValue(group.Key, out var header))
+                {
+                    desiredWidth = Math.Max(desiredWidth, header.DesiredSize.Width);
+                    desiredHeight += header.DesiredSize.Height;
+                }
+
+                var itemCount = group.Count();
+                var groupColumns = ComputeColumns(availableSize.Width, effW, itemCount);
+                var groupRows = (int)Math.Ceiling((double)itemCount / groupColumns);
+                desiredWidth = Math.Max(desiredWidth, groupColumns * effW);
+                desiredHeight += groupRows * effH;
+            }
+
+            return new Size(desiredWidth, desiredHeight);
+        }
+
         var columns = ComputeColumns(availableSize.Width, effW, visible);
         var rows = visible == 0 ? 0 : (int)Math.Ceiling((double)visible / columns);
 
@@ -163,6 +239,11 @@ public partial class UniformItemsPanel : Panel
         var visible = 0;
         foreach (var child in Children)
         {
+            if (child is TextBlock header && groupHeaders.ContainsValue(header))
+            {
+                continue;
+            }
+
             if (child.Visibility == Visibility.Collapsed)
             {
                 continue;
@@ -192,6 +273,40 @@ public partial class UniformItemsPanel : Panel
 
         var effW = cellW > 0 ? cellW : maxChildW;
         var effH = cellH > 0 ? cellH : maxChildH;
+
+        if (groupSelector is not null)
+        {
+            var arrangedHeaders = new HashSet<TextBlock>();
+            double y = 0;
+            foreach (var group in GetVisibleGroups())
+            {
+                if (groupHeaders.TryGetValue(group.Key, out var header))
+                {
+                    header.Arrange(new Rect(0, y, finalSize.Width, header.DesiredSize.Height));
+                    arrangedHeaders.Add(header);
+                    y += header.DesiredSize.Height;
+                }
+
+                var groupItems = group.ToArray();
+                var groupColumns = ComputeColumns(finalSize.Width, effW, groupItems.Length);
+                for (var index = 0; index < groupItems.Length; index++)
+                {
+                    var itemColumn = index % groupColumns;
+                    var itemRow = index / groupColumns;
+                    groupItems[index].Arrange(
+                        new Rect(itemColumn * effW, y + (itemRow * effH), effW, effH));
+                }
+
+                y += Math.Ceiling((double)groupItems.Length / groupColumns) * effH;
+            }
+
+            foreach (var header in groupHeaders.Values.Except(arrangedHeaders))
+            {
+                header.Arrange(new Rect(0, 0, 0, 0));
+            }
+
+            return finalSize;
+        }
 
         var columns = ComputeColumns(finalSize.Width, effW, visible);
         var column = 0;

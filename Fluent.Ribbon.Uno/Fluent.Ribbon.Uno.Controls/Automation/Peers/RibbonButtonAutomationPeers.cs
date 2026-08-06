@@ -9,7 +9,7 @@ using Microsoft.UI.Dispatching;
 /// <summary>
 /// Automation peer for <see cref="RibbonButton"/>.
 /// </summary>
-public partial class RibbonButtonAutomationPeer : ButtonAutomationPeer
+public partial class RibbonButtonAutomationPeer : ButtonAutomationPeer, IInvokeProvider
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonButtonAutomationPeer"/> class.
@@ -29,7 +29,7 @@ public partial class RibbonButtonAutomationPeer : ButtonAutomationPeer
     {
         var name = base.GetNameCore();
         return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetObjectName(OwnerButton.Header)
+            ? AutomationPeerHelpers.GetHeaderOrPlaceholderName(OwnerButton)
             : name;
     }
 
@@ -46,12 +46,25 @@ public partial class RibbonButtonAutomationPeer : ButtonAutomationPeer
         var helpText = base.GetHelpTextCore();
         return string.IsNullOrWhiteSpace(helpText) ? OwnerButton.ScreenTipText : helpText;
     }
+
+    /// <inheritdoc/>
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Invoke
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    public new void Invoke()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        base.Invoke();
+    }
 }
 
 /// <summary>
 /// Automation peer for <see cref="RibbonCheckBox"/>.
 /// </summary>
-public partial class RibbonCheckBoxAutomationPeer : CheckBoxAutomationPeer
+public partial class RibbonCheckBoxAutomationPeer : CheckBoxAutomationPeer, IToggleProvider
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonCheckBoxAutomationPeer"/> class.
@@ -66,8 +79,30 @@ public partial class RibbonCheckBoxAutomationPeer : CheckBoxAutomationPeer
     {
         var name = base.GetNameCore();
         return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
+            ? AutomationPeerHelpers.GetHeaderOrPlaceholderName((FrameworkElement)Owner)
             : name;
+    }
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore() => [];
+
+    /// <inheritdoc/>
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Toggle
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    public new void Toggle()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        base.Toggle();
     }
 }
 
@@ -90,17 +125,27 @@ public partial class RibbonComboBoxAutomationPeer : ComboBoxAutomationPeer
     /// <inheritdoc/>
     protected override string GetNameCore()
     {
-        var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
-            : name;
+        var name = AutomationProperties.GetName(Owner);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        name = AutomationPeerHelpers.GetHeaderOrPlaceholderName((FrameworkElement)Owner);
+        return string.IsNullOrWhiteSpace(name) ? base.GetNameCore() : name;
     }
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
 }
 
 /// <summary>
 /// Runtime automation peer used by <see cref="RibbonComboBox"/>.
 /// </summary>
-internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : FrameworkElementAutomationPeer,
+internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : RibbonComboBoxAutomationPeer,
     IExpandCollapseProvider,
     IItemContainerProvider,
     IScrollItemProvider,
@@ -108,7 +153,7 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
     IValueProvider
 {
     private ExpandCollapseState expandCollapseState;
-    private readonly List<RibbonComboBoxItemDataAutomationPeer?> itemPeers = [];
+    private readonly List<RibbonComboBoxItemDataAutomationPeer> itemPeers = [];
     private DispatcherQueueTimer? pendingDropDownTimer;
     private bool pendingDropDownState;
 
@@ -129,10 +174,14 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
 
     protected override string GetNameCore()
     {
-        var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
-            : name;
+        var name = AutomationProperties.GetName(Owner);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        name = AutomationPeerHelpers.GetHeaderOrPlaceholderName((FrameworkElement)Owner);
+        return string.IsNullOrWhiteSpace(name) ? base.GetNameCore() : name;
     }
 
     protected override AutomationControlType GetAutomationControlTypeCore()
@@ -157,12 +206,15 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
             ? new List<AutomationPeer>(baseChildren)
             : [];
 
-        for (var index = 0; index < OwnerComboBox.Items.Count; index++)
+        if (OwnerComboBox.IsDropDownOpen)
         {
-            var peer = GetContainerPeer(index) ?? GetDataPeer(index);
-            if (peer is not null && !children.Contains(peer))
+            for (var index = 0; index < OwnerComboBox.Items.Count; index++)
             {
-                children.Add(peer);
+                var peer = GetContainerPeer(index) ?? GetDataPeer(index);
+                if (peer is not null && !children.Contains(peer))
+                {
+                    children.Add(peer);
+                }
             }
         }
 
@@ -171,42 +223,55 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
 
     public new object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
-    public void Expand()
+    public new void Expand()
     {
+        RunOnOwnerThread(() => AutomationProviderGuard.EnsureEnabled(this));
         QueueDropDownState(isOpen: true, delay: TimeSpan.FromMilliseconds(100));
     }
 
-    public void Collapse() => QueueDropDownState(isOpen: false, delay: TimeSpan.Zero);
+    public new void Collapse()
+    {
+        RunOnOwnerThread(() => AutomationProviderGuard.EnsureEnabled(this));
+        QueueDropDownState(isOpen: false, delay: TimeSpan.Zero);
+    }
 
-    public ExpandCollapseState ExpandCollapseState => expandCollapseState;
+    public new ExpandCollapseState ExpandCollapseState => expandCollapseState;
 
-    public bool CanSelectMultiple => false;
+    public new bool CanSelectMultiple => false;
 
-    public bool IsSelectionRequired => false;
+    public new bool IsSelectionRequired => false;
 
-    public bool IsReadOnly => !OwnerComboBox.IsEditable;
+    public new bool IsReadOnly => !OwnerComboBox.IsEditable;
 
-    public string Value => RunOnOwnerThread(
+    public new string Value => RunOnOwnerThread(
         () => OwnerComboBox.Text
               ?? AutomationPeerHelpers.GetObjectName(OwnerComboBox.SelectedItem));
 
-    public IRawElementProviderSimple[] GetSelection()
+    public new IRawElementProviderSimple[] GetSelection()
         => RunOnOwnerThread(GetSelectionProviders);
 
     public void ScrollIntoView()
-        => RunOnOwnerThread(() => OwnerComboBox.StartBringIntoView());
+        => RunOnOwnerThread(
+            () =>
+            {
+                AutomationProviderGuard.EnsureEnabled(this);
+                OwnerComboBox.StartBringIntoView();
+            });
 
-    public void SetValue(string value)
+    public new void SetValue(string value)
     {
-        if (!OwnerComboBox.IsEditable)
-        {
-            throw new InvalidOperationException("The ComboBox is not editable.");
-        }
-
-        RunOnOwnerThread(() => OwnerComboBox.Text = value);
+        RunOnOwnerThread(
+            () =>
+            {
+                AutomationProviderGuard.Validate(
+                    this,
+                    OwnerComboBox.IsEditable,
+                    "The ComboBox is not editable.");
+                OwnerComboBox.Text = value;
+            });
     }
 
-    public IRawElementProviderSimple? FindItemByProperty(
+    public new IRawElementProviderSimple? FindItemByProperty(
         IRawElementProviderSimple? startAfter,
         AutomationProperty? automationProperty,
         object? value)
@@ -224,7 +289,9 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
             var startPeer = PeerFromProvider(startAfter);
             startIndex = startPeer is RibbonComboBoxItemDataAutomationPeer dataPeer
                 ? dataPeer.ItemIndex
-                : FindContainerPeerIndex(startPeer);
+                : startPeer is null
+                    ? -1
+                    : FindContainerPeerIndex(startPeer);
         }
 
         for (var index = startIndex + 1; index < OwnerComboBox.Items.Count; index++)
@@ -301,6 +368,11 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
 
     private void ApplyDropDownState(bool isOpen)
     {
+        if (!OwnerComboBox.IsEnabled)
+        {
+            return;
+        }
+
         OwnerComboBox.IsDropDownOpen = isOpen;
         UpdateExpandCollapseState(
             isOpen ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
@@ -329,6 +401,53 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
             ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
             previous,
             value);
+    }
+
+    internal void RaiseSelectionChanged(
+        object? oldItem,
+        int oldIndex,
+        object? newItem,
+        int newIndex)
+    {
+        if (oldIndex == newIndex && ReferenceEquals(oldItem, newItem))
+        {
+            return;
+        }
+
+        RaiseDataItemSelectionChanged(oldItem, oldIndex, true, false);
+        RaiseDataItemSelectionChanged(newItem, newIndex, false, true);
+    }
+
+    internal void RaiseValueChanged(string oldValue, string newValue)
+    {
+        if (string.Equals(oldValue, newValue, StringComparison.Ordinal)
+            || !OwnerComboBox.IsEditable)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ValuePatternIdentifiers.ValueProperty,
+            oldValue,
+            newValue);
+    }
+
+    private void RaiseDataItemSelectionChanged(
+        object? item,
+        int index,
+        bool oldValue,
+        bool newValue)
+    {
+        if (item is null
+            || index < 0
+            || index >= OwnerComboBox.Items.Count
+            || !ReferenceEquals(OwnerComboBox.Items[index], item)
+            || GetContainerPeer(index) is not null)
+        {
+            return;
+        }
+
+        GetDataPeer(index)?.RaiseIsSelectedChanged(oldValue, newValue);
     }
 
     private IRawElementProviderSimple[] GetSelectionProviders()
@@ -370,22 +489,20 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
             return null;
         }
 
-        while (itemPeers.Count <= index)
-        {
-            itemPeers.Add(null);
-        }
-
         var item = OwnerComboBox.Items[index];
-        var peer = itemPeers[index];
-        if (peer is null || !ReferenceEquals(peer.Item, item))
+        var occurrence = GetItemOccurrence(item, index);
+        var peer = itemPeers.FirstOrDefault(
+            candidate => ReferenceEquals(candidate.Item, item)
+                         && candidate.ItemOccurrence == occurrence);
+        if (peer is null)
         {
             peer = new RibbonComboBoxItemDataAutomationPeer(
                 item,
                 index,
-                GetItemOccurrence(item, index),
+                occurrence,
                 GetItemName(index),
                 this);
-            itemPeers[index] = peer;
+            itemPeers.Add(peer);
         }
         else
         {
@@ -411,34 +528,39 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
 
     internal int ResolveItemIndex(object item, int occurrence, int preferredIndex)
         => RunOnOwnerThread(
-            () =>
+            () => ResolveItemIndexCore(item, occurrence, preferredIndex));
+
+    private int ResolveItemIndexCore(
+        object item,
+        int occurrence,
+        int preferredIndex)
+    {
+        if (preferredIndex >= 0
+            && preferredIndex < OwnerComboBox.Items.Count
+            && ReferenceEquals(OwnerComboBox.Items[preferredIndex], item)
+            && GetItemOccurrence(item, preferredIndex) == occurrence)
+        {
+            return preferredIndex;
+        }
+
+        var currentOccurrence = 0;
+        for (var index = 0; index < OwnerComboBox.Items.Count; index++)
+        {
+            if (!ReferenceEquals(OwnerComboBox.Items[index], item))
             {
-                if (preferredIndex >= 0
-                    && preferredIndex < OwnerComboBox.Items.Count
-                    && ReferenceEquals(OwnerComboBox.Items[preferredIndex], item)
-                    && GetItemOccurrence(item, preferredIndex) == occurrence)
-                {
-                    return preferredIndex;
-                }
+                continue;
+            }
 
-                var currentOccurrence = 0;
-                for (var index = 0; index < OwnerComboBox.Items.Count; index++)
-                {
-                    if (!ReferenceEquals(OwnerComboBox.Items[index], item))
-                    {
-                        continue;
-                    }
+            if (currentOccurrence == occurrence)
+            {
+                return index;
+            }
 
-                    if (currentOccurrence == occurrence)
-                    {
-                        return index;
-                    }
+            currentOccurrence++;
+        }
 
-                    currentOccurrence++;
-                }
-
-                return -1;
-            });
+        return -1;
+    }
 
     internal string GetItemName(int index)
         => RunOnOwnerThread(
@@ -459,17 +581,35 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
                 index >= 0
                 && index < OwnerComboBox.Items.Count
                 && OwnerComboBox.IsEnabled
-                && (OwnerComboBox.Items[index] is not Control control || control.IsEnabled));
+                && (OwnerComboBox.ContainerFromIndex(index) is not Control container
+                    || container.IsEnabled)
+                && (OwnerComboBox.Items[index] is not Control item
+                    || item.IsEnabled));
+
+    internal void AddItemToSelection(int index)
+        => RunOnOwnerThread(
+            () =>
+            {
+                EnsureItemEnabled(index);
+                if (OwnerComboBox.SelectedIndex == index)
+                {
+                    return;
+                }
+
+                if (OwnerComboBox.SelectedIndex >= 0)
+                {
+                    throw new InvalidOperationException(
+                        "The ComboBox supports only one selected item.");
+                }
+
+                OwnerComboBox.SelectedIndex = index;
+            });
 
     internal void SelectItem(int index)
         => RunOnOwnerThread(
             () =>
             {
-                if (!IsItemEnabled(index))
-                {
-                    throw new ElementNotEnabledException();
-                }
-
+                EnsureItemEnabled(index);
                 OwnerComboBox.SelectedIndex = index;
             });
 
@@ -477,6 +617,7 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
         => RunOnOwnerThread(
             () =>
             {
+                EnsureItemEnabled(index);
                 if (OwnerComboBox.SelectedIndex == index)
                 {
                     OwnerComboBox.SelectedIndex = -1;
@@ -487,17 +628,60 @@ internal sealed partial class RibbonComboBoxAccessibleAutomationPeer : Framework
         => RunOnOwnerThread(
             () =>
             {
-                if (OwnerComboBox.ContainerFromIndex(index) is UIElement container)
+                EnsureItemEnabled(index);
+                var container = OwnerComboBox.ContainerFromIndex(index) as UIElement;
+                if (container is null)
                 {
-                    container.StartBringIntoView();
+                    OwnerComboBox.IsDropDownOpen = true;
+                    OwnerComboBox.UpdateLayout();
+                    container = OwnerComboBox.ContainerFromIndex(index) as UIElement;
                 }
+
+                AutomationProviderGuard.EnsureAvailable(
+                    container is not null,
+                    "The ComboBox item could not be realized for scrolling.");
+                container!.StartBringIntoView();
             });
+
+    private void EnsureItemEnabled(int index)
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        if (index < 0 || index >= OwnerComboBox.Items.Count)
+        {
+            throw new ElementNotAvailableException();
+        }
+
+        if (OwnerComboBox.Items[index] is Control control)
+        {
+            AutomationProviderGuard.EnsureEnabled(control.IsEnabled);
+        }
+
+        if (OwnerComboBox.ContainerFromIndex(index) is Control container)
+        {
+            AutomationProviderGuard.EnsureEnabled(container.IsEnabled);
+        }
+    }
 
     private void OnItemsVectorChanged(
         Windows.Foundation.Collections.IObservableVector<object> sender,
         Windows.Foundation.Collections.IVectorChangedEventArgs args)
     {
-        itemPeers.Clear();
+        for (var index = itemPeers.Count - 1; index >= 0; index--)
+        {
+            var peer = itemPeers[index];
+            var itemIndex = ResolveItemIndexCore(
+                peer.Item,
+                peer.ItemOccurrence,
+                peer.LastKnownIndex);
+            if (itemIndex < 0)
+            {
+                itemPeers.RemoveAt(index);
+            }
+            else
+            {
+                peer.UpdateIndex(itemIndex);
+            }
+        }
     }
 
     private void RunOnOwnerThread(Action action)
@@ -581,6 +765,10 @@ internal sealed partial class RibbonComboBoxItemDataAutomationPeer : AutomationP
 
     internal object Item { get; }
 
+    internal int ItemOccurrence => itemOccurrence;
+
+    internal int LastKnownIndex => lastKnownIndex;
+
     internal int ItemIndex =>
         owner.ResolveItemIndex(Item, itemOccurrence, lastKnownIndex);
 
@@ -604,7 +792,7 @@ internal sealed partial class RibbonComboBoxItemDataAutomationPeer : AutomationP
         return patternInterface switch
         {
             PatternInterface.ScrollItem => this,
-            PatternInterface.SelectionItem when IsEnabledCore() => this,
+            PatternInterface.SelectionItem when ItemIndex >= 0 => this,
             _ => base.GetPatternCore(patternInterface),
         };
     }
@@ -613,7 +801,7 @@ internal sealed partial class RibbonComboBoxItemDataAutomationPeer : AutomationP
 
     public void ScrollIntoView() => owner.ScrollItemIntoView(GetCurrentIndex());
 
-    public void AddToSelection() => Select();
+    public void AddToSelection() => owner.AddItemToSelection(GetCurrentIndex());
 
     public void RemoveFromSelection() => owner.RemoveItemFromSelection(GetCurrentIndex());
 
@@ -630,6 +818,23 @@ internal sealed partial class RibbonComboBoxItemDataAutomationPeer : AutomationP
 
     public IRawElementProviderSimple SelectionContainer => ProviderFromPeer(owner);
 
+    internal void RaiseIsSelectedChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            SelectionItemPatternIdentifiers.IsSelectedProperty,
+            oldValue,
+            newValue);
+        RaiseAutomationEvent(
+            newValue
+                ? AutomationEvents.SelectionItemPatternOnElementSelected
+                : AutomationEvents.SelectionItemPatternOnElementRemovedFromSelection);
+    }
+
     private int GetCurrentIndex()
     {
         var index = ItemIndex;
@@ -645,7 +850,10 @@ internal sealed partial class RibbonComboBoxItemDataAutomationPeer : AutomationP
 /// <summary>
 /// Automation peer for <see cref="RibbonDropDownButton"/>.
 /// </summary>
-public partial class RibbonDropDownButtonAutomationPeer : RibbonHeaderedControlAutomationPeer, IExpandCollapseProvider
+public partial class RibbonDropDownButtonAutomationPeer :
+    RibbonHeaderedControlAutomationPeer,
+    IExpandCollapseProvider,
+    ISelectionProvider
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonDropDownButtonAutomationPeer"/> class.
@@ -668,7 +876,8 @@ public partial class RibbonDropDownButtonAutomationPeer : RibbonHeaderedControlA
         => AutomationControlType.Button;
 
     /// <inheritdoc/>
-    protected override string GetLocalizedControlTypeCore() => "drop-down button";
+    protected override string GetLocalizedControlTypeCore()
+        => global::Fluent.RibbonLocalization.Current.Localization.DropDownButtonControlType;
 
     /// <inheritdoc/>
     protected override string GetAccessKeyCore()
@@ -685,16 +894,34 @@ public partial class RibbonDropDownButtonAutomationPeer : RibbonHeaderedControlA
 
     /// <inheritdoc/>
     protected override object? GetPatternCore(PatternInterface patternInterface)
-        => patternInterface == PatternInterface.ExpandCollapse
-            ? this
-            : base.GetPatternCore(patternInterface);
+    {
+        return patternInterface switch
+        {
+            PatternInterface.ExpandCollapse => this,
+            PatternInterface.Selection when GroupedMenuItems.Count > 0 => this,
+            _ => base.GetPatternCore(patternInterface),
+        };
+    }
 
     /// <inheritdoc cref="AutomationPeer.GetPattern"/>
     public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore() => [];
+
+    /// <inheritdoc/>
+    protected override void SetFocusCore()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        AutomationProviderGuard.EnsureAvailable(
+            ((Control)Owner).Focus(FocusState.Programmatic),
+            "The drop-down button could not receive focus.");
+    }
+
+    /// <inheritdoc/>
     public void Collapse()
     {
+        AutomationProviderGuard.EnsureEnabled(this);
         switch (Owner)
         {
             case RibbonDropDownButton dropDownButton:
@@ -706,6 +933,7 @@ public partial class RibbonDropDownButtonAutomationPeer : RibbonHeaderedControlA
     /// <inheritdoc/>
     public void Expand()
     {
+        AutomationProviderGuard.EnsureEnabled(this);
         switch (Owner)
         {
             case RibbonDropDownButton dropDownButton:
@@ -721,12 +949,61 @@ public partial class RibbonDropDownButtonAutomationPeer : RibbonHeaderedControlA
             RibbonDropDownButton { IsDropDownOpen: true } => Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded,
             _ => Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed,
         };
+
+    internal void RaiseIsDropDownOpenChanged(bool oldValue, bool newValue)
+    {
+        if (oldValue == newValue)
+        {
+            return;
+        }
+
+        RaisePropertyChangedEvent(
+            ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+            oldValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed,
+            newValue ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+    }
+
+    private IReadOnlyList<MenuItem> GroupedMenuItems
+    {
+        get
+        {
+            if (Owner is not RibbonDropDownButton dropDownButton)
+            {
+                return [];
+            }
+
+            var items = dropDownButton.ItemsSource as System.Collections.IEnumerable
+                        ?? dropDownButton.Items;
+            return items.Cast<object>()
+                .OfType<MenuItem>()
+                .Where(item => item.IsCheckable && !string.IsNullOrEmpty(item.GroupName))
+                .ToList();
+        }
+    }
+
+    bool ISelectionProvider.CanSelectMultiple
+        => GroupedMenuItems
+            .Select(item => item.GroupName)
+            .Distinct(StringComparer.Ordinal)
+            .Skip(1)
+            .Any();
+
+    bool ISelectionProvider.IsSelectionRequired => true;
+
+    IRawElementProviderSimple[] ISelectionProvider.GetSelection()
+        => GroupedMenuItems
+            .Where(item => item.IsChecked is true)
+            .Select(
+                item => CreatePeerForElement(item)
+                        ?? new RibbonMenuItemAutomationPeer(item))
+            .Select(ProviderFromPeer)
+            .ToArray();
 }
 
 /// <summary>
 /// Automation peer for <see cref="RibbonRadioButton"/>.
 /// </summary>
-public partial class RibbonRadioButtonAutomationPeer : RadioButtonAutomationPeer
+public partial class RibbonRadioButtonAutomationPeer : RadioButtonAutomationPeer, ISelectionItemProvider
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonRadioButtonAutomationPeer"/> class.
@@ -747,10 +1024,54 @@ public partial class RibbonRadioButtonAutomationPeer : RadioButtonAutomationPeer
             ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
             : name;
     }
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore() => [];
+
+    /// <inheritdoc/>
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.SelectionItem
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    public new void AddToSelection()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        base.AddToSelection();
+    }
+
+    /// <inheritdoc/>
+    public new void RemoveFromSelection()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        base.RemoveFromSelection();
+    }
+
+    /// <inheritdoc/>
+    public new void Select()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        base.Select();
+    }
+
+    /// <inheritdoc/>
+    public new bool IsSelected => base.IsSelected;
+
+    /// <inheritdoc/>
+    public new IRawElementProviderSimple SelectionContainer => base.SelectionContainer;
 }
 
 /// <summary>
 /// Automation peer for <see cref="RibbonSplitButton"/>.
+/// The outer peer is the single control-view element and exposes both the primary
+/// <see cref="IInvokeProvider"/> action and the inherited expand/collapse action.
 /// </summary>
 public partial class RibbonSplitButtonAutomationPeer : RibbonDropDownButtonAutomationPeer, IInvokeProvider
 {
@@ -773,33 +1094,30 @@ public partial class RibbonSplitButtonAutomationPeer : RibbonDropDownButtonAutom
 
     /// <inheritdoc/>
     protected override string GetAutomationIdCore()
-    {
-        var automationId = base.GetAutomationIdCore();
-        return string.IsNullOrWhiteSpace(automationId)
-            ? nameof(RibbonSplitButton)
-            : automationId;
-    }
+        => base.GetAutomationIdCore();
 
     /// <inheritdoc/>
     protected override object? GetPatternCore(PatternInterface patternInterface)
         => patternInterface == PatternInterface.Invoke
+           && OwnerSplitButton.IsButtonEnabled
             ? this
             : base.GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
     public void Invoke()
     {
-        if (OwnerSplitButton.IsEnabled)
-        {
-            OwnerSplitButton.InvokePrimaryAction();
-        }
+        AutomationProviderGuard.Validate(
+            this,
+            OwnerSplitButton.IsButtonEnabled,
+            "The split-button primary action is disabled.");
+        OwnerSplitButton.InvokePrimaryAction();
     }
 }
 
 /// <summary>
 /// Automation peer for <see cref="RibbonTextBox"/>.
 /// </summary>
-public partial class RibbonTextBoxAutomationPeer : TextBoxAutomationPeer
+public partial class RibbonTextBoxAutomationPeer : TextBoxAutomationPeer, IValueProvider
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonTextBoxAutomationPeer"/> class.
@@ -809,23 +1127,134 @@ public partial class RibbonTextBoxAutomationPeer : TextBoxAutomationPeer
     {
     }
 
+    private RibbonTextBox OwnerTextBox => (RibbonTextBox)Owner;
+
     /// <inheritdoc/>
     protected override string GetClassNameCore() => nameof(RibbonTextBox);
 
     /// <inheritdoc/>
     protected override string GetNameCore()
     {
-        var name = base.GetNameCore();
-        return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
-            : name;
+        var name = AutomationProperties.GetName(Owner);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        name = AutomationPeerHelpers.GetHeaderOrPlaceholderName((FrameworkElement)Owner);
+        return string.IsNullOrWhiteSpace(name) ? base.GetNameCore() : name;
+    }
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
+
+    /// <inheritdoc/>
+    protected override void SetFocusCore()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        AutomationProviderGuard.EnsureAvailable(
+            ((RibbonTextBox)Owner).FocusEditorForAutomation(),
+            "The ribbon text editor could not receive focus.");
+    }
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore() => [];
+
+    /// <inheritdoc/>
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Value
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    public
+#if !WINDOWS
+        new
+#endif
+        bool IsReadOnly => RunOnOwnerThread(() => OwnerTextBox.IsReadOnly);
+
+    /// <inheritdoc/>
+    public
+#if !WINDOWS
+        new
+#endif
+        string Value => RunOnOwnerThread(() => OwnerTextBox.Text ?? string.Empty);
+
+    /// <inheritdoc/>
+    public
+#if !WINDOWS
+        new
+#endif
+        void SetValue(string value)
+    {
+        RunOnOwnerThread(
+            () =>
+            {
+                AutomationProviderGuard.Validate(
+                    this,
+                    !OwnerTextBox.IsReadOnly,
+                    "The ribbon text editor is read-only.");
+                ArgumentNullException.ThrowIfNull(value);
+                OwnerTextBox.Text = value;
+                return true;
+            });
+    }
+
+    private T RunOnOwnerThread<T>(Func<T> action)
+    {
+        if (OwnerTextBox.DispatcherQueue.HasThreadAccess)
+        {
+            return action();
+        }
+
+        using var completion = new System.Threading.ManualResetEventSlim();
+        Exception? dispatchException = null;
+        T result = default!;
+        if (!OwnerTextBox.DispatcherQueue.TryEnqueue(
+                () =>
+                {
+                    try
+                    {
+                        result = action();
+                    }
+                    catch (Exception exception)
+                    {
+                        dispatchException = exception;
+                    }
+                    finally
+                    {
+                        completion.Set();
+                    }
+                }))
+        {
+            throw new InvalidOperationException(
+                "Could not dispatch the ribbon text automation action.");
+        }
+
+        if (!completion.Wait(TimeSpan.FromSeconds(5)))
+        {
+            throw new TimeoutException(
+                "The ribbon text automation action timed out.");
+        }
+
+        if (dispatchException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(dispatchException)
+                .Throw();
+        }
+
+        return result;
     }
 }
 
 /// <summary>
 /// Automation peer for <see cref="RibbonToggleButton"/>.
 /// </summary>
-public partial class RibbonToggleButtonAutomationPeer : ToggleButtonAutomationPeer
+public partial class RibbonToggleButtonAutomationPeer : ToggleButtonAutomationPeer, IToggleProvider
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonToggleButtonAutomationPeer"/> class.
@@ -843,7 +1272,38 @@ public partial class RibbonToggleButtonAutomationPeer : ToggleButtonAutomationPe
     {
         var name = base.GetNameCore();
         return string.IsNullOrWhiteSpace(name)
-            ? AutomationPeerHelpers.GetHeaderName((FrameworkElement)Owner)
+            ? AutomationPeerHelpers.GetHeaderOrPlaceholderName((FrameworkElement)Owner)
             : name;
+    }
+
+    /// <inheritdoc/>
+    protected override string GetAccessKeyCore()
+        => AutomationPeerHelpers.GetAccessKey(
+            (FrameworkElement)Owner,
+            base.GetAccessKeyCore());
+
+    /// <inheritdoc/>
+    protected override string GetHelpTextCore()
+    {
+        var helpText = base.GetHelpTextCore();
+        return string.IsNullOrWhiteSpace(helpText)
+            ? ((RibbonToggleButton)Owner).ScreenTipText
+            : helpText;
+    }
+
+    /// <inheritdoc/>
+    protected override List<AutomationPeer>? GetChildrenCore() => [];
+
+    /// <inheritdoc/>
+    protected override object? GetPatternCore(PatternInterface patternInterface)
+        => patternInterface == PatternInterface.Toggle
+            ? this
+            : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc/>
+    public new void Toggle()
+    {
+        AutomationProviderGuard.EnsureEnabled(this);
+        base.Toggle();
     }
 }

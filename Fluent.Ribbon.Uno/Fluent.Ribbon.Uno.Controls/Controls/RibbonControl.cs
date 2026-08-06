@@ -15,12 +15,18 @@ namespace Fluent;
 /// therefore uses <see cref="UIElement"/> as the nearest portable target descriptor.
 /// Derived controls remain responsible for deciding when to call <see cref="ExecuteCommand"/>.
 /// </remarks>
-public abstract class RibbonControl :
+public abstract partial class RibbonControl :
     Control,
     ICommandSource,
     IQuickAccessItemProvider,
     IRibbonControl
 {
+    private static readonly RibbonControlSizeDefinition UnsetSizeDefinition =
+        new(
+            (RibbonControlSize)(-1),
+            (RibbonControlSize)(-1),
+            (RibbonControlSize)(-1));
+
     private bool commandCanExecute = true;
 
     /// <summary>Initializes a new compatibility ribbon control.</summary>
@@ -176,14 +182,42 @@ public abstract class RibbonControl :
             nameof(SizeDefinition),
             typeof(RibbonControlSizeDefinition),
             typeof(RibbonControl),
-            new PropertyMetadata(default(RibbonControlSizeDefinition)));
+            new PropertyMetadata(UnsetSizeDefinition));
 
     /// <summary>Gets or sets the typed ribbon size definition.</summary>
     public RibbonControlSizeDefinition SizeDefinition
     {
-        get => (RibbonControlSizeDefinition)GetValue(SizeDefinitionProperty);
+        get
+        {
+            var definition =
+                (RibbonControlSizeDefinition)GetValue(SizeDefinitionProperty);
+            return IsUnsetSizeDefinition(definition)
+                ? default
+                : definition;
+        }
         set => SetValue(SizeDefinitionProperty, value);
     }
+
+    internal static bool TryGetEffectiveSizeDefinition(
+        DependencyObject element,
+        out RibbonControlSizeDefinition definition)
+    {
+        definition =
+            (RibbonControlSizeDefinition)element.GetValue(SizeDefinitionProperty);
+        if (!IsUnsetSizeDefinition(definition))
+        {
+            return true;
+        }
+
+        definition = default;
+        return false;
+    }
+
+    internal static bool IsUnsetSizeDefinition(
+        RibbonControlSizeDefinition definition)
+        => definition.Large == (RibbonControlSize)(-1)
+           && definition.Medium == (RibbonControlSize)(-1)
+           && definition.Small == (RibbonControlSize)(-1);
 
     /// <summary>Identifies the <see cref="CanAddToQuickAccessToolBar"/> dependency property.</summary>
     public static readonly DependencyProperty CanAddToQuickAccessToolBarProperty =

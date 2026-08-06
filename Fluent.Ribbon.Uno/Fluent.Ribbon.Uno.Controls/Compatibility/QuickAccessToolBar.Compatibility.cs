@@ -317,7 +317,12 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
                 $"QuickAccessCustomizationItem{index}");
             AutomationProperties.SetName(
                 item,
-                item.Header?.ToString() ?? "Quick Access command");
+                Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(item.Header)
+                is { Length: > 0 } header
+                    ? header
+                    : string.Format(
+                        RibbonLocalization.Current.Localization.QuickAccessToolBarItemFormat,
+                        index + 1));
             panel.Children.Add(item);
         }
     }
