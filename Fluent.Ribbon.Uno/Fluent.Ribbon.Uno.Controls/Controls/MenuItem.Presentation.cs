@@ -331,10 +331,14 @@ public partial class MenuItem
         return true;
     }
 
-    internal string GetMenuHeaderName() =>
-        Header is string text && RecognizesAccessKey
+    internal string GetMenuHeaderName()
+    {
+        // QuickAccessMenuItem reimplements the header contract with its own Header DP.
+        var header = ((IHeaderedControl)this).Header;
+        return header is string text && RecognizesAccessKey
             ? ParseAccessText(text).Text
-            : AutomationPeerHelpers.GetObjectName(Header);
+            : AutomationPeerHelpers.GetObjectName(header);
+    }
 
     private void UpdateAccessKeyPresentation()
     {

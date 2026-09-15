@@ -276,3 +276,22 @@ test('has no serious or critical axe violations in the semantic UI', async ({
     }, originalOpacity);
   }
 });
+
+test('keeps customization names and split-button roles accessible', async ({
+  page,
+}) => {
+  const root = semanticsRoot(page);
+  await expect(
+    root.getByRole('menuitem', { name: 'Save', exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    root.getByRole('menuitem', { name: 'Print Preview', exact: true }),
+  ).toHaveCount(1);
+
+  const paste = root
+    .getByRole('group', { name: 'Clipboard', exact: true })
+    .getByRole('button', { name: 'Paste', exact: true });
+  await expect(paste).toHaveCount(1);
+  await expect(paste).toHaveJSProperty('tagName', 'BUTTON');
+  await expect(root.locator('[role="splitbutton"]')).toHaveCount(0);
+});

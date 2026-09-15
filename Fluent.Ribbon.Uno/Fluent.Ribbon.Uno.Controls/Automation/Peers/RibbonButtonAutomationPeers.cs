@@ -907,7 +907,44 @@ public partial class RibbonDropDownButtonAutomationPeer :
     public new virtual object? GetPattern(PatternInterface patternInterface) => GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
-    protected override List<AutomationPeer>? GetChildrenCore() => [];
+    protected override List<AutomationPeer>? GetChildrenCore()
+    {
+        var peers = new List<AutomationPeer>();
+#if WINDOWS
+        if (Owner is RibbonDropDownButton { OpenNativePopup.Child: { } content })
+        {
+            AddPopupPeers(content, peers);
+        }
+#endif
+        return peers;
+    }
+
+#if WINDOWS
+    private static void AddPopupPeers(DependencyObject element, ICollection<AutomationPeer> peers)
+    {
+        if (element is UIElement uiElement)
+        {
+            if (!AutomationPeerHelpers.IsEffectivelyVisible(uiElement))
+            {
+                return;
+            }
+            if (CreatePeerForElement(uiElement) is { } peer)
+            {
+                peers.Add(peer);
+                return;
+            }
+        }
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(element); index++)
+        {
+            AddPopupPeers(VisualTreeHelper.GetChild(element, index), peers);
+        }
+    }
+
+    internal void RaisePopupChildrenChanged(bool visible)
+        => RaiseStructureChangedEvent(
+            visible ? AutomationStructureChangeType.ChildrenBulkAdded : AutomationStructureChangeType.ChildrenBulkRemoved,
+            this);
+#endif
 
     /// <inheritdoc/>
     protected override void SetFocusCore()
@@ -1090,7 +1127,12 @@ public partial class RibbonSplitButtonAutomationPeer : RibbonDropDownButtonAutom
 
     /// <inheritdoc/>
     protected override AutomationControlType GetAutomationControlTypeCore()
+#if __WASM__
+        // ARIA has no splitbutton role. Retain Invoke/ExpandCollapse on a named button.
+        => AutomationControlType.Button;
+#else
         => AutomationControlType.SplitButton;
+#endif
 
     /// <inheritdoc/>
     protected override string GetAutomationIdCore()

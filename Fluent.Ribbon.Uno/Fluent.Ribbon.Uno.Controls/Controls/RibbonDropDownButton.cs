@@ -539,12 +539,24 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     internal void OpenDropDownForAutomation() => ShowDropDown();
 
     /// <summary>Raises the drop-down-opened notification.</summary>
-    protected void RaiseDropDownOpened() =>
+    protected void RaiseDropDownOpened()
+    {
+#if WINDOWS
+        (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            as Fluent.Automation.Peers.RibbonDropDownButtonAutomationPeer)?.RaisePopupChildrenChanged(true);
+#endif
         DropDownOpened?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Raises the drop-down-closed notification.</summary>
-    protected void RaiseDropDownClosed() =>
+    protected void RaiseDropDownClosed()
+    {
+#if WINDOWS
+        (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+            as Fluent.Automation.Peers.RibbonDropDownButtonAutomationPeer)?.RaisePopupChildrenChanged(false);
+#endif
         DropDownClosed?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Closes the drop-down if it is currently open.

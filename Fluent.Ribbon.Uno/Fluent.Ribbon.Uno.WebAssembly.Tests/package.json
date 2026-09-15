@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "playwright test",
-    "test:list": "playwright test --list"
+    "test": "npm run test:source && playwright test",
+    "test:list": "playwright test --list",
+    "test:source": "node --test contracts/source-contracts.test.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
