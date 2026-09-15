@@ -18,7 +18,7 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// <summary>
     /// Occurs when the menu item is clicked.
     /// </summary>
-#if __ANDROID__ || __IOS__
+#if __ANDROID__
     public new event RoutedEventHandler? Click;
 #else
     public event RoutedEventHandler? Click;
@@ -51,7 +51,11 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// <summary>
     /// Gets or sets the description text displayed below the header.
     /// </summary>
+#if __IOS__
+    public new string Description
+#else
     public string Description
+#endif
     {
         get => (string)GetValue(DescriptionProperty);
         set => SetValue(DescriptionProperty, value);

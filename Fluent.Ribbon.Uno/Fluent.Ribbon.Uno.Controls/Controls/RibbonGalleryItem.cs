@@ -173,7 +173,7 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     /// <summary>
     /// Occurs when the item is clicked.
     /// </summary>
-#if __ANDROID__ || __IOS__
+#if __ANDROID__
     public new event RoutedEventHandler? Click;
 #else
     public event RoutedEventHandler? Click;

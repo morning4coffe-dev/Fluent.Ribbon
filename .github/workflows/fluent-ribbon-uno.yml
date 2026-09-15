@@ -403,6 +403,18 @@ jobs:
           fi
           echo "path=${apks[0]}" >> "$GITHUB_OUTPUT"
 
+      - name: Enable hardware acceleration for the runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          printf 'KERNEL=="kvm", GROUP="%s", MODE="0660", OPTIONS+="static_node=kvm"\n' "$(id -gn)" |
+            sudo tee /etc/udev/rules.d/99-kvm-runner.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+
       - name: Run Android accessibility hierarchy tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -410,6 +422,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_7
+          disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on
           script: >-

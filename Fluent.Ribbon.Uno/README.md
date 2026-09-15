@@ -254,6 +254,11 @@ diagnostic-option tests, cumulative phase-4 parity, and out-of-process UI smoke.
 WinUI also runs the focused presentation/configuration contracts; this is not
 approval of the separate native pointer/lifetime gate.
 
+The Android accessibility job requires hardware acceleration. Its Linux runner
+grants the current runner group read/write access to `/dev/kvm` and checks that
+access before starting the emulator; it does not fall back to slow software
+emulation or extend accessibility-test timeouts.
+
 ### Native validation limitations
 
 Desktop and reference-target passes do not certify native WinUI input or

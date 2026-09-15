@@ -12,7 +12,7 @@ public partial class BackstageButton : Control
     /// <summary>
     /// Occurs when this button is clicked.
     /// </summary>
-#if __ANDROID__ || __IOS__
+#if __ANDROID__
     public new event RoutedEventHandler? Click;
 #else
     public event RoutedEventHandler? Click;

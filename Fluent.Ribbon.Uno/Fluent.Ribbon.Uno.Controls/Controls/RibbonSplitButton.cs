@@ -24,7 +24,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
     protected FrameworkElement? PrimaryActionTarget => button;
 
     /// <summary>Occurs when the primary button is clicked.</summary>
-#if __ANDROID__ || __IOS__
+#if __ANDROID__
     public new event RoutedEventHandler? Click;
 #else
     public event RoutedEventHandler? Click;
