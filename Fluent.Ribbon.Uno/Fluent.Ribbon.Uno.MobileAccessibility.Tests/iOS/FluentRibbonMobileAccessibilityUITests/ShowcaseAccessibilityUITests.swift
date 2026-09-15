@@ -27,6 +27,11 @@ final class ShowcaseAccessibilityUITests: XCTestCase {
             ribbonQuery.firstMatch.waitForExistence(timeout: 90),
             "The native Showcase accessibility root never appeared."
         )
+        waitForState("initial logical ribbon content", diagnostics: { app.debugDescription }) {
+            self.exactLabel("Toolbars", in: app).count == 1
+                && self.exactLabel("Clipboard", in: app).count == 1
+                && self.exactLabel("Spinners", in: app).count == 1
+        }
 
         let ribbon = try unique("Fluent Ribbon Showcase", in: app)
         let toolbars = try unique("Toolbars", in: app)
@@ -128,6 +133,9 @@ final class ShowcaseAccessibilityUITests: XCTestCase {
     ) throws -> XCUIElement {
         let query = exactLabel(label, in: app)
         let count = query.count
+        if count != 1 {
+            attachHierarchy(app.debugDescription)
+        }
         XCTAssertEqual(
             count,
             1,
@@ -185,11 +193,24 @@ final class ShowcaseAccessibilityUITests: XCTestCase {
     private func waitForState(
         _ description: String,
         timeout: TimeInterval = 20,
+        diagnostics: (() -> String)? = nil,
         condition: @escaping () -> Bool
     ) {
         let predicate = NSPredicate { _, _ in condition() }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        if result != .completed, let diagnostics {
+            attachHierarchy(diagnostics())
+        }
         XCTAssertEqual(result, .completed, "Timed out waiting for \(description).")
+    }
+
+    @MainActor
+    private func attachHierarchy(_ description: String) {
+        print("Showcase accessibility hierarchy:\n\(description)")
+        let attachment = XCTAttachment(string: description)
+        attachment.name = "Showcase accessibility hierarchy at assertion"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
