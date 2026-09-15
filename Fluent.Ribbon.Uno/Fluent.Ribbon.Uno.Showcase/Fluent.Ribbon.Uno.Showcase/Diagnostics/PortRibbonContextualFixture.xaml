@@ -1,0 +1,24 @@
+<UserControl
+    x:Class="FluentRibbon.Uno.Showcase.Diagnostics.PortRibbonContextualFixture"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+    <fluent:Ribbon
+        x:Name="TestRibbon"
+        Width="800"
+        AutomaticStateManagement="False"
+        IsAutomaticCollapseEnabled="False"
+        IsKeyTipHandlingEnabled="False">
+        <fluent:Ribbon.ContextualGroups>
+            <fluent:RibbonContextualTabGroup
+                x:Name="ToolsGroup"
+                Header="ElementName tools"
+                Visibility="Visible" />
+        </fluent:Ribbon.ContextualGroups>
+        <fluent:RibbonTabItem Header="Home" />
+        <fluent:RibbonTabItem
+            x:Name="ToolsTab"
+            Header="ElementName tab"
+            Group="{Binding ElementName=ToolsGroup}" />
+    </fluent:Ribbon>
+</UserControl>

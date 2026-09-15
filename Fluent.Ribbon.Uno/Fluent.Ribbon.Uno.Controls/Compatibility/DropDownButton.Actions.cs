@@ -9,8 +9,7 @@ public partial class DropDownButton
         var clone = new DropDownButton
         {
             Size = RibbonControlSize.Small,
-            CanAddToQuickAccessToolBar = false,
-            ItemsSource = CreateQuickAccessItems()
+            CanAddToQuickAccessToolBar = false
         };
 
         BindQuickAccessItem(clone);
@@ -20,13 +19,13 @@ public partial class DropDownButton
 
     protected virtual void BindQuickAccessItem(FrameworkElement element)
     {
-        RibbonControl.BindQuickAccessItem(this, element);
-
         if (element is not DropDownButton target)
         {
             return;
         }
 
+        var bindings = QuickAccessBindingSession.For(this, target);
+        bindings.BindCommon();
         BindPresentation(RibbonDropDownButton.HeaderProperty);
         BindPresentation(IconProperty);
         BindPresentation(LargeIconProperty);
@@ -39,20 +38,51 @@ public partial class DropDownButton
         BindOneWay(RibbonDropDownButton.DropDownHeightProperty);
         BindOneWay(RibbonDropDownButton.ClosePopupOnMouseDownProperty);
         BindOneWay(RibbonDropDownButton.ClosePopupOnMouseDownDelayProperty);
+        BindOneWay(RibbonDropDownButton.HeaderTemplateProperty);
+        BindOneWay(HeaderTemplateSelectorProperty);
+        BindOneWay(DismissOnClickOutsideProperty);
+        BindOneWay(ItemTemplateProperty);
+        BindOneWay(ItemTemplateSelectorProperty);
+        BindOneWay(ItemContainerStyleProperty);
+        BindOneWay(ItemContainerStyleSelectorProperty);
+        BindOneWay(ItemsPanelProperty);
+        BindOneWay(DisplayMemberPathProperty);
+        ToolTipService.SetToolTip(target, ToolTipService.GetToolTip(this) ?? Header);
         return;
 
         void BindPresentation(DependencyProperty property) =>
-            QuickAccessHelper.SynchronizePresentationValue(this, property, target, property);
+            bindings.BindPresentation(property, property);
 
         void BindOneWay(DependencyProperty property) =>
-            RibbonControl.Synchronize(this, property, target, property);
+            bindings.Bind(property);
     }
+
+    /// <summary>Synchronizes a clone property for the lifetime of the quick-access presentation.</summary>
+    protected void BindQuickAccessProperty(
+        FrameworkElement target,
+        DependencyProperty sourceProperty,
+        DependencyProperty targetProperty,
+        bool twoWay = false) =>
+        QuickAccessBindingSession.For(this, target).Bind(sourceProperty, targetProperty, twoWay);
 
     protected void BindQuickAccessItemDropDownEvents(DropDownButton button)
     {
-        button.DropDownOpened += OnQuickAccessOpened;
-        button.DropDownOpened += OnQuickAccessDropDownOpened;
-        button.DropDownClosed += OnQuickAccessDropDownClosed;
+        button.BindSharedQuickAccessPresentation(this);
+        var owner = new WeakReference<DropDownButton>(this);
+        button.DropDownOpened += (_, _) =>
+        {
+            if (owner.TryGetTarget(out var source))
+            {
+                source.RaiseDropDownOpened();
+            }
+        };
+        button.DropDownClosed += (_, _) =>
+        {
+            if (owner.TryGetTarget(out var source))
+            {
+                source.RaiseDropDownClosed();
+            }
+        };
     }
 
     protected virtual void OnDropDownOpened()
@@ -103,12 +133,6 @@ public partial class DropDownButton
         button.Unloaded -= OnQuickAccessMenuClosedOrUnloaded;
     }
 
-    private void OnQuickAccessDropDownOpened(object? sender, EventArgs e) =>
-        RaiseDropDownOpened();
-
-    private void OnQuickAccessDropDownClosed(object? sender, EventArgs e) =>
-        RaiseDropDownClosed();
-
     private void OnSimplifiedPropertyChanged()
     {
         var newValue = IsSimplified;
@@ -117,68 +141,21 @@ public partial class DropDownButton
         OnIsSimplifiedChanged(oldValue, newValue);
     }
 
+    /// <summary>Creates a provider/data snapshot for derived controls. Use the drop-down lifecycle binding for live content.</summary>
     protected object[] CreateQuickAccessItems()
     {
         var source = ItemsSource is System.Collections.IEnumerable itemsSource
             ? itemsSource.Cast<object>()
             : Items.Cast<object>();
-        return source.Select(CloneQuickAccessItem).ToArray();
-    }
-
-    private static object CloneQuickAccessItem(object item)
-    {
-        switch (item)
+        return source.Select(item => item switch
         {
-            case MenuItem menuItem:
-            {
-                var clone = new MenuItem
-                {
-                    Header = QuickAccessHelper.ClonePresentationValue(menuItem.Header),
-                    Description = menuItem.Description,
-                    IsCheckable = menuItem.IsCheckable,
-                    IsChecked = menuItem.IsChecked,
-                    GroupName = menuItem.GroupName,
-                    IsDefinitive = menuItem.IsDefinitive
-                };
-                clone.Click += (_, _) => menuItem.InvokeFromQuickAccess();
-                CloneChildItems(menuItem.Items, clone.Items);
-                return clone;
-            }
-            case Microsoft.UI.Xaml.Controls.Button button:
-            {
-                var clone = new Microsoft.UI.Xaml.Controls.Button
-                {
-                    Content = QuickAccessHelper.ClonePresentationValue(button.Content)
-                };
-                clone.Click += (_, _) => Fluent.Modern.Commands.RibbonInvoker.Invoke(button);
-                return clone;
-            }
-            case UIElement element:
-                return new ContentPresenter
-                {
-                    Content =
-                        Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(element)
-                        ?? element.GetType().Name
-                };
-            default:
-                return item;
-        }
-    }
-
-    private static void CloneChildItems(
-        IEnumerable<UIElement> source,
-        ICollection<UIElement> target)
-    {
-        foreach (var child in source)
-        {
-            var clone = CloneQuickAccessItem(child);
-            target.Add(
-                clone as UIElement
-                ?? new ContentPresenter
-                {
-                    Content = clone
-                });
-        }
+            IQuickAccessItemProvider provider => provider.CreateQuickAccessItem()
+                ?? throw new NotSupportedException("An item provider did not create a quick access copy."),
+            UIElement => throw new NotSupportedException(
+                "Arbitrary UIElements require live content transfer. BindQuickAccessItemDropDownEvents " +
+                "connects that transfer without assigning an ItemsSource snapshot."),
+            _ => item,
+        }).ToArray();
     }
 
     public override KeyTipPressedResult OnKeyTipPressed() =>

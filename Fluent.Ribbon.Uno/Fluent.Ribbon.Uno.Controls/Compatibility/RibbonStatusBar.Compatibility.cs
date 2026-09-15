@@ -38,14 +38,22 @@ public partial class RibbonStatusBar
     /// <summary>
     /// Creates a portable default item container.
     /// </summary>
-    protected virtual DependencyObject GetContainerForItemOverride()
+    protected override DependencyObject GetContainerForItemOverride()
         => new StatusBarItem();
 
     /// <summary>
     /// Determines whether an item already represents its own portable container.
     /// </summary>
-    protected virtual bool IsItemItsOwnContainerOverride(object item)
+    protected override bool IsItemItsOwnContainerOverride(object item)
         => item is StatusBarItem or RibbonSeparator;
+
+    /// <inheritdoc />
+    protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
+        => Fluent.Helpers.ItemsControlBinding.PrepareContent(this, element, item);
+
+    /// <inheritdoc />
+    protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+        => Fluent.Helpers.ItemsControlBinding.ClearContent(element, item);
 
     /// <summary>
     /// Handles changes to the status-bar item collection.

@@ -1,6 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using System.Windows.Input;
 
 namespace Fluent;
 
@@ -80,15 +83,13 @@ public static class ContextMenuService
             return baseValue;
         }
 
-        if (element is not FrameworkElement frameworkElement
-            || element is not IQuickAccessItemProvider provider
-            || provider.CanAddToQuickAccessToolBar is false)
+        if (element is not FrameworkElement frameworkElement)
         {
             return null;
         }
 
         var ribbon = RibbonControl.GetParentRibbon(frameworkElement);
-        if (ribbon is null)
+        if (ribbon is null || !CanUseDefaultMenu())
         {
             return null;
         }
@@ -97,22 +98,105 @@ public static class ContextMenuService
         {
             IsQuickAccessCompatibilityMenu = true
         };
-        var localization = RibbonLocalization.Current.Localization;
+        var permissionCallbacks = new List<(DependencyProperty Property, long Token)>();
         var menuItem = new MenuFlyoutItem();
-
-        if (ribbon.IsInQuickAccessToolBar(provider))
+        ConfigureItem();
+        if (contextMenu.Items.Count == 0)
         {
-            menuItem.Text = localization.RibbonContextMenuRemoveItem;
-            menuItem.Click += (_, _) => ribbon.RemoveFromQuickAccessToolBar(provider);
-        }
-        else
-        {
-            menuItem.Text = localization.RibbonContextMenuAddItem;
-            menuItem.Click += (_, _) => ribbon.AddToQuickAccessToolBar(provider);
+            return null;
         }
 
-        contextMenu.Items.Add(menuItem);
+        contextMenu.Opening += (_, _) =>
+        {
+            ConfigureItem();
+            if (contextMenu.Items.Count > 0 && permissionCallbacks.Count == 0)
+            {
+                foreach (var property in new[]
+                         {
+                             Ribbon.IsDefaultContextMenuEnabledProperty,
+                             Ribbon.CanCustomizeQuickAccessToolBarItemsProperty,
+                             Ribbon.IsQuickAccessToolBarVisibleProperty,
+                             Control.IsEnabledProperty,
+                         })
+                {
+                    permissionCallbacks.Add((property,
+                        ribbon.RegisterPropertyChangedCallback(property, (_, _) => contextMenu.Hide())));
+                }
+            }
+        };
+        contextMenu.Opened += (_, _) =>
+        {
+            if (!CanUseDefaultMenu() || contextMenu.Items.Count == 0)
+            {
+                contextMenu.Hide();
+            }
+        };
+        contextMenu.Closed += (_, _) =>
+        {
+            foreach (var (property, token) in permissionCallbacks)
+            {
+                ribbon.UnregisterPropertyChangedCallback(property, token);
+            }
+            permissionCallbacks.Clear();
+        };
+
         return contextMenu;
+
+        void ConfigureItem()
+        {
+            contextMenu.Items.Clear();
+            ICommand action = ribbon.IsInQuickAccessToolBar(frameworkElement)
+                ? Ribbon.RemoveFromQuickAccessCommand
+                : Ribbon.AddToQuickAccessCommand;
+            if (!CanUseDefaultMenu() || !action.CanExecute(frameworkElement))
+            {
+                return;
+            }
+
+            var localization = RibbonLocalization.Current.Localization;
+            menuItem.Text = ribbon.IsInQuickAccessToolBar(frameworkElement)
+                ? localization.RibbonContextMenuRemoveItem
+                : localization.RibbonContextMenuAddItem;
+            var command = new XamlUICommand { Label = menuItem.Text };
+            command.CanExecuteRequested += (_, args) =>
+                args.CanExecute = CanUseDefaultMenu() && action.CanExecute(frameworkElement);
+            command.ExecuteRequested += (_, _) =>
+            {
+                if (CanUseDefaultMenu() && action.CanExecute(frameworkElement))
+                {
+                    action.Execute(frameworkElement);
+                }
+            };
+            menuItem.Command = command;
+            contextMenu.Items.Add(menuItem);
+        }
+
+        bool CanUseDefaultMenu()
+        {
+            if (ribbon is not
+                {
+                    IsDefaultContextMenuEnabled: true, IsEnabled: true,
+                    CanCustomizeQuickAccessToolBarItems: true, IsQuickAccessToolBarVisible: true,
+                }
+                || !ReferenceEquals(RibbonControl.GetParentRibbon(frameworkElement), ribbon))
+            {
+                return false;
+            }
+
+            for (DependencyObject? current = frameworkElement; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                if (current is FrameworkElement owner
+                    && owner.ContextFlyout is not ContextMenu { IsQuickAccessCompatibilityMenu: true }
+                    && (owner.ContextFlyout is not null
+                        || owner.ReadLocalValue(FrameworkElement.ContextFlyoutProperty) != DependencyProperty.UnsetValue
+                        || owner.GetBindingExpression(FrameworkElement.ContextFlyoutProperty) is not null))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
     /// <summary>Re-evaluates the compatibility context flyout for an element.</summary>
@@ -123,7 +207,20 @@ public static class ContextMenuService
             return;
         }
 
-        var coerced = CoerceContextMenu(element, frameworkElement.ContextFlyout);
-        frameworkElement.ContextFlyout = coerced as FlyoutBase;
+        var current = frameworkElement.ContextFlyout;
+        var coerced = CoerceContextMenu(element, current);
+        if (ReferenceEquals(current, coerced))
+        {
+            return;
+        }
+
+        if (coerced is null && current is ContextMenu { IsQuickAccessCompatibilityMenu: true })
+        {
+            frameworkElement.ClearValue(FrameworkElement.ContextFlyoutProperty);
+        }
+        else
+        {
+            frameworkElement.ContextFlyout = coerced as FlyoutBase;
+        }
     }
 }

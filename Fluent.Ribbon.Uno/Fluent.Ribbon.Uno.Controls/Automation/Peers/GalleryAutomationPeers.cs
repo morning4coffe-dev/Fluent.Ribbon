@@ -333,6 +333,10 @@ internal static class GalleryAutomationSelection
         object? owner,
         UIElement? item)
     {
+        if (item is RibbonGalleryItem galleryItem)
+        {
+            AutomationProviderGuard.EnsureEnabled(galleryItem.CanActivate);
+        }
         AutomationProviderGuard.EnsureEnabled(itemPeer);
         if (owner is Control ownerControl)
         {
@@ -359,7 +363,7 @@ internal static class GalleryAutomationSelection
     internal static object? GetSelectedItem(object? owner)
         => owner switch
         {
-            RibbonGallery gallery => gallery.SelectedItem,
+            RibbonGallery gallery => gallery.FindSelectionContainer(gallery.SelectedItem),
             InRibbonGallery gallery => gallery.FindSelectionContainer(gallery.SelectedItem),
             _ => null,
         };

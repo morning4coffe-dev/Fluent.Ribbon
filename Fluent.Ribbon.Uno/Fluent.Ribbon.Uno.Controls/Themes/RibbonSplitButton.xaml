@@ -1,7 +1,8 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:fluent="using:Fluent">
+    xmlns:fluent="using:Fluent"
+    xmlns:win="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
     <Style TargetType="fluent:RibbonSplitButton">
         <Setter Property="Background" Value="Transparent" />
@@ -15,6 +16,13 @@
         <Setter Property="IsTabStop" Value="True" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="FocusVisualMargin" Value="-2" />
+        <win:Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <StackPanel />
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </win:Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:RibbonSplitButton">
@@ -62,6 +70,16 @@
                                         <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
                                         <Setter Target="LabelText.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
                                         <Setter Target="DropDownArrow.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="PART_Icon.Opacity" Value="0.5" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="PrimaryActionStates">
+                                <VisualState x:Name="PrimaryEnabled" />
+                                <VisualState x:Name="PrimaryDisabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="GlyphIcon.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
+                                        <Setter Target="LabelText.Foreground" Value="{ThemeResource RibbonDisabledForegroundBrush}" />
                                         <Setter Target="PART_Icon.Opacity" Value="0.5" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -130,6 +148,7 @@
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
+                        <Grid>
                         <StackPanel x:Name="OuterPanel" Orientation="Vertical" Padding="{TemplateBinding Padding}"
                                     HorizontalAlignment="Center" VerticalAlignment="Center">
 
@@ -196,6 +215,37 @@
                                          Visibility="{Binding HasTriangle, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}" />
                             </Button>
                         </StackPanel>
+                        <win:Grid x:Name="PART_ItemsOwner" Width="0" Height="0"
+                              Visibility="Collapsed" IsHitTestVisible="False">
+                            <ItemsPresenter x:Name="ItemsPresenter" />
+                        </win:Grid>
+                        <win:Popup x:Name="PART_Popup" IsLightDismissEnabled="True" FlowDirection="LeftToRight">
+                            <fluent:ResizeableContentControl
+                                x:Name="PART_PopupContentControl"
+                                Background="{ThemeResource RibbonCardBackgroundBrush}"
+                                Foreground="{ThemeResource RibbonTextBrush}"
+                                BorderBrush="{ThemeResource RibbonBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{ThemeResource RibbonPopupCornerRadius}"
+                                Padding="2">
+                                <ScrollViewer x:Name="PART_ScrollViewer"
+                                              HorizontalScrollMode="Disabled"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto" IsTabStop="False">
+                                    <StackPanel x:Name="PART_PopupItemsPanel">
+                                        <TextBlock x:Name="PART_MenuHeader" FontWeight="SemiBold"
+                                                   FontSize="12" Margin="12,8,12,4" Visibility="Collapsed" />
+                                        <Rectangle x:Name="PART_HeaderSeparator" Height="1" Margin="0,2,0,4"
+                                                   Fill="{ThemeResource RibbonBorderBrush}" Visibility="Collapsed" />
+                                        <ContentControl x:Name="PART_Gallery" IsTabStop="False"
+                                                        HorizontalContentAlignment="Stretch" Visibility="Collapsed" />
+                                        <Rectangle x:Name="PART_GallerySeparator" Height="1" Margin="0,4,0,4"
+                                                   Fill="{ThemeResource RibbonBorderBrush}" Visibility="Collapsed" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </fluent:ResizeableContentControl>
+                        </win:Popup>
+                        </Grid>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>

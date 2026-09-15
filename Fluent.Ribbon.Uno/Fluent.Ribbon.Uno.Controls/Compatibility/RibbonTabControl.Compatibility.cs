@@ -54,7 +54,7 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
             nameof(CanMinimize),
             typeof(bool),
             typeof(RibbonTabControl),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnDisplayOptionsAvailabilityChanged));
 
     /// <summary>Gets or sets whether the ribbon may be minimized.</summary>
     public bool CanMinimize
@@ -84,7 +84,7 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
             nameof(CanUseSimplified),
             typeof(bool),
             typeof(RibbonTabControl),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnDisplayOptionsAvailabilityChanged));
 
     /// <summary>Gets or sets whether simplified mode is available.</summary>
     public bool CanUseSimplified
@@ -144,9 +144,9 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
             nameof(AreTabHeadersVisible),
             typeof(bool),
             typeof(RibbonTabControl),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnAreTabHeadersVisibleChanged));
 
-    /// <summary>Gets or sets whether tab headers are visible.</summary>
+    /// <summary>Gets or sets whether the header strip is visible without changing tab selection or content.</summary>
     public bool AreTabHeadersVisible
     {
         get => (bool)GetValue(AreTabHeadersVisibleProperty);
@@ -204,7 +204,7 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
             nameof(IsDisplayOptionsButtonVisible),
             typeof(bool),
             typeof(RibbonTabControl),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnDisplayOptionsAvailabilityChanged));
 
     /// <summary>Gets or sets whether the display-options button is visible.</summary>
     public bool IsDisplayOptionsButtonVisible
@@ -229,13 +229,14 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
     }
 
     /// <inheritdoc />
-    public Popup? DropDownPopup => null;
+    public Popup? DropDownPopup => _minimizedPopup;
 
     /// <summary>Gets the panel hosting tab headers when exposed by the active template.</summary>
     public Panel? TabsContainer { get; private set; }
 
     /// <summary>Gets the presenter hosting selected tab content.</summary>
-    public FrameworkElement? SelectedContentPresenter => _contentPresenter;
+    public FrameworkElement? SelectedContentPresenter =>
+        IsMinimizedPopupVisible ? _popupContentPresenter : _contentPresenter;
 
     /// <inheritdoc />
     public bool IsContextMenuOpened { get; set; }
@@ -248,7 +249,10 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
         OnInitialized(EventArgs.Empty);
         SelectionChanged += OnCompatibilitySelectionChanged;
         PointerWheelChanged += OnCompatibilityPointerWheelChanged;
+        Loaded += OnCompatibilityLoaded;
         Unloaded += OnCompatibilityUnloaded;
+        RegisterPropertyChangedCallback(FrameworkElement.DataContextProperty, (_, _) => UpdateSelectedContent());
+        SizeChanged += (_, _) => UpdatePopupPlacement();
     }
 
     /// <summary>Provides the WPF-compatible initialization hook.</summary>
@@ -279,22 +283,25 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
     {
         var oldItem = e.RemovedItems.FirstOrDefault();
         var newItem = e.AddedItems.FirstOrDefault();
-        var wasDropDownOpen = IsDropDownOpen;
+        var wasDropDownOpen = IsMinimizedPopupVisible;
+
+        if (oldItem is RibbonTabItem removed && !TabItems.Contains(removed))
+        {
+            IsDropDownOpen = false;
+        }
 
         UpdateSelectedContent();
 
         if (SelectedItem is RibbonTabItem selectedTab)
         {
             selectedTab.IsSelected = true;
-            if (IsMinimized)
+            if (IsMinimized && oldItem is not null && TabItems.Contains(oldItem))
             {
                 IsDropDownOpen = true;
             }
         }
-        else if (IsDropDownOpen)
-        {
-            IsDropDownOpen = false;
-        }
+        // TabView can report a null selection between deselecting the old tab and selecting
+        // the next one. The deferred presentation pass closes only a final empty selection.
 
         if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
             is Fluent.Automation.Peers.RibbonTabControlAutomationPeer peer)
@@ -325,7 +332,8 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
 
     private void UpdateCompatibilityTemplateParts()
     {
-        TabsContainer = GetTemplateChild("PART_TabsContainer") as Panel;
+        TabsContainer = GetTemplateChild("TabContainerGrid") as Panel
+                        ?? GetTemplateChild("PART_TabsContainer") as Panel;
         UpdateSelectedContent();
     }
 
@@ -340,6 +348,8 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
         {
             tab.UpdateSimplifiedState((bool)args.NewValue);
         }
+
+        tabControl.CloseDisplayOptions();
     }
 
     private static void OnIsDropDownOpenChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
@@ -350,6 +360,7 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
             return;
         }
 
+        ++tabControl._popupRequestVersion;
         if ((bool)args.NewValue && !tabControl.IsMinimized)
         {
             tabControl._isUpdatingDropDownState = true;
@@ -358,38 +369,22 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
             return;
         }
 
-        tabControl.RaiseRequestBackstageClose();
-        tabControl.UpdateMinimizedState();
-
         if ((bool)args.NewValue)
         {
+            tabControl.RaiseRequestBackstageClose();
             if (tabControl.SelectedItem is null)
             {
-                tabControl.SelectedItem =
-                    tabControl.GetFirstVisibleAndEnabledItem()
-                    ?? tabControl.GetFirstVisibleItem();
+                tabControl.SelectedItem = tabControl.GetFirstVisibleAndEnabledItem();
             }
 
-            PopupService.RegisterOpenDropDown(tabControl);
-            tabControl.DropDownOpened?.Invoke(tabControl, EventArgs.Empty);
+            tabControl.CapturePopupFocus();
         }
         else
         {
-            PopupService.UnregisterOpenDropDown(tabControl);
-            tabControl.DropDownClosed?.Invoke(tabControl, EventArgs.Empty);
+            tabControl.CloseMinimizedPopup();
         }
 
-        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(tabControl)
-            is Fluent.Automation.Peers.RibbonTabControlAutomationPeer peer)
-        {
-            var oldState = RibbonTabControl.GetSelectedTabExpandCollapseState(
-                tabControl.IsMinimized,
-                (bool)args.OldValue);
-            var newState = RibbonTabControl.GetSelectedTabExpandCollapseState(
-                tabControl.IsMinimized,
-                (bool)args.NewValue);
-            peer.RaiseSelectedTabExpandCollapseChanged(oldState, newState);
-        }
+        tabControl.UpdateMinimizedState();
     }
 
     private void OnMinimizedCompatibilityChanged(bool isMinimized)
@@ -412,8 +407,28 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
 
     private void UpdateSelectedContent()
     {
-        SelectedContent = (SelectedItem as RibbonTabItem)?.Content;
+        var tab = SelectedItem as RibbonTabItem;
+        SelectedContent = tab?.Content;
+        if (tab is not null
+            && ReferenceEquals(SelectedContent, tab.GroupsContainer)
+            && tab.GroupsContainer.ReadLocalValue(FrameworkElement.DataContextProperty) == DependencyProperty.UnsetValue
+            && tab.GroupsContainer.GetBindingExpression(FrameworkElement.DataContextProperty) is null)
+        {
+            // ContentPresenter resets its own DataContext for UIElement content.
+            // Keep the tab-owned groups linked to their logical owner, not the presentation host.
+            tab.GroupsContainer.SetBinding(FrameworkElement.DataContextProperty, new Binding
+            {
+                Source = tab,
+                Path = new PropertyPath(nameof(FrameworkElement.DataContext)),
+                Mode = BindingMode.OneWay,
+            });
+        }
+        tab?.PrepareGroupsContent();
+        ObserveSelectedContent();
+        UpdateContentPresentation();
     }
+
+    internal void RefreshSelectedContent() => UpdateSelectedContent();
 
     /// <inheritdoc />
     protected override void OnKeyDown(KeyRoutedEventArgs args)
@@ -519,6 +534,14 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
     private void OnCompatibilityUnloaded(object sender, RoutedEventArgs args)
     {
         IsDropDownOpen = false;
+        ResetContentPresentation();
+        StopObservingSelectedContent();
+    }
+
+    private void OnCompatibilityLoaded(object sender, RoutedEventArgs args)
+    {
+        UpdateSelectedContent();
+        UpdateMinimizedState();
     }
 
     /// <summary>Selects the first visible tab while the ribbon is expanded.</summary>
@@ -555,12 +578,12 @@ public partial class RibbonTabControl : IDropDownControl, ILogicalChildSupport
 
     private void HandleTabItemsChanged(NotifyCollectionChangedEventArgs args)
     {
-        if (SelectedItem is RibbonTabItem { Visibility: Visibility.Visible })
+        if (SelectedItem is not RibbonTabItem { Visibility: Visibility.Visible, IsEnabled: true } selectedTab
+            || !TabItems.Contains(selectedTab))
         {
-            return;
+            SelectedItem = GetFirstVisibleAndEnabledItem();
         }
 
-        SelectedItem = GetFirstVisibleAndEnabledItem() ?? GetFirstVisibleItem();
         UpdateSelectedContent();
     }
 }

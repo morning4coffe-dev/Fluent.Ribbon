@@ -19,6 +19,25 @@ public partial class Backstage : RibbonControl
     private bool isShown;
     private DispatcherQueueTimer? closingAnimationTimer;
     private string? localizedAutomationName;
+    private Ribbon? presentationOwner;
+    private bool isSynchronizingOpenProperty;
+    private bool isClosingForOwner;
+    private EffectiveValueConstraint? openStateConstraint;
+
+    internal event EventHandler? PresentationChanged;
+
+    internal bool IsPresentationShown => isShown;
+
+    internal Ribbon? PresentationOwner => presentationOwner;
+
+    /// <summary>Gets whether the surface has content that can be displayed.</summary>
+    protected virtual bool HasDisplayContent => Content is not null;
+
+    /// <summary>Gets the content scope which receives focus when the surface opens.</summary>
+    protected virtual DependencyObject FocusScope => Content ?? (DependencyObject)this;
+
+    /// <summary>Gets whether this surface participates in its owning ribbon's application state.</summary>
+    protected virtual bool AffectsParentRibbon => true;
 
     /// <summary>
     /// Occurs when <see cref="IsOpen"/> changes.
@@ -148,6 +167,9 @@ public partial class Backstage : RibbonControl
         RegisterPropertyChangedCallback(
             HeaderProperty,
             static (sender, _) => ((Backstage)sender).RefreshLocalizedAutomationName());
+        RegisterPropertyChangedCallback(
+            VisibilityProperty,
+            (_, _) => PresentationChanged?.Invoke(this, EventArgs.Empty));
     }
 
     /// <inheritdoc />
@@ -171,7 +193,7 @@ public partial class Backstage : RibbonControl
     {
         if (sender is DependencyObject source
             && ReferenceEquals(source, this) is false
-            && PopupService.IsAncestorOf(this, source) is false)
+            && PopupService.IsOwnedDescendantOf(this, source) is false)
         {
             return;
         }
@@ -183,21 +205,30 @@ public partial class Backstage : RibbonControl
             return;
         }
 
+        if (PopupService.ShouldPreserveOpenAncestor(this, sender))
+        {
+            return;
+        }
+
         SetIsOpen(false);
     }
 
     /// <summary>Shows the backstage content.</summary>
     protected virtual bool Show()
     {
-        if (Content is null)
+        if (!HasDisplayContent)
         {
             return false;
         }
 
         CancelClosingAnimation();
-        focusBackup = FocusRoutingHelper.CaptureFocusedElement(this, onlyWhenOutsideOwner: true);
         ResolveParentRibbon();
-        ApplyParentRibbonOpenState();
+        if (!ApplyParentRibbonOpenState())
+        {
+            return false;
+        }
+
+        CapturePresentationFocus();
         isShown = true;
         UpdateVisualState();
 
@@ -211,12 +242,13 @@ public partial class Backstage : RibbonControl
         DispatcherQueue?.TryEnqueue(
             () =>
             {
-                if (effectiveIsOpen && Content is not null)
+                if (effectiveIsOpen && IsLoaded && FocusRoutingHelper.IsEffectivelyVisible(this))
                 {
-                    FocusRoutingHelper.FocusFirst(Content);
+                    FocusRoutingHelper.FocusFirst(FocusScope);
                 }
             });
 
+        PresentationChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
 
@@ -227,7 +259,7 @@ public partial class Backstage : RibbonControl
         // property is driven by VisualState setters which are gated behind the OpenStates
         // VisualTransition (180 ms), so a close that happens sooner would still observe the
         // stale Collapsed value and skip the closing animation entirely.
-        if (AreAnimationsEnabled && isShown && AdornerLayer is not null)
+        if (!isClosingForOwner && AreAnimationsEnabled && isShown && AdornerLayer is not null)
         {
             StartClosingAnimation();
             return;
@@ -290,6 +322,7 @@ public partial class Backstage : RibbonControl
 
         RestoreParentRibbonState();
         FocusRoutingHelper.RestoreFocus(ref focusBackup);
+        PresentationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void CancelClosingAnimation()
@@ -313,6 +346,13 @@ public partial class Backstage : RibbonControl
             return;
         }
 
+        if (e.Key == Windows.System.VirtualKey.Escape
+            && (presentationOwner ?? parentRibbon)?.IsKeyTipModeActive == true)
+        {
+            base.OnKeyDown(e);
+            return;
+        }
+
         if ((e.Key == Windows.System.VirtualKey.Enter
              || e.Key == Windows.System.VirtualKey.Space)
             && FocusState != FocusState.Unfocused)
@@ -320,15 +360,24 @@ public partial class Backstage : RibbonControl
             SetIsOpen(!effectiveIsOpen);
             e.Handled = true;
         }
-        else if (e.Key == Windows.System.VirtualKey.Escape
-                 && CloseOnEsc
-                 && effectiveIsOpen)
+        else if (e.Key == Windows.System.VirtualKey.Escape && TryCloseOnEscape())
         {
-            SetIsOpen(false);
             e.Handled = true;
         }
 
         base.OnKeyDown(e);
+    }
+
+    internal bool TryCloseOnEscape()
+    {
+        if (!CloseOnEsc || !effectiveIsOpen || !CanChangeIsOpen
+            || (presentationOwner ?? parentRibbon)?.IsKeyTipModeActive == true)
+        {
+            return false;
+        }
+
+        SetIsOpen(false);
+        return !effectiveIsOpen;
     }
 
     /// <inheritdoc />
@@ -354,7 +403,7 @@ public partial class Backstage : RibbonControl
         SetIsOpen(true);
         base.OnKeyTipPressed();
 
-        return KeyTipPressedResult.Empty;
+        return new KeyTipPressedResult(false, effectiveIsOpen);
     }
 
     /// <inheritdoc />
@@ -393,8 +442,25 @@ public partial class Backstage : RibbonControl
 
     internal void SetIsOpen(bool isOpen)
     {
-        if (CanChangeIsOpen
-            && (bool)GetValue(IsOpenProperty) != isOpen)
+        if (!CanChangeIsOpen && !isClosingForOwner)
+        {
+            return;
+        }
+
+        if ((bool)GetValue(IsOpenProperty) == isOpen && effectiveIsOpen != isOpen)
+        {
+            isSynchronizingOpenProperty = true;
+            try
+            {
+                SetValue(IsOpenProperty, effectiveIsOpen);
+            }
+            finally
+            {
+                isSynchronizingOpenProperty = false;
+            }
+        }
+
+        if ((bool)GetValue(IsOpenProperty) != isOpen)
         {
             SetValue(IsOpenProperty, isOpen);
         }
@@ -405,11 +471,17 @@ public partial class Backstage : RibbonControl
         DependencyPropertyChangedEventArgs args)
     {
         var backstage = (Backstage)sender;
+        if (backstage.isSynchronizingOpenProperty)
+        {
+            return;
+        }
+
         var oldValue = backstage.effectiveIsOpen;
         var requestedValue = (bool)args.NewValue;
 
-        if (backstage.CanChangeIsOpen is false)
+        if (!backstage.CanChangeIsOpen && !backstage.isClosingForOwner)
         {
+            backstage.HoldOpenState();
             return;
         }
 
@@ -442,6 +514,11 @@ public partial class Backstage : RibbonControl
         {
             peer.RaiseIsOpenChanged(oldValue, newValue);
         }
+        else if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
+                 is Fluent.Automation.Peers.RibbonStartScreenAutomationPeer startScreenPeer)
+        {
+            startScreenPeer.RaiseIsOpenChanged(oldValue, newValue);
+        }
     }
 
     private void RefreshLocalizedAutomationName()
@@ -468,62 +545,88 @@ public partial class Backstage : RibbonControl
         DependencyPropertyChangedEventArgs args)
     {
         var backstage = (Backstage)sender;
-        if ((bool)args.NewValue is false
-            || backstage.effectiveIsOpen
-               == (bool)backstage.GetValue(IsOpenProperty))
+        if (!(bool)args.NewValue)
         {
+            backstage.HoldOpenState();
             return;
         }
 
-        var oldValue = backstage.effectiveIsOpen;
-        if ((bool)backstage.GetValue(IsOpenProperty))
+        backstage.openStateConstraint?.Release();
+        if (backstage.effectiveIsOpen != (bool)backstage.GetValue(IsOpenProperty))
         {
-            backstage.effectiveIsOpen = true;
-            if (backstage.Show() is false)
-            {
-                backstage.effectiveIsOpen = false;
-                backstage.UpdateVisualState();
-            }
+            backstage.SetIsOpen((bool)backstage.GetValue(IsOpenProperty));
         }
-        else
-        {
-            backstage.effectiveIsOpen = false;
-            backstage.Hide();
-        }
+    }
 
-        backstage.RaiseIsOpenAutomationEvent(
-            oldValue,
-            backstage.effectiveIsOpen);
+    private void HoldOpenState()
+    {
+        isSynchronizingOpenProperty = true;
+        try
+        {
+            (openStateConstraint ??= new EffectiveValueConstraint(this, IsOpenProperty, nameof(IsOpen))).Hold(effectiveIsOpen);
+        }
+        finally
+        {
+            isSynchronizingOpenProperty = false;
+        }
     }
 
     private static void OnContentChanged(
         DependencyObject sender,
         DependencyPropertyChangedEventArgs args)
     {
-        var backstage = (Backstage)sender;
-        if (args.NewValue is null && backstage.effectiveIsOpen)
+        ((Backstage)sender).OnBackstageContentChanged((UIElement?)args.NewValue);
+    }
+
+    /// <summary>Synchronizes a portable content change with a pending open request.</summary>
+    protected virtual void OnBackstageContentChanged(UIElement? content) => RefreshRequestedOpenState();
+
+    /// <summary>Reevaluates an open request when content becomes available or is removed.</summary>
+    protected void RefreshRequestedOpenState()
+    {
+        if (!HasDisplayContent && effectiveIsOpen)
         {
-            var oldValue = backstage.effectiveIsOpen;
-            backstage.effectiveIsOpen = false;
-            backstage.Hide();
-            backstage.RaiseIsOpenAutomationEvent(
-                oldValue,
-                backstage.effectiveIsOpen);
+            var oldValue = effectiveIsOpen;
+            effectiveIsOpen = false;
+            Hide();
+            RaiseIsOpenAutomationEvent(oldValue, false);
         }
+        else if (HasDisplayContent && !effectiveIsOpen && CanChangeIsOpen && (bool)GetValue(IsOpenProperty))
+        {
+            SetIsOpen(true);
+        }
+
+        PresentationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnBackstageLoaded(object sender, RoutedEventArgs args)
     {
         PopupService.DismissPopup += OnDismissPopup;
+        AdornerLayer = GetTemplateChild(PART_AdornerLayer) as FrameworkElement;
         ResolveParentRibbon();
         UpdateVisualState();
 
         if (CanChangeIsOpen && (bool)GetValue(IsOpenProperty))
         {
-            effectiveIsOpen = true;
-            ApplyParentRibbonOpenState();
-            UpdateVisualState();
+            if (!effectiveIsOpen)
+            {
+                SetIsOpen(true);
+            }
+            else
+            {
+                isShown = HasDisplayContent;
+                CapturePresentationFocus();
+                if (!ApplyParentRibbonOpenState())
+                {
+                    CloseForOwner(restoreFocus: false);
+                    return;
+                }
+
+                UpdateVisualState();
+            }
         }
+
+        PresentationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnBackstageUnloaded(object sender, RoutedEventArgs args)
@@ -531,29 +634,35 @@ public partial class Backstage : RibbonControl
         PopupService.DismissPopup -= OnDismissPopup;
         CancelClosingAnimation();
         RestoreParentRibbonState();
-        focusBackup = null;
-        isShown = false;
+        if (presentationOwner is null || !effectiveIsOpen)
+        {
+            focusBackup = null;
+            isShown = false;
+        }
         AdornerLayer = null;
     }
 
     private void ResolveParentRibbon()
     {
-        parentRibbon = GetParentRibbon(this);
+        parentRibbon = presentationOwner ?? GetParentRibbon(this);
         if (parentRibbon is null && XamlRoot?.Content is DependencyObject root)
         {
             parentRibbon = FocusRoutingHelper.FindDescendant<Ribbon>(root);
         }
     }
 
-    private void ApplyParentRibbonOpenState()
+    private bool ApplyParentRibbonOpenState()
     {
-        if (parentRibbon is null)
+        if (parentRibbon is null || !AffectsParentRibbon)
         {
-            return;
+            return true;
         }
 
-        parentRibbon.ActiveBackstage = this;
-        parentRibbon.IsBackstageOrStartScreenOpen = true;
+        if (!parentRibbon.TryActivateApplicationSurface(this))
+        {
+            return false;
+        }
+
         if (HideContextTabsOnOpen
             && parentRibbon.TitleBar is { } titleBar
             && titleBar.HideContextTabs is false)
@@ -561,6 +670,8 @@ public partial class Backstage : RibbonControl
             originalHideContextTabs = false;
             titleBar.HideContextTabs = true;
         }
+
+        return true;
     }
 
     private void RestoreParentRibbonState()
@@ -570,13 +681,14 @@ public partial class Backstage : RibbonControl
             return;
         }
 
-        if (ReferenceEquals(parentRibbon.ActiveBackstage, this))
+        if (!AffectsParentRibbon)
         {
-            parentRibbon.ActiveBackstage = null;
+            originalHideContextTabs = null;
+            parentRibbon = null;
+            return;
         }
 
-        parentRibbon.IsBackstageOrStartScreenOpen =
-            parentRibbon.StartScreen?.IsOpen == true;
+        parentRibbon.ReleaseApplicationSurface(this);
 
         if (originalHideContextTabs.HasValue && parentRibbon.TitleBar is { } titleBar)
         {
@@ -585,6 +697,83 @@ public partial class Backstage : RibbonControl
 
         originalHideContextTabs = null;
         parentRibbon = null;
+    }
+
+    internal void SetPresentationOwner(Ribbon? ribbon)
+    {
+        presentationOwner = ribbon;
+        if (ribbon is not null && effectiveIsOpen)
+        {
+            ResolveParentRibbon();
+            CapturePresentationFocus();
+            if (!ApplyParentRibbonOpenState())
+            {
+                CloseForOwner(restoreFocus: false);
+            }
+        }
+    }
+
+    internal WeakReference<UIElement>? TakePresentationFocus()
+    {
+        var reference = focusBackup;
+        focusBackup = null;
+        return reference;
+    }
+
+    internal void AdoptPresentationFocus(WeakReference<UIElement>? reference)
+    {
+        if (reference is not null)
+        {
+            focusBackup = reference;
+        }
+    }
+
+    internal void CapturePresentationFocus()
+    {
+        focusBackup ??= XamlRoot is null && presentationOwner is not null
+            ? FocusRoutingHelper.CaptureFocusedElement(presentationOwner)
+            : FocusRoutingHelper.CaptureFocusedElement(this, onlyWhenOutsideOwner: true);
+    }
+
+    internal void FocusPresentation()
+    {
+        if (effectiveIsOpen && IsLoaded && FocusRoutingHelper.IsEffectivelyVisible(this))
+        {
+            FocusRoutingHelper.FocusFirst(FocusScope);
+        }
+    }
+
+    internal void CloseForOwner(bool restoreFocus)
+    {
+        if (!restoreFocus)
+        {
+            focusBackup = null;
+        }
+
+        isClosingForOwner = true;
+        try
+        {
+            isSynchronizingOpenProperty = true;
+            try
+            {
+                openStateConstraint?.Release();
+            }
+            finally
+            {
+                isSynchronizingOpenProperty = false;
+            }
+
+            SetIsOpen(false);
+            CompleteHide();
+        }
+        finally
+        {
+            isClosingForOwner = false;
+            if (!CanChangeIsOpen)
+            {
+                HoldOpenState();
+            }
+        }
     }
 
     private void UpdateVisualState()

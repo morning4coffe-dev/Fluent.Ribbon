@@ -109,6 +109,13 @@ public partial class RibbonAutomationPeer : FrameworkElementAutomationPeer, IExp
             return peers;
         }
 
+        if (OwnerRibbon.StartScreen is { IsOpen: true, IsPresentationShown: true, Visibility: Visibility.Visible } screen
+            && CreatePeerForElement(screen) is { } screenPeer)
+        {
+            peers.Add(screenPeer);
+            return peers;
+        }
+
         if (OwnerRibbon.Menu is FrameworkElement menu
             && AutomationPeerHelpers.IsEffectivelyVisible(menu)
             && CreatePeerForMenu() is { } menuPeer)

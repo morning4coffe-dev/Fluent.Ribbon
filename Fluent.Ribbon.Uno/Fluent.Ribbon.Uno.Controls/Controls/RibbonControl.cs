@@ -27,11 +27,12 @@ public abstract partial class RibbonControl :
             (RibbonControlSize)(-1),
             (RibbonControlSize)(-1));
 
-    private bool commandCanExecute = true;
+    private readonly CommandAvailability commandAvailability;
 
     /// <summary>Initializes a new compatibility ribbon control.</summary>
     protected RibbonControl()
     {
+        commandAvailability = new CommandAvailability(this, CommandProperty, CommandParameterProperty);
         QuickAccessHelper.AttachContextMenu(this);
     }
 
@@ -116,7 +117,7 @@ public abstract partial class RibbonControl :
             nameof(Command),
             typeof(ICommand),
             typeof(RibbonControl),
-            new PropertyMetadata(null, OnCommandChanged));
+            new PropertyMetadata(null));
 
     /// <summary>Gets or sets the portable command.</summary>
     public ICommand? Command
@@ -131,7 +132,7 @@ public abstract partial class RibbonControl :
             nameof(CommandParameter),
             typeof(object),
             typeof(RibbonControl),
-            new PropertyMetadata(null, OnCommandParameterChanged));
+            new PropertyMetadata(null));
 
     /// <summary>Gets or sets the command parameter.</summary>
     public object? CommandParameter
@@ -279,11 +280,8 @@ public abstract partial class RibbonControl :
         if (source is RibbonControl sourceRibbonControl
             && element is RibbonControl targetRibbonControl)
         {
-            Synchronize(
-                sourceRibbonControl,
-                HeaderProperty,
-                targetRibbonControl,
-                HeaderProperty);
+            QuickAccessBindingSession.For(sourceRibbonControl, targetRibbonControl)
+                .BindPresentation(HeaderProperty, HeaderProperty);
             Synchronize(
                 sourceRibbonControl,
                 HeaderTemplateProperty,
@@ -344,7 +342,7 @@ public abstract partial class RibbonControl :
     }
 
     /// <summary>Gets whether the control and its command are currently enabled.</summary>
-    protected virtual bool IsEnabledCore => IsEnabled && commandCanExecute;
+    protected virtual bool IsEnabledCore => CanExecuteCommand() && IsEnabled;
 
     /// <summary>Gets the logical children retained for WPF source compatibility.</summary>
     protected virtual IEnumerator LogicalChildren
@@ -370,15 +368,15 @@ public abstract partial class RibbonControl :
     /// <summary>Returns whether the current command can execute.</summary>
     protected bool CanExecuteCommand()
     {
-        return Command?.CanExecute(CommandParameter) ?? true;
+        return commandAvailability.CanExecute;
     }
 
     /// <summary>Executes the current command when it can execute.</summary>
     protected void ExecuteCommand()
     {
-        if (Command is { } command && command.CanExecute(CommandParameter))
+        if (IsEnabledCore)
         {
-            command.Execute(CommandParameter);
+            Internal.CommandHelper.Execute(Command, CommandParameter);
         }
     }
 
@@ -419,48 +417,6 @@ public abstract partial class RibbonControl :
         }
 
         return null;
-    }
-
-    private static void OnCommandChanged(
-        DependencyObject sender,
-        DependencyPropertyChangedEventArgs args)
-    {
-        if (sender is not RibbonControl control)
-        {
-            return;
-        }
-
-        if (args.OldValue is ICommand oldCommand)
-        {
-            oldCommand.CanExecuteChanged -= control.OnCommandCanExecuteChanged;
-        }
-
-        if (args.NewValue is ICommand newCommand)
-        {
-            newCommand.CanExecuteChanged += control.OnCommandCanExecuteChanged;
-        }
-
-        control.UpdateCommandCapability();
-    }
-
-    private static void OnCommandParameterChanged(
-        DependencyObject sender,
-        DependencyPropertyChangedEventArgs args)
-    {
-        if (sender is RibbonControl control)
-        {
-            control.UpdateCommandCapability();
-        }
-    }
-
-    private void OnCommandCanExecuteChanged(object? sender, EventArgs args)
-    {
-        UpdateCommandCapability();
-    }
-
-    private void UpdateCommandCapability()
-    {
-        commandCanExecute = CanExecuteCommand();
     }
 
     internal static void Synchronize(

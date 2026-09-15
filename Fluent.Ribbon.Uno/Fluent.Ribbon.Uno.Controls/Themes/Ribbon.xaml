@@ -1,7 +1,11 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:fluent="using:Fluent">
+    xmlns:fluent="using:Fluent"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
+    xmlns:not_win="http://uno.ui/not_win"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="not_win">
 
     <Style TargetType="fluent:Ribbon">
         <Setter Property="IsTabStop" Value="False" />
@@ -128,7 +132,7 @@
                             BorderThickness="{TemplateBinding BorderThickness}">
                             <fluent:RibbonTabControl
                                 x:Name="PART_RibbonTabControl"
-                                IsMinimized="{TemplateBinding IsMinimized}" />
+                                IsMinimized="{Binding IsMinimized, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
                         </Border>
 
                         <!-- Quick Access Toolbar (below ribbon) -->
@@ -148,4 +152,96 @@
         </Setter>
     </Style>
 
+    <Style TargetType="fluent:RibbonTabControl">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Background" Value="{ThemeResource RibbonContentBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource RibbonBorderBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="fluent:RibbonTabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid x:Name="TabContainerGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition x:Name="LeftContentColumn" Width="Auto" />
+                                <ColumnDefinition x:Name="TabColumn" Width="Auto" />
+                                <ColumnDefinition x:Name="AddButtonColumn" Width="Auto" />
+                                <ColumnDefinition x:Name="RightContentColumn" Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter
+                                x:Name="LeftContentPresenter"
+                                Content="{TemplateBinding TabStripHeader}"
+                                ContentTemplate="{TemplateBinding TabStripHeaderTemplate}" />
+                            <primitives:TabViewListView
+                                x:Name="TabListView"
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                Padding="{TemplateBinding Padding}"
+                                CanReorderItems="{TemplateBinding CanReorderTabs}"
+                                CanDragItems="{TemplateBinding CanDragTabs}"
+                                AllowDrop="{TemplateBinding AllowDropTabs}"
+                                ItemsSource="{TemplateBinding TabItemsSource}"
+                                ItemTemplate="{TemplateBinding TabItemTemplate}"
+                                ItemTemplateSelector="{TemplateBinding TabItemTemplateSelector}">
+                                <!-- Uno uses persistent containers; native TabView requires
+                                     its framework items panel and generator mapping. -->
+                                <not_win:ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </not_win:ItemsControl.ItemsPanel>
+                            </primitives:TabViewListView>
+                            <Button
+                                x:Name="AddButton"
+                                Grid.Column="2"
+                                Content="+"
+                                Visibility="{Binding IsAddTabButtonVisible, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Command="{TemplateBinding AddTabButtonCommand}"
+                                CommandParameter="{TemplateBinding AddTabButtonCommandParameter}" />
+                            <ContentPresenter
+                                x:Name="RightContentPresenter"
+                                Grid.Column="3"
+                                HorizontalContentAlignment="Stretch">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter
+                                        Content="{TemplateBinding TabStripFooter}"
+                                        ContentTemplate="{TemplateBinding TabStripFooterTemplate}" />
+                                    <Button
+                                        x:Name="PART_DisplayOptionsButton"
+                                        Grid.Column="1"
+                                        AutomationProperties.AutomationId="RibbonDisplayOptionsButton"
+                                        MinWidth="22"
+                                        MinHeight="22"
+                                        Padding="4,2"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        Foreground="{ThemeResource RibbonIconBrush}"
+                                        BorderThickness="0">
+                                        <FontIcon Glyph="&#xE70D;" FontSize="12" />
+                                    </Button>
+                                </Grid>
+                            </ContentPresenter>
+                        </Grid>
+                        <!-- Ribbon alone owns this presenter. Omitting TabView's TabContentPresenter
+                             prevents the native TabView from reparenting content out of an open popup. -->
+                        <ContentPresenter
+                            x:Name="PART_ContentPresenter"
+                            Grid.Row="1"
+                            Background="{TemplateBinding Background}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>

@@ -6,19 +6,12 @@ using Windows.System;
 public partial class GalleryItem
 {
     /// <summary>Gets whether the item and its command are currently enabled.</summary>
-    protected virtual bool IsEnabledCore =>
-        IsEnabled && (Command?.CanExecute(CommandParameter) ?? true);
+    protected override bool IsEnabledCore => base.IsEnabledCore;
 
     /// <inheritdoc />
     protected override void OnKeyUp(KeyRoutedEventArgs e)
     {
         base.OnKeyUp(e);
-
-        if (!e.Handled && e.Key == VirtualKey.Enter)
-        {
-            RaiseClick();
-            e.Handled = true;
-        }
     }
 
     /// <summary>Handles pointer-capture loss.</summary>

@@ -2,16 +2,27 @@
     x:Class="FluentUno.PackageConsumer.PackageFixture"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:fluent="using:Fluent">
+    xmlns:fluent="using:Fluent"
+    xmlns:local="using:FluentUno.PackageConsumer">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="ms-appx:///Fluent.Ribbon.Uno/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <DataTemplate x:Key="PackagedEditorHeader">
+                <TextBlock Text="{Binding}" />
+            </DataTemplate>
+            <local:PackageHeaderSelector
+                x:Key="PackagedHeaderSelector"
+                Template="{StaticResource PackagedEditorHeader}" />
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <fluent:Ribbon>
+    <fluent:Ribbon
+        AreTabHeadersVisible="True"
+        IsDisplayOptionsButtonVisible="False"
+        IsDefaultContextMenuEnabled="False"
+        CanCustomizeQuickAccessToolBarItems="False">
         <fluent:Ribbon.Tabs>
             <fluent:RibbonTabItem Header="Home">
                 <fluent:RibbonTabItem.Groups>
@@ -28,6 +39,16 @@
                                     </fluent:ContextMenu>
                                 </fluent:Button.ContextFlyout>
                             </fluent:Button>
+                            <fluent:ComboBox
+                                Header="Packaged combo"
+                                HeaderTemplate="{StaticResource PackagedEditorHeader}"
+                                HeaderTemplateSelector="{StaticResource PackagedHeaderSelector}" />
+                            <fluent:TextBox
+                                Header="Packaged text"
+                                HeaderTemplateSelector="{StaticResource PackagedHeaderSelector}" />
+                            <fluent:Spinner
+                                Header="Packaged value"
+                                HeaderTemplate="{StaticResource PackagedEditorHeader}" />
                         </fluent:RibbonGroupBox.Items>
                     </fluent:RibbonGroupBox>
                 </fluent:RibbonTabItem.Groups>

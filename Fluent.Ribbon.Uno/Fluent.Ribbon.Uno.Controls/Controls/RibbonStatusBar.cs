@@ -6,6 +6,8 @@ namespace Fluent;
 [ContentProperty(Name = nameof(Items))]
 public partial class RibbonStatusBar : StatusBarBase
 {
+    private readonly Fluent.Helpers.ItemsControlBinding itemsBinding;
+
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
@@ -19,9 +21,13 @@ public partial class RibbonStatusBar : StatusBarBase
     /// <summary>
     /// Gets the collection of left-aligned status bar items.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        get
+        {
+            itemsBinding?.RefreshUnnotifiedNativeItems();
+            return (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        }
         private set => SetValue(ItemsProperty, value);
     }
 
@@ -52,11 +58,25 @@ public partial class RibbonStatusBar : StatusBarBase
     public RibbonStatusBar()
     {
         DefaultStyleKey = typeof(RibbonStatusBar);
-        Items = new ObservableCollection<UIElement>();
+        Items = Fluent.Helpers.ItemsControlBinding.CreateItems(this);
         RightItems = new ObservableCollection<UIElement>();
 
-        Items.CollectionChanged += OnItemsChanged;
+        itemsBinding = new Fluent.Helpers.ItemsControlBinding(
+            this, Items,
+            IsItemItsOwnContainerOverride, GetContainerForItemOverride,
+            PrepareContainerForItemOverride, ClearContainerForItemOverride,
+            OnBoundItemsChanged);
         RightItems.CollectionChanged += OnRightItemsChanged;
+        Loaded += (_, _) =>
+        {
+            SyncItems();
+            SyncRightItems();
+        };
+        Unloaded += (_, _) =>
+        {
+            _leftPanel?.Children.Clear();
+            _rightPanel?.Children.Clear();
+        };
         InitializeCompatibility();
         RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedMetadata);
     }
@@ -79,6 +99,8 @@ public partial class RibbonStatusBar : StatusBarBase
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
+        _leftPanel?.Children.Clear();
+        _rightPanel?.Children.Clear();
         base.OnApplyTemplate();
 
         _leftPanel = GetTemplateChild("PART_LeftPanel") as StackPanel;
@@ -92,7 +114,7 @@ public partial class RibbonStatusBar : StatusBarBase
 
     #region Methods
 
-    private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnBoundItemsChanged(NotifyCollectionChangedEventArgs e)
     {
         SyncItems();
         OnItemsChanged(e);
@@ -108,11 +130,7 @@ public partial class RibbonStatusBar : StatusBarBase
     {
         if (_leftPanel is null) return;
 
-        _leftPanel.Children.Clear();
-        foreach (var item in Items)
-        {
-            _leftPanel.Children.Add(item);
-        }
+        itemsBinding.SynchronizePanel(_leftPanel);
     }
 
     private void SyncRightItems()
@@ -122,9 +140,22 @@ public partial class RibbonStatusBar : StatusBarBase
         _rightPanel.Children.Clear();
         foreach (var item in RightItems)
         {
+            Fluent.Helpers.ItemsControlHelper.DetachFromParent(item);
             _rightPanel.Children.Add(item);
         }
     }
+
+    /// <summary>Returns the live status container for a source item.</summary>
+    public new DependencyObject? ContainerFromItem(object item) => itemsBinding.ContainerFromItem(item);
+
+    /// <summary>Returns the live status container at an item index.</summary>
+    public new DependencyObject? ContainerFromIndex(int index) => itemsBinding.ContainerFromIndex(index);
+
+    /// <summary>Returns the source item represented by a live status container.</summary>
+    public new object? ItemFromContainer(DependencyObject container) => itemsBinding.ItemFromContainer(container);
+
+    /// <summary>Returns the index of a live status container.</summary>
+    public new int IndexFromContainer(DependencyObject container) => itemsBinding.IndexFromContainer(container);
 
     #endregion
 }

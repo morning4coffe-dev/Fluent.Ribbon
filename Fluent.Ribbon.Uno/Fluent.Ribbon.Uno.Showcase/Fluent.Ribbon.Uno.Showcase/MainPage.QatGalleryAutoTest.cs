@@ -2,6 +2,7 @@ namespace FluentRibbon.Uno.Showcase;
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Fluent;
 using Microsoft.UI.Xaml;
@@ -26,13 +27,7 @@ public sealed partial class MainPage
         {
             await SettleAsync(4, 120);
 
-            QuickAccessToolBar? qat = null;
-            foreach (var found in EnumerateDescendants<QuickAccessToolBar>(this))
-            {
-                qat = found;
-                break;
-            }
-
+            var qat = MainRibbon.QuickAccessToolBar;
             if (qat is null)
             {
                 AutoLog("  FAIL QATGAL QuickAccessToolBar not found");
@@ -40,19 +35,18 @@ public sealed partial class MainPage
                 return;
             }
 
-            InRibbonGallery? clone = null;
-            foreach (var gallery in EnumerateDescendants<InRibbonGallery>(qat))
+            var mapped = MainRibbon.GetQuickAccessElements().TryGetValue(GalInRibbon, out var copy);
+            if (!mapped || copy is not InRibbonGallery clone
+                || !clone.IsLoaded || !EnumerateDescendants<InRibbonGallery>(qat).Any(item => ReferenceEquals(item, clone)))
             {
-                clone = gallery;
-                break;
-            }
-
-            if (clone is null)
-            {
-                AutoLog("  FAIL QATGAL gallery clone not found in QAT");
+                AutoLog($"  FAIL QATGAL gallery clone not found in active QAT (mapped={mapped}, type={copy?.GetType().Name}, activeLoaded={qat.IsLoaded})");
                 AutoLog("QATGAL END");
                 return;
             }
+
+            var firstToolbar = EnumerateDescendants<QuickAccessToolBar>(this).FirstOrDefault();
+            AutoLog($"  QATGAL activeToolbarIsFirst={ReferenceEquals(firstToolbar, qat)}, "
+                    + $"firstToolbarHasMappedClone={firstToolbar is not null && EnumerateDescendants<InRibbonGallery>(firstToolbar).Any(item => ReferenceEquals(item, clone))}");
 
             var width = clone.ActualWidth;
             var height = clone.ActualHeight;

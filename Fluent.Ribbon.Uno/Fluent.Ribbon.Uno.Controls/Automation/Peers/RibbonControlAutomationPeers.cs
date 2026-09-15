@@ -353,8 +353,8 @@ public partial class RibbonGalleryAutomationPeer : SelectorAutomationPeer,
 
     IRawElementProviderSimple[] ISelectionProvider.GetSelection()
     {
-        if (OwnerGallery.SelectedItem is not UIElement selected
-            || !OwnerGallery.GetAutomationItems().Contains(selected))
+        var selected = OwnerGallery.FindSelectionContainer(OwnerGallery.SelectedItem);
+        if (selected is null || !OwnerGallery.GetAutomationItems().Contains(selected))
         {
             return [];
         }

@@ -24,6 +24,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     private const string PART_PopupHeaderText = "PART_PopupHeaderText";
 
     private Panel? _itemsPanel;
+    private ItemsPanelTemplate? _synchronizedItemsPanel;
     private WinUIButton? _collapsedButton;
     private Popup? _collapsedPopup;
     private StackPanel? _popupItemsPanel;
@@ -42,6 +43,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// to the group's uniform size.
     /// </summary>
     private readonly Dictionary<UIElement, RibbonControlSize> _preferredSizes = new();
+    private readonly Fluent.Helpers.ItemsControlBinding itemsBinding;
 
     #region Dependency Properties
 
@@ -75,11 +77,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
     public new static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(RibbonGroupBox),
-            new PropertyMetadata(null, OnLauncherMetadataChanged));
+        HeaderedItemsControl.HeaderProperty;
 
     /// <summary>
     /// Gets or sets the header content of the group.
@@ -103,7 +101,11 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// </summary>
     public new ObservableCollection<UIElement> Items
     {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        get
+        {
+            itemsBinding?.RefreshUnnotifiedNativeItems();
+            return (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        }
         private set => SetValue(ItemsProperty, value);
     }
 
@@ -294,7 +296,10 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         if (d is RibbonGroupBox groupBox)
         {
             var isSimplified = (bool)e.NewValue;
-            groupBox.State = groupBox.GetInitialStateForMode(isSimplified);
+            if (groupBox.State != RibbonGroupBoxState.QuickAccess)
+            {
+                groupBox.State = groupBox.GetInitialStateForMode(isSimplified);
+            }
 
             foreach (var item in groupBox.Items)
             {
@@ -394,13 +399,20 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     public RibbonGroupBox()
     {
         DefaultStyleKey = typeof(RibbonGroupBox);
-        Items = new ObservableCollection<UIElement>();
-        Items.CollectionChanged += OnItemsCollectionChanged;
+        Items = Fluent.Helpers.ItemsControlBinding.CreateItems(this);
+        itemsBinding = new Fluent.Helpers.ItemsControlBinding(
+            this, Items,
+            IsItemItsOwnContainerOverride, GetContainerForItemOverride,
+            PrepareContainerForItemOverride, ClearContainerForItemOverride,
+            OnItemsChanged);
+        Loaded += OnGroupItemsLoaded;
+        Unloaded += OnGroupItemsUnloaded;
         InitializeCompatibility();
         RibbonLocalizationUpdateHelper.Track(this, UpdateLauncherMetadata);
         QuickAccessHelper.AttachContextMenu(this);
         GotFocus += OnGroupGotFocus;
         LostFocus += OnGroupLostFocus;
+        RegisterPropertyChangedCallback(HeaderProperty, (_, _) => UpdateLauncherMetadata());
     }
 
     #endregion
@@ -410,9 +422,16 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
+        ReleaseActiveQuickAccessGroup();
+        CollapseForAutomation();
+        _itemsPanel?.Children.Clear();
+        _popupItemsPanel?.Children.Clear();
         base.OnApplyTemplate();
 
         _itemsPanel = GetTemplateChild(PART_ItemsPanel) as Panel;
+        _quickAccessInlinePanelHost = _itemsPanel is { } panel
+            ? VisualTreeHelper.GetParent(panel) as Panel ?? panel.Parent as Panel
+            : null;
 
         if (_collapsedButton is not null)
         {
@@ -467,19 +486,107 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     #region Methods
 
-    private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    /// <inheritdoc />
+    protected override DependencyObject GetContainerForItemOverride()
+        => new ContentControl
+        {
+            IsTabStop = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+        };
+
+    /// <inheritdoc />
+    protected override bool IsItemItsOwnContainerOverride(object item) => item is UIElement;
+
+    /// <inheritdoc />
+    protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
     {
-        OnItemsChanged(e);
+        Fluent.Helpers.ItemsControlBinding.PrepareContent(this, element, item);
+        if (!ReferenceEquals(element, item) && element is FrameworkElement container)
+        {
+            container.Loaded -= OnGroupItemsLoaded;
+            container.Loaded += OnGroupItemsLoaded;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+    {
+        if (element is UIElement child)
+        {
+            RemovePreferredSizes(child);
+        }
+
+        if (!ReferenceEquals(element, item) && element is FrameworkElement container)
+        {
+            container.Loaded -= OnGroupItemsLoaded;
+        }
+
+        Fluent.Helpers.ItemsControlBinding.ClearContent(element, item);
+    }
+
+    /// <summary>Returns the live group container for a source item.</summary>
+    public new DependencyObject? ContainerFromItem(object item) =>
+        QuickAccessGroupSource?.ContainerFromItem(item) ?? itemsBinding.ContainerFromItem(item);
+
+    /// <summary>Returns the live group container at an item index.</summary>
+    public new DependencyObject? ContainerFromIndex(int index) =>
+        QuickAccessGroupSource?.ContainerFromIndex(index) ?? itemsBinding.ContainerFromIndex(index);
+
+    /// <summary>Returns the source item represented by a live group container.</summary>
+    public new object? ItemFromContainer(DependencyObject container) =>
+        QuickAccessGroupSource?.ItemFromContainer(container) ?? itemsBinding.ItemFromContainer(container);
+
+    /// <summary>Returns the index of a live group container.</summary>
+    public new int IndexFromContainer(DependencyObject container) =>
+        QuickAccessGroupSource?.IndexFromContainer(container) ?? itemsBinding.IndexFromContainer(container);
+
+    private void OnGroupItemsLoaded(object sender, RoutedEventArgs e)
+    {
+        if (QuickAccessGroupSource is not null)
+        {
+            if (IsDropDownOpen)
+            {
+                ExpandForAutomation();
+            }
+            return;
+        }
+
+        if (ReferenceEquals(sender, this))
+        {
+            SyncItems();
+        }
+
+        CapturePreferredSizes();
+        UpdateItemSizes();
+        InvalidateHeaderAlignment();
+    }
+
+    private void OnGroupItemsUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            return;
+        }
+        CollapseForAutomation();
+        if (_activeQuickAccessGroup is not null)
+        {
+            return;
+        }
+
+        _itemsPanel?.Children.Clear();
+        _popupItemsPanel?.Children.Clear();
     }
 
     /// <summary>Handles item collection changes.</summary>
     protected virtual void OnItemsChanged(NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == NotifyCollectionChangedAction.Reset)
+        if (QuickAccessGroupSource is not null)
         {
-            _preferredSizes.Clear();
+            return;
         }
-        else if (e.OldItems is not null)
+
+        if (e.Action != NotifyCollectionChangedAction.Move && e.OldItems is not null)
         {
             foreach (var old in e.OldItems)
             {
@@ -524,14 +631,21 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// </summary>
     private void CapturePreferredSizes()
     {
+        var currentItems = new HashSet<UIElement>();
         foreach (var item in Items)
         {
-            CapturePreferredSizes(item);
+            CapturePreferredSizes(item, currentItems);
+        }
+
+        foreach (var retired in _preferredSizes.Keys.Where(item => !currentItems.Contains(item)).ToArray())
+        {
+            _preferredSizes.Remove(retired);
         }
     }
 
-    private void CapturePreferredSizes(UIElement item)
+    private void CapturePreferredSizes(UIElement item, ISet<UIElement> currentItems)
     {
+        currentItems.Add(item);
         if (item is IScalableRibbonControl scalable && !_preferredSizes.ContainsKey(item))
         {
             _preferredSizes[item] = scalable.Size;
@@ -543,24 +657,18 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         }
 #endif
 
-        if (item is Panel panel)
+        foreach (var child in GetNestedItemChildren(item))
         {
-            foreach (var child in panel.Children)
-            {
-                CapturePreferredSizes(child);
-            }
+            CapturePreferredSizes(child, currentItems);
         }
     }
 
     private void RemovePreferredSizes(UIElement item)
     {
         _preferredSizes.Remove(item);
-        if (item is Panel panel)
+        foreach (var child in GetNestedItemChildren(item))
         {
-            foreach (var child in panel.Children)
-            {
-                RemovePreferredSizes(child);
-            }
+            RemovePreferredSizes(child);
         }
     }
 
@@ -571,47 +679,64 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             simplifiedControl.UpdateSimplifiedState(isSimplified);
         }
 
+        foreach (var child in GetNestedItemChildren(item))
+        {
+            UpdateNestedSimplifiedState(child, isSimplified);
+        }
+    }
+
+    private static IEnumerable<UIElement> GetNestedItemChildren(DependencyObject item)
+    {
+        if (item is IScalableRibbonControl or IRibbonControl)
+        {
+            yield break;
+        }
+
         if (item is Panel panel)
         {
             foreach (var child in panel.Children)
             {
-                UpdateNestedSimplifiedState(child, isSimplified);
+                yield return child;
+            }
+        }
+        else if (item is ContentControl { Content: UIElement content })
+        {
+            yield return content;
+        }
+        else
+        {
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(item); index++)
+            {
+                if (VisualTreeHelper.GetChild(item, index) is UIElement child)
+                {
+                    yield return child;
+                }
             }
         }
     }
 
     private void SyncItems()
     {
+        if (QuickAccessGroupSource is not null || _activeQuickAccessGroup?._quickAccessGroupLease?.IsMoving == true)
+        {
+            return;
+        }
+
         // While the collapsed drop-down is open the items legitimately live in the popup panel.
         // Pulling them back into the in-ribbon panel here would reparent elements out from under
         // an open popup, so sync whichever panel currently owns them.
-        var target = _collapsedPopup?.IsOpen == true ? _popupItemsPanel : _itemsPanel;
+        var target = IsDropDownOpen ? _popupItemsPanel : _itemsPanel;
         if (target is null) return;
 
-        target.Children.Clear();
-        foreach (var item in Items)
+        if (ReferenceEquals(_synchronizedItemsPanel, ItemsPanel)
+            && target.Children.Count == Items.Count
+            && target.Children.Select((item, index) => ReferenceEquals(item, Items[index])).All(equal => equal))
         {
-            DetachFromParent(item);
-            target.Children.Add(item);
+            return;
         }
-    }
 
-    /// <summary>
-    /// Collapsed groups move their items between the in-ribbon panel and the drop-down panel.
-    /// Adding an element that still has a parent throws inside the XAML framework and fail-fasts
-    /// the process, so always detach before re-adding.
-    /// </summary>
-    private static void DetachFromParent(UIElement element)
-    {
-        // Resolve the host through the visual parent (the elements are hosted directly in a
-        // Panel's Children, whose logical Parent reads null on the native WinUI head). Callers
-        // must invoke this while that host is still rooted: detaching a realized element from a
-        // panel already removed from the visual tree corrupts its native peer, after which
-        // re-adding it throws COMException 0x800F1000.
-        if (VisualTreeHelper.GetParent(element) is Panel panel)
-        {
-            panel.Children.Remove(element);
-        }
+        itemsBinding.SynchronizePanel(target);
+        _synchronizedItemsPanel = ItemsPanel;
     }
 
     private static void OnStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -645,6 +770,26 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     {
         if (_collapsedPopup is null || _popupItemsPanel is null) return;
         if (_collapsedPopup.IsOpen) return; // Prevent double-click
+        if (!IsDropDownOpen)
+        {
+            IsDropDownOpen = true;
+            return;
+        }
+
+        if (_activeQuickAccessGroup is { } borrowed)
+        {
+            borrowed.IsDropDownOpen = false;
+            borrowed._quickAccessGroupLease?.Release();
+            if (_activeQuickAccessGroup is not null)
+            {
+                return;
+            }
+        }
+
+        if (QuickAccessGroupSource is not null && !PrepareQuickAccessGroupContent())
+        {
+            return;
+        }
 
         // Only one collapsed group may be expanded at a time, matching WPF. Without this the
         // panels stack up and overlap each other and the page body.
@@ -657,15 +802,16 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         }
 
         // Move items from main panel to popup panel at Large size
-        _itemsPanel?.Children.Clear();
-        _popupItemsPanel.Children.Clear();
-
-        foreach (var item in Items)
+        if (QuickAccessGroupSource is null)
         {
-            ApplyPopupItemSize(item);
+            _itemsPanel?.Children.Clear();
+            _popupItemsPanel.Children.Clear();
 
-            DetachFromParent(item);
-            _popupItemsPanel.Children.Add(item);
+            foreach (var item in Items)
+            {
+                ApplyPopupItemSize(item);
+            }
+            itemsBinding.SynchronizePanel(_popupItemsPanel);
         }
 
         // Position the popup below the collapsed button
@@ -714,7 +860,8 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             }
         }
 
-        FlyoutShowHelper.OpenDeferred(_collapsedPopup);
+        var popup = _collapsedPopup;
+        FlyoutShowHelper.OpenDeferred(popup, () => IsDropDownOpen && IsLoaded && ReferenceEquals(_collapsedPopup, popup));
         _openCollapsedGroup = new WeakReference<RibbonGroupBox>(this);
         if (!IsDropDownOpen)
         {
@@ -743,6 +890,8 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     internal void CollapseForAutomation()
     {
+        CancelQuickAccessSourceCloseWait();
+        _quickAccessGroupLease?.Release();
         if (_collapsedPopup is not null)
         {
             _collapsedPopup.IsOpen = false;
@@ -764,6 +913,11 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         }
 
         if (_popupItemsPanel is null) return;
+        if (QuickAccessGroupSource is not null)
+        {
+            _quickAccessGroupLease?.Release();
+            return;
+        }
 
         // Move items back from popup panel to main panel
         _popupItemsPanel.Children.Clear();
@@ -788,12 +942,9 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             return;
         }
 #endif
-        if (item is Panel panel)
+        foreach (var child in GetNestedItemChildren(item))
         {
-            foreach (var child in panel.Children)
-            {
-                ApplyPopupItemSize(child);
-            }
+            ApplyPopupItemSize(child);
         }
     }
 
@@ -807,6 +958,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             RibbonGroupBoxState.Medium => "Medium",
             RibbonGroupBoxState.Small => "Small",
             RibbonGroupBoxState.Collapsed => "Collapsed",
+            RibbonGroupBoxState.QuickAccess => "QuickAccess",
             _ => "Large"
         };
 
@@ -833,9 +985,14 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     private void UpdateItemSizes()
     {
+        if (QuickAccessGroupSource is not null)
+        {
+            return;
+        }
+
         // The group state acts as a cap: controls may be their authored size or smaller,
         // but never larger than what the current group state allows.
-        var cap = State switch
+        var cap = _activeQuickAccessGroup is not null ? RibbonControlSize.Large : State switch
         {
             RibbonGroupBoxState.Large => RibbonControlSize.Large,
             RibbonGroupBoxState.Medium => RibbonControlSize.Medium,
@@ -880,12 +1037,7 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
     /// </summary>
     private void ApplyNestedItemSizes(DependencyObject element, RibbonControlSize cap)
     {
-        if (element is not Panel panel)
-        {
-            return;
-        }
-
-        foreach (var child in panel.Children)
+        foreach (var child in GetNestedItemChildren(element))
         {
             if (child is IScalableRibbonControl scalable)
             {
@@ -1039,6 +1191,8 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
             return;
         }
 
+        // A new ItemTemplate can replace descendants without reloading their container.
+        CapturePreferredSizes();
         _headerAlignmentAttempts++;
         var completed = AlignInputHeaders();
 
@@ -1079,13 +1233,8 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
         List<FrameworkElement>? headers = null;
         var allResolved = true;
 
-        foreach (var item in Items)
+        foreach (var alignable in Items.SelectMany(GetHeaderAlignableItems))
         {
-            if (item is not IRibbonHeaderAlignable alignable)
-            {
-                continue;
-            }
-
             var header = alignable.HeaderPresenter;
             if (header is null)
             {
@@ -1152,13 +1301,29 @@ public partial class RibbonGroupBox : HeaderedItemsControl, IHeaderedControl
 
     private void ResetImposedHeaderWidths()
     {
-        foreach (var item in Items)
+        foreach (var alignable in Items.SelectMany(GetHeaderAlignableItems))
         {
-            if (item is IRibbonHeaderAlignable alignable
-                && alignable.HeaderPresenter is { } header
+            if (alignable.HeaderPresenter is { } header
                 && !double.IsNaN(header.Width))
             {
                 header.Width = double.NaN;
+            }
+        }
+    }
+
+    private static IEnumerable<IRibbonHeaderAlignable> GetHeaderAlignableItems(UIElement item)
+    {
+        if (item is IRibbonHeaderAlignable alignable)
+        {
+            yield return alignable;
+            yield break;
+        }
+
+        foreach (var child in GetNestedItemChildren(item))
+        {
+            foreach (var nested in GetHeaderAlignableItems(child))
+            {
+                yield return nested;
             }
         }
     }

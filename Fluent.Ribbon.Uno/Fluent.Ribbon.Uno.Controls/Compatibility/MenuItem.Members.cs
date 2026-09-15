@@ -129,18 +129,18 @@ public partial class MenuItem
         DependencyPropertyChangedEventArgs args)
     {
         var item = (MenuItem)sender;
+        item.submenuRequestVersion++;
         item.RaiseExpandCollapseAutomationEvent((bool)args.OldValue, (bool)args.NewValue);
         if ((bool)args.NewValue)
         {
-            item.ShowCompatibilitySubmenu();
             PopupService.RegisterOpenDropDown(item);
-            item.DropDownOpened?.Invoke(item, EventArgs.Empty);
+            item.ShowCompatibilitySubmenu();
         }
         else
         {
             PopupService.UnregisterOpenDropDown(item);
             item.HideCompatibilitySubmenu();
-            item.DropDownClosed?.Invoke(item, EventArgs.Empty);
+            item.NotifySubmenuClosed();
         }
     }
 

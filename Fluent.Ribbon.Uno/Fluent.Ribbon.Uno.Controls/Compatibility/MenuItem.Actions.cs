@@ -5,20 +5,22 @@ public partial class MenuItem
     /// <inheritdoc />
     public virtual FrameworkElement? CreateQuickAccessItem()
     {
-        return new MenuItem
+        FrameworkElement clone;
+        if (HasSubItems)
         {
-            Header = Header,
-            Description = Description,
-            Icon = Icon,
-            Command = Command,
-            CommandParameter = CommandParameter,
-            Size = RibbonControlSize.Small,
-            CanAddToQuickAccessToolBar = false,
-            IsCheckable = IsCheckable,
-            IsChecked = IsChecked,
-            GroupName = GroupName,
-            IsDefinitive = IsDefinitive
-        };
+            clone = IsSplit
+                ? new RibbonSplitButton { Size = RibbonControlSize.Small, CanAddToQuickAccessToolBar = false }
+                : new DropDownButton { Size = RibbonControlSize.Small, CanAddToQuickAccessToolBar = false };
+        }
+        else
+        {
+            clone = IsCheckable
+                ? new RibbonToggleButton { Size = RibbonControlSize.Small, CanAddToQuickAccessToolBar = false }
+                : new Button { Size = RibbonControlSize.Small, CanAddToQuickAccessToolBar = false };
+        }
+
+        BindMenuQuickAccessItem(clone);
+        return clone;
     }
 
     /// <inheritdoc />
@@ -26,11 +28,20 @@ public partial class MenuItem
     {
         if (HasSubItems)
         {
+            if (!CanOpenSubmenu)
+            {
+                return KeyTipPressedResult.Empty;
+            }
+
             OpenSubmenuAndFocusFirstItem();
             return new KeyTipPressedResult(true, true);
         }
 
-        OnClick();
+        if (CanInvoke)
+        {
+            OnClick();
+        }
+
         return KeyTipPressedResult.Empty;
     }
 

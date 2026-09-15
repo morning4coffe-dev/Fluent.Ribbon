@@ -5,6 +5,7 @@ namespace Fluent;
 /// </summary>
 [TemplatePart(Name = PART_ItemsPresenter, Type = typeof(ItemsPresenter))]
 [TemplatePart(Name = PART_ContentPresenter, Type = typeof(ContentPresenter))]
+[TemplatePart(Name = "PART_DisplayOptionsButton", Type = typeof(Microsoft.UI.Xaml.Controls.Button))]
 public partial class RibbonTabControl : TabView
 {
     private const string PART_ItemsPresenter = "PART_ItemsPresenter";
@@ -57,7 +58,7 @@ public partial class RibbonTabControl : TabView
     /// </summary>
     public RibbonTabControl()
     {
-        // Use TabView's default style/template — no custom template needed
+        DefaultStyleKey = typeof(RibbonTabControl);
         IsAddTabButtonVisible = false;
         TabWidthMode = TabViewWidthMode.SizeToContent;
         Padding = new Thickness(0);
@@ -66,6 +67,7 @@ public partial class RibbonTabControl : TabView
         Resources["TabViewItemHeaderPadding"] = new Thickness(9, 0, 9, 0);
         Resources["TabViewSelectedItemHeaderPadding"] = new Thickness(9, 0, 9, 0);
         InitializeCompatibility();
+        InitializeDisplayOptions();
     }
 
     #endregion
@@ -75,12 +77,24 @@ public partial class RibbonTabControl : TabView
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
+        if (_contentPresenter is not null)
+        {
+            _contentPresenter.Loaded -= OnContentPresenterLoaded;
+        }
+        ResetContentPresentation();
         base.OnApplyTemplate();
         _contentPresenter = GetTemplateChild(PART_ContentPresenter) as ContentPresenter;
+        if (_contentPresenter is not null)
+        {
+            _contentPresenter.Loaded += OnContentPresenterLoaded;
+        }
         UpdateCompatibilityTemplateParts();
+        UpdateDisplayOptionsTemplateParts();
         UpdateItemContentHeights();
         UpdateMinimizedState();
     }
+
+    private void OnContentPresenterLoaded(object sender, RoutedEventArgs args) => UpdateSelectedContent();
 
     private static void OnIsMinimizedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -88,10 +102,10 @@ public partial class RibbonTabControl : TabView
         {
             var oldState = GetSelectedTabExpandCollapseState(
                 (bool)e.OldValue,
-                tabControl.IsDropDownOpen);
+                tabControl.IsMinimizedPopupVisible);
             var newState = GetSelectedTabExpandCollapseState(
                 (bool)e.NewValue,
-                tabControl.IsDropDownOpen);
+                tabControl.IsMinimizedPopupVisible);
             if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(tabControl)
                 is Fluent.Automation.Peers.RibbonTabControlAutomationPeer peer)
             {
@@ -100,6 +114,7 @@ public partial class RibbonTabControl : TabView
 
             tabControl.OnMinimizedCompatibilityChanged((bool)e.NewValue);
             tabControl.UpdateMinimizedState();
+            tabControl.CloseDisplayOptions();
         }
     }
 
@@ -114,6 +129,7 @@ public partial class RibbonTabControl : TabView
         if (d is RibbonTabControl tabControl)
         {
             tabControl.UpdateItemContentHeights();
+            tabControl.UpdateContentPresentation();
         }
     }
 
@@ -129,13 +145,14 @@ public partial class RibbonTabControl : TabView
     {
         VisualStateManager.GoToState(this, IsMinimized ? "Minimized" : "Normal", true);
 
-        // Manually find the content presenter in TabView if template doesn't handle it
         if (_contentPresenter is not null)
         {
-            _contentPresenter.Visibility = IsMinimized && !IsDropDownOpen
+            _contentPresenter.Visibility = IsMinimized
                 ? Visibility.Collapsed
                 : Visibility.Visible;
         }
+
+        UpdateContentPresentation();
     }
 
     #endregion

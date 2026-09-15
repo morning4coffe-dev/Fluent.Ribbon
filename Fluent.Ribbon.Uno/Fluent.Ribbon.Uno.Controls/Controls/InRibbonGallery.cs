@@ -31,7 +31,6 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private ScrollViewer? _popupScroller;
     private StackPanel? _popupPanel;
     private bool _isPopupOpen;
-    private bool _suppressPopupRebuild;
     private bool _isChangingIsCollapsedInternally;
     private bool _isCollapsedExplicitlySet;
     private bool _isRebuildingItemsSource;
@@ -386,6 +385,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         IsTabStop = false;
         Items = new ObservableCollection<UIElement>();
         MenuItems = new ObservableCollection<UIElement>();
+        MenuItems.CollectionChanged += (_, _) => RebuildPopupSupplementalContent();
         Items.CollectionChanged += OnItemsCollectionChanged;
         Loaded += OnGalleryLoaded;
         Unloaded += OnGalleryUnloaded;
@@ -403,7 +403,15 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     {
         base.OnApplyTemplate();
 
+        if (_galleryPanel is not null)
+        {
+            _galleryPanel.Loaded -= OnGalleryPanelLoaded;
+        }
         _galleryPanel = GetTemplateChild(PART_GalleryPanel) as UniformItemsPanel;
+        if (_galleryPanel is not null)
+        {
+            _galleryPanel.Loaded += OnGalleryPanelLoaded;
+        }
 
         if (_expandButton is not null)
         {
@@ -610,7 +618,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         UnsubscribeItemsSource();
         RebuildItemsFromSource();
 
-        if (newSource is INotifyCollectionChanged newNotify && IsLoaded)
+        if (newSource is INotifyCollectionChanged newNotify && (IsLoaded || _activeQuickAccessClone is not null))
         {
             SubscribeItemsSource(newNotify);
         }
@@ -629,7 +637,10 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     private void OnGalleryUnloaded(object sender, RoutedEventArgs e)
     {
         IsDropDownOpen = false;
-        UnsubscribeItemsSource();
+        if (_activeQuickAccessClone is null)
+        {
+            UnsubscribeItemsSource();
+        }
     }
 
     private void SubscribeItemsSource(INotifyCollectionChanged source)
@@ -779,7 +790,9 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     }
 
     internal object? GetSelectionValue(UIElement container)
-        => _sourceItemByContainer.TryGetValue(container, out var sourceItem)
+        => QuickAccessGalleryOwner is { } owner
+            ? owner.GetSelectionValue(container)
+            : _sourceItemByContainer.TryGetValue(container, out var sourceItem)
             ? sourceItem
             : container;
 
@@ -787,6 +800,11 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         object? selectionValue,
         bool requireCurrentItem = true)
     {
+        if (QuickAccessGalleryOwner is { } owner)
+        {
+            return owner.FindSelectionContainer(selectionValue, requireCurrentItem);
+        }
+
         if (selectionValue is UIElement element
             && (!requireCurrentItem || Items.Contains(element)))
         {
@@ -829,10 +847,8 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     // Hosts the live gallery UIElements directly as panel children (non-virtualizing). While the
     // popup is open the items live in the popup panel, so inline syncing is skipped until it closes.
-    // It is also skipped while _suppressPopupRebuild is set: that flag brackets the bulk item
-    // transfers between a Quick Access clone and its owner, during which the shared elements must
-    // stay parented in the owner's panel and must not be reparented here (reparenting a realized
-    // element out of an unrooted panel corrupts its native peer -> COMException 0x800F1000).
+    // Quick Access copies expose canonical logical items but never populate another inline
+    // panel; their popup borrows the source panel without reparenting individual item elements.
     //
     // NOTE: this reconcile is deliberately SYNCHRONOUS. RibbonGroupItemsPanel force-measures this
     // gallery, so OnApplyTemplate runs inside a live measure pass and the Children.Add below can
@@ -848,17 +864,35 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
     // population / membership change instead of firing on every redundant re-apply or re-measure.
     private void SyncInlineChildren()
     {
-        if (_galleryPanel is null)
+        if (_galleryPanel is null || QuickAccessGalleryOwner is not null)
         {
             return;
         }
 
-        ConfigurePanel(
-            _galleryPanel,
-            MinItemsInRow,
-            GetCurrentItemsInRow());
+        if (_quickAccessDataCopies.Count > 0 && !IsLoaded && !_galleryPanel.IsLoaded)
+        {
+            return;
+        }
 
-        if (_isPopupOpen || _suppressPopupRebuild)
+        if (_activeQuickAccessClone is { } clone)
+        {
+            if (clone._quickAccessPanelLease?.IsMoving == true)
+            {
+                return;
+            }
+
+            clone.ConfigurePanel(_galleryPanel, clone.MinItemsInDropDownRow, clone.MaxItemsInDropDownRow);
+            ReconcileFlatPanelChildren();
+            if (ReferenceEquals(clone._borrowedOwnerPanel, _galleryPanel))
+            {
+                clone.PreparePopupContent();
+            }
+            return;
+        }
+
+        ConfigurePanel(_galleryPanel, MinItemsInRow, GetCurrentItemsInRow());
+
+        if (_isPopupOpen)
         {
             return;
         }
@@ -909,6 +943,8 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     // Keeps the old method name as a thin wrapper so callers (OnApplyTemplate) stay unchanged.
     private void SetupGalleryPanel() => SyncInlineChildren();
+
+    private void OnGalleryPanelLoaded(object sender, RoutedEventArgs args) => SyncInlineChildren();
 
     private void UpdateGalleryLayout()
     {
@@ -1099,6 +1135,26 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
         }
 
         EnsurePopup();
+        if (!IsDropDownOpen)
+        {
+            IsDropDownOpen = true;
+            return;
+        }
+
+        if (_activeQuickAccessClone is { } borrowed)
+        {
+            borrowed.IsDropDownOpen = false;
+            borrowed.ReleaseQuickAccessGalleryContent();
+            if (_activeQuickAccessClone is not null)
+            {
+                return;
+            }
+        }
+
+        if (QuickAccessGalleryOwner is not null && !PrepareQuickAccessGalleryContent())
+        {
+            return;
+        }
 
         if (_isPopupOpen && _popup?.IsOpen == true)
         {
@@ -1145,7 +1201,8 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
                 }
             }
 
-            FlyoutShowHelper.OpenDeferred(_popup);
+            var popup = _popup;
+            FlyoutShowHelper.OpenDeferred(popup, () => IsDropDownOpen && IsLoaded && ReferenceEquals(_popup, popup));
         }
 
     }
@@ -1164,6 +1221,7 @@ public partial class InRibbonGallery : Selector, IScalableRibbonControl, IHeader
 
     internal void CollapseForAutomation()
     {
+        ReleaseQuickAccessGalleryContent();
         if (_popup is not null)
         {
             _popup.IsOpen = false;

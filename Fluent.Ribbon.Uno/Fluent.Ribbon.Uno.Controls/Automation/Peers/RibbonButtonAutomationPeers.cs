@@ -1099,16 +1099,17 @@ public partial class RibbonSplitButtonAutomationPeer : RibbonDropDownButtonAutom
     /// <inheritdoc/>
     protected override object? GetPatternCore(PatternInterface patternInterface)
         => patternInterface == PatternInterface.Invoke
-           && OwnerSplitButton.IsButtonEnabled
+           && OwnerSplitButton.CanInvokePrimaryAction
             ? this
             : base.GetPatternCore(patternInterface);
 
     /// <inheritdoc/>
     public void Invoke()
     {
+        AutomationProviderGuard.EnsureEnabled(OwnerSplitButton.CanInvokePrimaryAction);
         AutomationProviderGuard.Validate(
             this,
-            OwnerSplitButton.IsButtonEnabled,
+            OwnerSplitButton.CanInvokePrimaryAction,
             "The split-button primary action is disabled.");
         OwnerSplitButton.InvokePrimaryAction();
     }

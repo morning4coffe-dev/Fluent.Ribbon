@@ -16,6 +16,9 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
     private WinUIButton? button;
     private WinUIButton? dropDownButton;
     private ButtonPointerClickFallback? primaryClickFallback;
+    private readonly CommandAvailability commandAvailability;
+    private EnabledStateConstraint? primaryEnabledConstraint;
+    private WeakReference<RibbonSplitButton>? quickAccessPrimarySource;
 
     /// <summary>Gets the template part used for the primary action.</summary>
     protected FrameworkElement? PrimaryActionTarget => button;
@@ -141,6 +144,14 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
         set => SetValue(IsButtonEnabledProperty, value);
     }
 
+    /// <summary>Identifies whether the primary action is effectively enabled.</summary>
+    public static readonly DependencyProperty IsPrimaryActionEnabledProperty =
+        DependencyProperty.Register(nameof(IsPrimaryActionEnabled), typeof(bool), typeof(RibbonSplitButton),
+            new PropertyMetadata(true));
+
+    /// <summary>Gets the primary action's combined control, user, and command availability.</summary>
+    public bool IsPrimaryActionEnabled => (bool)GetValue(IsPrimaryActionEnabledProperty);
+
     /// <summary>Identifies the <see cref="IsDefinitive"/> dependency property.</summary>
     public static readonly DependencyProperty IsDefinitiveProperty =
         DependencyProperty.Register(
@@ -160,6 +171,11 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
     public RibbonSplitButton()
     {
         DefaultStyleKey = typeof(RibbonSplitButton);
+        commandAvailability = new CommandAvailability(
+            this, CommandProperty, CommandParameterProperty, UpdatePrimaryAvailability, constrainOwner: false);
+        IsEnabledChanged += (_, _) => UpdatePrimaryAvailability(commandAvailability.CanExecute);
+        Loaded += (_, _) => UpdatePrimaryAvailability(commandAvailability.CanExecute);
+        Unloaded += (_, _) => primaryEnabledConstraint?.Release();
     }
 
     /// <inheritdoc />
@@ -174,6 +190,8 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
             primaryClickFallback?.Dispose();
             primaryClickFallback = null;
         }
+        primaryEnabledConstraint?.Release();
+        primaryEnabledConstraint = null;
 
         base.OnApplyTemplate();
 
@@ -194,7 +212,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
                     Focus(FocusState.Pointer);
                     InvokePrimaryAction();
                 });
-            button.IsEnabled = IsButtonEnabled;
+            primaryEnabledConstraint = new EnabledStateConstraint(button);
         }
 
         if (dropDownButton is not null)
@@ -207,6 +225,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
         }
 
         UpdateSplitButtonVisualState();
+        UpdatePrimaryAvailability(commandAvailability.CanExecute);
     }
 
     private void OnButtonClick(object sender, RoutedEventArgs e)
@@ -237,7 +256,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
     private void InvokePrimaryAction(RoutedEventArgs e)
     {
-        if (!IsEnabled || !IsButtonEnabled)
+        if (!CanInvokePrimaryAction)
         {
             return;
         }
@@ -249,10 +268,7 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
         Click?.Invoke(this, e);
 
-        if (Command?.CanExecute(CommandParameter) == true)
-        {
-            Command.Execute(CommandParameter);
-        }
+        ExecutePrimaryCommand();
 
         if (IsDefinitive)
         {
@@ -265,11 +281,63 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
 
     protected internal void ForwardQuickAccessPrimaryAction(RoutedEventArgs e)
     {
-        Click?.Invoke(this, e);
-
-        if (Command?.CanExecute(CommandParameter) == true)
+        if (!CanInvokePrimaryAction)
         {
-            Command.Execute(CommandParameter);
+            return;
+        }
+
+        Click?.Invoke(this, e);
+        ExecutePrimaryCommand();
+    }
+
+    private void ExecutePrimaryCommand()
+    {
+        // A clone observes its own Command for availability, but its Click is
+        // forwarded to the original source, which alone executes that command.
+        if (quickAccessPrimarySource is null)
+        {
+            Internal.CommandHelper.Execute(Command, CommandParameter);
+        }
+    }
+
+    protected internal bool CanInvokePrimaryAction
+        => commandAvailability.CanExecute && IsEnabled && IsButtonEnabled
+           && (quickAccessPrimarySource is null
+               || (quickAccessPrimarySource.TryGetTarget(out var source) && source.CanInvokePrimaryAction));
+
+    private void UpdatePrimaryAvailability(bool commandAvailable)
+    {
+        var sourceAvailable = quickAccessPrimarySource is null
+                              || (quickAccessPrimarySource.TryGetTarget(out var source) && source.CanInvokePrimaryAction);
+        var primaryAvailable = commandAvailable && IsButtonEnabled && sourceAvailable;
+        SetValue(IsPrimaryActionEnabledProperty, IsEnabled && primaryAvailable);
+        if (IsLoaded)
+        {
+            primaryEnabledConstraint?.SetAllowed(primaryAvailable);
+            VisualStateManager.GoToState(this, primaryAvailable ? "PrimaryEnabled" : "PrimaryDisabled", true);
+        }
+    }
+
+    /// <summary>Keeps forwarded primary actions gated by their original command source.</summary>
+    protected void BindPrimaryQuickAccessAvailability(RibbonSplitButton clone)
+    {
+        clone.quickAccessPrimarySource = new WeakReference<RibbonSplitButton>(this);
+        var bindings = QuickAccessBindingSession.For(this, clone);
+        bindings.Bind(IsButtonEnabledProperty);
+        bindings.Bind(CommandParameterProperty);
+        bindings.Bind(CommandProperty);
+        clone.Click -= OnQuickAccessPrimaryClick;
+        clone.Click += OnQuickAccessPrimaryClick;
+        clone.UpdatePrimaryAvailability(clone.commandAvailability.CanExecute);
+    }
+
+    private static void OnQuickAccessPrimaryClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is RibbonSplitButton clone
+            && clone.quickAccessPrimarySource is { } weakSource
+            && weakSource.TryGetTarget(out var source))
+        {
+            source.ForwardQuickAccessPrimaryAction(args);
         }
     }
 
@@ -315,10 +383,9 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
         DependencyPropertyChangedEventArgs args)
     {
         var splitButton = (RibbonSplitButton)sender;
-        if (splitButton.button is not null)
-        {
-            splitButton.button.IsEnabled = (bool)args.NewValue;
-        }
+        splitButton.UpdatePrimaryAvailability(
+            splitButton.commandAvailability?.CanExecute
+            ?? (splitButton.Command?.CanExecute(splitButton.CommandParameter) ?? true));
     }
 
     private static void OnDropDownToolTipChanged(
@@ -350,34 +417,29 @@ public partial class RibbonSplitButton : DropDownButton, IToggleButton
         var clone = new RibbonSplitButton
         {
             Size = RibbonControlSize.Small,
-            CanAddToQuickAccessToolBar = false,
-            ItemsSource = CreateQuickAccessItems()
+            CanAddToQuickAccessToolBar = false
         };
 
         BindQuickAccessItem(clone);
         BindOneWay(DropDownToolTipProperty);
         BindOneWay(IsCheckableProperty);
-        BindOneWay(IsButtonEnabledProperty);
+        BindPrimaryQuickAccessAvailability(clone);
         BindOneWay(IsDefinitiveProperty);
         BindTwoWay(IsCheckedProperty);
         BindQuickAccessItemDropDownEvents(clone);
-        clone.Click += (_, args) => ForwardQuickAccessPrimaryAction(args);
         return clone;
 
         void BindOneWay(DependencyProperty property) =>
-            RibbonControl.Synchronize(this, property, clone, property);
+            QuickAccessBindingSession.For(this, clone).Bind(property);
 
-        void BindTwoWay(DependencyProperty property)
-        {
-            RibbonControl.Synchronize(this, property, clone, property);
-            RibbonControl.Synchronize(clone, property, this, property);
-        }
+        void BindTwoWay(DependencyProperty property) =>
+            QuickAccessBindingSession.For(this, clone).Bind(property, twoWay: true);
     }
 
     /// <inheritdoc />
     public override KeyTipPressedResult OnKeyTipPressed()
     {
-        return base.OnKeyTipPressed();
+        return IsEnabled ? base.OnKeyTipPressed() : KeyTipPressedResult.Empty;
     }
 
     /// <inheritdoc />

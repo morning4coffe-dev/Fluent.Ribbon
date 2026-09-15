@@ -48,27 +48,43 @@ internal static class FlyoutShowHelper
     /// Shows <paramref name="flyout"/> anchored to <paramref name="target"/> at the supplied
     /// <paramref name="position"/> after the current input event has finished processing.
     /// </summary>
-    internal static void ShowDeferred(MenuFlyout? flyout, FrameworkElement? target, Windows.Foundation.Point position)
+    internal static void ShowDeferred(
+        MenuFlyout? flyout,
+        FrameworkElement? target,
+        Windows.Foundation.Point position,
+        Func<bool>? shouldShow = null)
     {
         if (flyout is null || target is null)
         {
             return;
         }
 
-        Defer(target, () => ShowIfStillLive(target, () => flyout.ShowAt(target, position)));
+        Defer(target, () =>
+        {
+            if (shouldShow?.Invoke() is not false)
+            {
+                ShowIfStillLive(target, () => flyout.ShowAt(target, position));
+            }
+        });
     }
 
     /// <summary>
     /// Opens <paramref name="popup"/> after the current input event has finished processing.
     /// </summary>
-    internal static void OpenDeferred(Popup? popup)
+    internal static void OpenDeferred(Popup? popup, Func<bool>? shouldOpen = null)
     {
         if (popup is null)
         {
             return;
         }
 
-        Defer(popup, () => popup.IsOpen = true);
+        Defer(popup, () =>
+        {
+            if (shouldOpen?.Invoke() is not false)
+            {
+                popup.IsOpen = true;
+            }
+        });
     }
 
     private static void Defer(DependencyObject context, Action show)

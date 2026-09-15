@@ -127,7 +127,7 @@ public sealed class AutomationEventWiringTests
         {
             AssertWiring<Ribbon>("OnIsMinimizedChanged", StaticNonPublic, "RaiseIsMinimizedChanged");
             AssertWiring<Backstage>("RaiseIsOpenAutomationEvent", InstanceNonPublic, "RaiseIsOpenChanged");
-            AssertWiring<StartScreen>("OnIsOpenChanged", StaticNonPublic, "RaiseIsOpenChanged");
+            AssertSharedStartScreenWiring();
             AssertWiring<RibbonDropDownButton>(
                 "OnIsDropDownOpenChanged",
                 StaticNonPublic,
@@ -141,9 +141,11 @@ public sealed class AutomationEventWiringTests
                 StaticNonPublic,
                 "RaiseIsDropDownOpenChanged");
             AssertWiring<RibbonTabControl>(
-                "OnIsDropDownOpenChanged",
-                StaticNonPublic,
+                "RaisePopupAutomationState",
+                InstanceNonPublic,
                 "RaiseSelectedTabExpandCollapseChanged");
+            AssertCalls<RibbonTabControl>("OnMinimizedPopupOpened", InstanceNonPublic, "RaisePopupAutomationState");
+            AssertCalls<RibbonTabControl>("OnMinimizedPopupClosed", InstanceNonPublic, "RaisePopupAutomationState");
             AssertWiring<RibbonTabControl>(
                 "OnIsMinimizedChanged",
                 StaticNonPublic,
@@ -185,6 +187,50 @@ public sealed class AutomationEventWiringTests
                 StaticNonPublic,
                 "RaiseValueChanged");
         });
+    }
+
+    [Test]
+    public void KeyTipEventHooksUseRegisteredInputRoutes()
+    {
+        AssertCalls<KeyTipService>("OnRootKeyDown", InstanceNonPublic, "ProcessKeyDown");
+        AssertCalls<KeyTipService>("OnRootKeyUp", InstanceNonPublic, "ProcessKeyUp");
+        AssertCalls<KeyTipService>("AttachInputRoot", InstanceNonPublic, "AddHandler");
+        AssertCalls<KeyTipService>("DetachInputRoot", InstanceNonPublic, "RemoveHandler");
+    }
+
+    private static void AssertSharedStartScreenWiring()
+    {
+        var property = typeof(StartScreen).GetProperty(
+            nameof(StartScreen.IsOpen),
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+        Assert.That(property, Is.Not.Null);
+        Assert.That(
+            GetReferencedMembers(property!.GetMethod!).OfType<MethodInfo>().Any(
+                method => method.DeclaringType == typeof(Backstage) && method.Name == "get_IsOpen"),
+            Is.True, "StartScreen must read the shared Backstage open state.");
+        Assert.That(
+            GetReferencedMembers(property.SetMethod!).OfType<MethodInfo>().Any(
+                method => method.DeclaringType == typeof(Backstage) && method.Name == "set_IsOpen"),
+            Is.True, "StartScreen must write through the shared Backstage state pipeline.");
+        AssertCalls<Backstage>("OnIsOpenChanged", StaticNonPublic, "RaiseIsOpenAutomationEvent");
+        var notification = typeof(Backstage).GetMethod("RaiseIsOpenAutomationEvent", InstanceNonPublic)!;
+        var calls = GetReferencedMembers(notification).OfType<MethodInfo>().ToArray();
+        Assert.That(calls.Any(method => method.DeclaringType == typeof(FrameworkElementAutomationPeer)
+                                        && method.Name == nameof(FrameworkElementAutomationPeer.FromElement)),
+            Is.True, "The shared callback must use an existing element peer.");
+        Assert.That(calls.Any(method => method.DeclaringType == typeof(RibbonStartScreenAutomationPeer)
+                                        && method.Name == "RaiseIsOpenChanged"),
+            Is.True, "The shared callback must notify the StartScreen peer, not only the Backstage peer.");
+        Assert.That(calls.Any(method => method.Name == nameof(FrameworkElementAutomationPeer.CreatePeerForElement)),
+            Is.False, "State notifications must not create automation peers.");
+    }
+
+    private static void AssertCalls<T>(string methodName, BindingFlags flags, string calledMethod)
+    {
+        var method = typeof(T).GetMethod(methodName, flags | BindingFlags.DeclaredOnly);
+        Assert.That(method, Is.Not.Null, $"{typeof(T).Name}.{methodName}");
+        Assert.That(GetReferencedMembers(method!).OfType<MethodInfo>().Any(call => call.Name == calledMethod),
+            Is.True, $"{typeof(T).Name}.{methodName} must call {calledMethod}.");
     }
 
     private static void AssertMethod<T>(string name, params Type[] parameterTypes)

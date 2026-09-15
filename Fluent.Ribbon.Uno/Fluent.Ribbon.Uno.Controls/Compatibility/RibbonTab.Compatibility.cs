@@ -148,7 +148,7 @@ public partial class RibbonTabItem
     /// <inheritdoc />
     protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
     {
-        if (IsContextual && Group?.Visibility == Visibility.Collapsed)
+        if (IsContextual && ActiveContextualGroup?.Visibility == Visibility.Collapsed)
         {
             return default;
         }
@@ -160,7 +160,7 @@ public partial class RibbonTabItem
     protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize)
     {
         var result = base.ArrangeOverride(finalSize);
-        Group?.UpdateInnerVisiblityAndGroupBorders();
+        ActiveContextualGroup?.UpdateInnerVisiblityAndGroupBorders();
         return result;
     }
 
@@ -168,7 +168,7 @@ public partial class RibbonTabItem
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        Group?.UpdateInnerVisiblityAndGroupBorders();
+        ActiveContextualGroup?.UpdateInnerVisiblityAndGroupBorders();
     }
 
     private void OnCompatibilityTapped(object sender, TappedRoutedEventArgs args)
@@ -225,11 +225,15 @@ public partial class RibbonTabItem
     {
         IsSelected = true;
 
-        if (TabControlParent is { IsMinimized: true } tabControl)
+        if (TabControlParent is { } tabControl)
         {
             tabControl.SelectedItem = this;
-            tabControl.IsDropDownOpen = true;
-            return new KeyTipPressedResult(true, true);
+            tabControl.RaiseRequestBackstageClose();
+            if (tabControl.IsMinimized)
+            {
+                tabControl.IsDropDownOpen = true;
+                return new KeyTipPressedResult(true, true);
+            }
         }
 
         return KeyTipPressedResult.Empty;

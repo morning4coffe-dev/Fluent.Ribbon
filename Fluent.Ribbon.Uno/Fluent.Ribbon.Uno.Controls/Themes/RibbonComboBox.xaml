@@ -45,7 +45,6 @@
                         x:Name="RootBorder"
                         Background="{TemplateBinding Background}"
                         Padding="{TemplateBinding Padding}">
-                        <Grid x:Name="LayoutRoot">
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal" />
@@ -57,8 +56,8 @@
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
-                                            <Setter Target="Background.Background" Value="{ThemeResource TextControlBackgroundPressed}" />
-                                            <Setter Target="Background.BorderBrush" Value="{ThemeResource TextControlBorderBrushPressed}" />
+                                            <Setter Target="Background.Background" Value="{ThemeResource ComboBoxBackgroundPressed}" />
+                                            <Setter Target="Background.BorderBrush" Value="{ThemeResource ComboBoxBorderBrushPressed}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
@@ -95,13 +94,11 @@
                                     <VisualState x:Name="Large">
                                         <VisualState.Setters>
                                             <Setter Target="GlyphIcon.FontSize" Value="16" />
-                                            <Setter Target="HeaderText.Visibility" Value="Visible" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Medium">
                                         <VisualState.Setters>
                                             <Setter Target="GlyphIcon.FontSize" Value="16" />
-                                            <Setter Target="HeaderText.Visibility" Value="Visible" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Small">
@@ -113,6 +110,7 @@
                                 </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
 
+                        <Grid x:Name="LayoutRoot">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -140,9 +138,11 @@
                                     VerticalAlignment="Center"
                                     Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
 
-                                <TextBlock
+                                <ContentPresenter
                                     x:Name="HeaderText"
-                                    Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                    Tag="Fluent.EditorHeader"
+                                    Content="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                    ContentTemplate="{TemplateBinding HeaderTemplate}"
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     VerticalAlignment="Center"
                                     FontSize="12"
@@ -222,7 +222,9 @@
                                     CornerRadius="{ThemeResource OverlayCornerRadius}"
                                     Margin="0,-0.5,0,-1"
                                     Padding="{ThemeResource ComboBoxDropdownBorderPadding}">
-                                    <ContentControl
+                                    <fluent:ResizeableContentControl
+                                        x:Name="PART_PopupContentControl"
+                                        ResizeMode="{TemplateBinding ResizeMode}"
                                         HorizontalContentAlignment="Stretch"
                                         VerticalContentAlignment="Stretch">
                                         <Grid>
@@ -239,7 +241,6 @@
                                             <ScrollViewer
                                                 x:Name="ScrollViewer"
                                                 Grid.Row="1"
-                                                MaxHeight="{Binding DropDownHeight, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NaNFallbackConverter}, ConverterParameter=300}"
                                                 Foreground="{ThemeResource ComboBoxDropDownForeground}"
                                                 MinWidth="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=TemplateSettings.DropDownContentMinWidth}"
                                                 HorizontalScrollMode="{TemplateBinding ScrollViewer.HorizontalScrollMode}"
@@ -252,10 +253,10 @@
                                             </ScrollViewer>
 
                                             <ContentPresenter
-                                                Grid.Row="2"
-                                                Content="{TemplateBinding Menu}" />
+                                                x:Name="PART_MenuPresenter"
+                                                Grid.Row="2" />
                                         </Grid>
-                                    </ContentControl>
+                                    </fluent:ResizeableContentControl>
                                 </Border>
                             </Popup>
                         </Grid>

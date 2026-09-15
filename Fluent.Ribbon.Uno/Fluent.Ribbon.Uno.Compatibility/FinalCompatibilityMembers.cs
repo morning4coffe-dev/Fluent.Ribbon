@@ -184,16 +184,9 @@ public partial class RadioButton
 
 public partial class TextBox
 {
-    private static readonly Func<DependencyProperty> NativeHeaderTemplatePropertyAccessor =
-        static () => Microsoft.UI.Xaml.Controls.TextBox.HeaderTemplateProperty;
-
     /// <summary>Identifies the WPF-compatible header template property.</summary>
     public new static readonly DependencyProperty HeaderTemplateProperty =
-        DependencyProperty.Register(
-            nameof(HeaderTemplate),
-            typeof(DataTemplate),
-            typeof(TextBox),
-            new PropertyMetadata(null, OnFinalHeaderTemplateChanged));
+        RibbonTextBox.HeaderTemplateProperty;
 
     /// <summary>Gets or sets the template used to display the header.</summary>
     public new DataTemplate? HeaderTemplate
@@ -203,15 +196,11 @@ public partial class TextBox
     }
 
     /// <summary>Identifies the WPF-compatible header template selector property.</summary>
-    public static readonly DependencyProperty HeaderTemplateSelectorProperty =
-        DependencyProperty.Register(
-            nameof(HeaderTemplateSelector),
-            typeof(DataTemplateSelector),
-            typeof(TextBox),
-            new PropertyMetadata(null, OnFinalHeaderTemplateSelectorChanged));
+    public new static readonly DependencyProperty HeaderTemplateSelectorProperty =
+        RibbonTextBox.HeaderTemplateSelectorProperty;
 
     /// <summary>Gets or sets the selector used to choose a header template.</summary>
-    public DataTemplateSelector? HeaderTemplateSelector
+    public new DataTemplateSelector? HeaderTemplateSelector
     {
         get => (DataTemplateSelector?)GetValue(HeaderTemplateSelectorProperty);
         set => SetValue(HeaderTemplateSelectorProperty, value);
@@ -220,33 +209,13 @@ public partial class TextBox
     /// <summary>Initializes a WPF-compatible text-box facade.</summary>
     public TextBox()
     {
-        RegisterPropertyChangedCallback(
-            RibbonTextBox.HeaderProperty,
-            static (sender, _) => ((TextBox)sender).ApplyFinalHeaderTemplateSelector());
     }
-
-    private static void OnFinalHeaderTemplateSelectorChanged(
-        DependencyObject sender,
-        DependencyPropertyChangedEventArgs args) =>
-        ((TextBox)sender).ApplyFinalHeaderTemplateSelector();
-
-    private static void OnFinalHeaderTemplateChanged(
-        DependencyObject sender,
-        DependencyPropertyChangedEventArgs args) =>
-        ((TextBox)sender).ApplyFinalHeaderTemplateSelector();
-
-    private void ApplyFinalHeaderTemplateSelector() =>
-        SetValue(
-            NativeHeaderTemplatePropertyAccessor(),
-            CompatibilityHeaderTemplateAdapter.Select(
-                HeaderTemplateSelector,
-                Header,
-                this,
-                HeaderTemplate));
 }
 
 public partial class ComboBox
 {
+    private ContentPresenter? finalHeaderPresenter;
+
     /// <summary>Identifies the WPF-compatible header template property.</summary>
     public new static readonly DependencyProperty HeaderTemplateProperty =
         DependencyProperty.Register(
@@ -332,6 +301,9 @@ public partial class ComboBox
             RibbonComboBox.HeaderProperty,
             static (sender, _) => ((ComboBox)sender).ApplyFinalHeaderTemplateSelector());
         RegisterPropertyChangedCallback(
+            Microsoft.UI.Xaml.Controls.ComboBox.HeaderTemplateProperty,
+            static (sender, _) => ((ComboBox)sender).ApplyFinalHeaderTemplateSelector());
+        RegisterPropertyChangedCallback(
             RibbonComboBox.TopPopupContentProperty,
             static (sender, _) => ((ComboBox)sender).ApplyFinalTopPopupPresentation());
     }
@@ -356,12 +328,18 @@ public partial class ComboBox
         DependencyPropertyChangedEventArgs args) =>
         ((RibbonComboBox)sender).Menu = (RibbonMenu?)args.NewValue;
 
-    private void ApplyFinalHeaderTemplateSelector() =>
-        base.HeaderTemplate = CompatibilityHeaderTemplateAdapter.Select(
-            HeaderTemplateSelector,
-            Header,
-            this,
-            HeaderTemplate);
+    private void ApplyFinalHeaderTemplateSelector()
+    {
+        if (finalHeaderPresenter is { } presenter)
+        {
+            CompatibilityHeaderTemplateAdapter.ApplyEditorHeader(
+                presenter,
+                HeaderTemplateSelector,
+                Header,
+                this,
+                HeaderTemplate ?? base.HeaderTemplate);
+        }
+    }
 
     private void ApplyFinalTopPopupPresentation()
     {
@@ -469,21 +447,49 @@ public partial class Spinner
     /// <summary>Initializes a WPF-compatible spinner facade.</summary>
     public Spinner()
     {
-        ValueChanged += (_, _) => ApplyFinalValueToEditor();
     }
 
     private static void OnFinalTextToValueConverterChanged(
         DependencyObject sender,
         DependencyPropertyChangedEventArgs args) =>
-        ((Spinner)sender).ApplyFinalValueToEditor();
+        ((Spinner)sender).UpdateTextBox();
 }
 
 internal static class CompatibilityHeaderTemplateAdapter
 {
+    internal static ContentPresenter? AttachEditorHeader(DependencyObject? part)
+    {
+        // Authored templates keep their own bindings unless they opt into the
+        // default editor's facade projection.
+        if (part is not ContentPresenter { Tag: "Fluent.EditorHeader" } presenter)
+        {
+            return null;
+        }
+
+        return presenter;
+    }
+
+    internal static void ApplyEditorHeader(
+        ContentPresenter presenter,
+        DataTemplateSelector? selector,
+        object? header,
+        DependencyObject container,
+        DataTemplate? template)
+    {
+        // WPF gives an explicit template priority. Select on the presentation part,
+        // not the native HeaderTemplate DP, so consumer bindings remain untouched.
+        var selectedTemplate = template ?? Select(selector, header, container, null);
+
+        // Uno preserves TemplatedParent bindings when ClearValue is called. Replace
+        // that binding so a later source notification cannot overwrite the selection.
+        EditorHeaderTemplateBinding.Apply(presenter, container, selectedTemplate);
+    }
+
     internal static DataTemplate? Select(
         DataTemplateSelector? selector,
         object? header,
         DependencyObject container,
         DataTemplate? fallback) =>
         selector?.SelectTemplate(header, container) ?? fallback;
+
 }

@@ -31,6 +31,8 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     private double _effectiveMaximum = double.MaxValue;
     private double _effectiveIncrement = 1.0;
     private bool _isCoercingDependencyValue;
+    private bool isCommittingText;
+    private string? formattedEditorText;
 
     #region Events
 
@@ -45,11 +47,7 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
     public new static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(RibbonSpinner),
-            new PropertyMetadata(null));
+        RibbonControl.HeaderProperty;
 
     /// <summary>
     /// Gets or sets the header/label of the spinner.
@@ -335,6 +333,10 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         DefaultStyleKey = typeof(RibbonSpinner);
         GettingFocus += OnRibbonSpinnerGettingFocus;
         GotFocus += OnRibbonSpinnerGotFocus;
+        foreach (var property in new[] { HeaderProperty, HeaderTemplateProperty, HeaderTemplateSelectorProperty })
+        {
+            RegisterPropertyChangedCallback(property, (_, _) => UpdateHeaderTemplate());
+        }
     }
 
     #endregion
@@ -373,6 +375,7 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         _upButton = GetTemplateChild(PART_UpButton) as WinUIButton;
         _downButton = GetTemplateChild(PART_DownButton) as WinUIButton;
         _headerText = GetTemplateChild("HeaderText") as FrameworkElement;
+        UpdateHeaderTemplate();
 
         if (_upButton is not null)
         {
@@ -446,6 +449,15 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
     }
 
     #region Methods
+
+    private void UpdateHeaderTemplate()
+    {
+        if (_headerText is ContentPresenter { Tag: "Fluent.EditorHeader" } presenter)
+        {
+            EditorHeaderTemplateBinding.Apply(
+                presenter, this, HeaderTemplate ?? HeaderTemplateSelector?.SelectTemplate(Header, this));
+        }
+    }
 
     private static void ConfigureImplementationButton(WinUIButton? button)
     {
@@ -666,27 +678,38 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
 
     private void OnTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Enter)
+        if (HandleEditorKeyDown(e.Key, e.Handled))
         {
-            ApplyTextBoxValue();
-            MoveFocusOffTextBox();
             e.Handled = true;
         }
-        else if (e.Key == Windows.System.VirtualKey.Up)
+    }
+
+    /// <summary>Handles editor keys through the same commit/cancel pipeline as focus loss.</summary>
+    protected virtual bool HandleEditorKeyDown(Windows.System.VirtualKey key, bool handled)
+    {
+        if (handled || !IsEnabled)
         {
-            Value = CoerceValue(Value + Increment);
-            e.Handled = true;
+            return false;
         }
-        else if (e.Key == Windows.System.VirtualKey.Down)
+
+        switch (key)
         {
-            Value = CoerceValue(Value - Increment);
-            e.Handled = true;
-        }
-        else if (e.Key == Windows.System.VirtualKey.Escape)
-        {
-            UpdateTextBox(); // Revert text to current value
-            MoveFocusOffTextBox();
-            e.Handled = true;
+            case Windows.System.VirtualKey.Enter:
+                ApplyTextBoxValue();
+                MoveFocusOffTextBox();
+                return true;
+            case Windows.System.VirtualKey.Up:
+                Value = CoerceValue(Value + Increment);
+                return true;
+            case Windows.System.VirtualKey.Down:
+                Value = CoerceValue(Value - Increment);
+                return true;
+            case Windows.System.VirtualKey.Escape:
+                UpdateTextBox();
+                MoveFocusOffTextBox();
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -726,15 +749,33 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
 
     private void ApplyTextBoxValue()
     {
-        if (_textBox is not null && TryParseValue(_textBox.Text, out var newValue))
+        if (isCommittingText || _textBox is null
+            || string.Equals(_textBox.Text, formattedEditorText, StringComparison.Ordinal))
         {
-            Value = CoerceValue(newValue);
+            return;
         }
 
-        // Always rewrite the text box from Value: on success this re-applies Format (so "42"
-        // becomes "42 px"), and on failure it reverts whatever invalid text the user typed.
-        UpdateTextBox();
+        var input = _textBox.Text;
+        isCommittingText = true;
+        try
+        {
+            if (TryConvertTextToValue(input, out var newValue) && double.IsFinite(newValue))
+            {
+                Value = CoerceValue(newValue);
+            }
+        }
+        finally
+        {
+            isCommittingText = false;
+            UpdateTextBox();
+        }
     }
+
+    /// <summary>Converts the original editor text before any formatting or value coercion.</summary>
+    protected virtual bool TryConvertTextToValue(string text, out double value) => TryParseValue(text, out value);
+
+    /// <summary>Formats the effective value for both the editor and the Text property.</summary>
+    protected virtual string FormatValue(double value) => value.ToString(Format, CultureInfo.CurrentCulture);
 
     /// <summary>
     /// Parses user input leniently, mirroring WPF's <c>SpinnerTextToValueConverter</c>:
@@ -889,7 +930,6 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         var oldValue = _effectiveValue;
         _effectiveValue = newValue;
         UpdateTextBox();
-        Text = newValue.ToString(Format);
         if (oldValue.Equals(newValue))
         {
             return;
@@ -943,7 +983,6 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         if (d is RibbonSpinner spinner)
         {
             spinner.UpdateTextBox();
-            spinner.Text = spinner.Value.ToString(spinner.Format);
         }
     }
 
@@ -955,11 +994,20 @@ public partial class RibbonSpinner : RibbonControl, IScalableRibbonControl, IMed
         }
     }
 
-    private void UpdateTextBox()
+    /// <summary>Refreshes formatted text, deferring refresh until an active commit completes.</summary>
+    protected void UpdateTextBox()
     {
-        if (_textBox is not null)
+        if (isCommittingText)
         {
-            _textBox.Text = Value.ToString(Format);
+            return;
+        }
+
+        var text = FormatValue(Value);
+        formattedEditorText = text;
+        Text = text;
+        if (_textBox is not null && !string.Equals(_textBox.Text, text, StringComparison.Ordinal))
+        {
+            _textBox.Text = text;
         }
     }
 

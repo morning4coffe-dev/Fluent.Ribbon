@@ -7,13 +7,23 @@ using WinUIButton = Microsoft.UI.Xaml.Controls.Button;
 /// </summary>
 [ContentProperty(Name = nameof(Items))]
 [TemplatePart(Name = PART_Button, Type = typeof(WinUIButton))]
+#if WINDOWS
+[TemplatePart(Name = "PART_ItemsOwner", Type = typeof(Panel))]
+[TemplatePart(Name = "ItemsPresenter", Type = typeof(ItemsPresenter))]
+[TemplatePart(Name = "PART_Popup", Type = typeof(Popup))]
+[TemplatePart(Name = "PART_PopupContentControl", Type = typeof(ResizeableContentControl))]
+[TemplatePart(Name = "PART_ScrollViewer", Type = typeof(ScrollViewer))]
+[TemplatePart(Name = "PART_PopupItemsPanel", Type = typeof(Panel))]
+#endif
 public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScalableRibbonControl, ILargeIconProvider, IMediumIconProvider, ISimplifiedRibbonControl, IDropDownControl
 {
     private const string PART_Button = "PART_Button";
 
     private WinUIButton? _button;
     private ButtonPointerClickFallback? _buttonClickFallback;
+#if !WINDOWS
     private Flyout? _flyout;
+#endif
     private bool _isPointerOver;
     private bool _isPressed;
 
@@ -284,10 +294,19 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     /// <summary>
     /// Gets or sets the initial drop down height.
     /// </summary>
+    /// <remarks>Assigning this property again resets a user-resized popup to the requested initial height.</remarks>
     public double DropDownHeight
     {
         get => (double)GetValue(DropDownHeightProperty);
-        set => SetValue(DropDownHeightProperty, value);
+        set
+        {
+            var unchanged = DropDownHeight.Equals(value);
+            SetValue(DropDownHeightProperty, value);
+            if (unchanged)
+            {
+                ApplyPopupDimensions(resetHeight: true);
+            }
+        }
     }
 
     /// <summary>Identifies the <see cref="ClosePopupOnMouseDown"/> dependency property.</summary>
@@ -318,10 +337,11 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     /// <summary>
     /// Gets or sets the delay in milliseconds before auto-closing the popup on mouse down.
     /// </summary>
+    /// <remarks>The supplied value is retained; the effective minimum delay is 100 ms.</remarks>
     public int ClosePopupOnMouseDownDelay
     {
         get => (int)GetValue(ClosePopupOnMouseDownDelayProperty);
-        set => SetValue(ClosePopupOnMouseDownDelayProperty, Math.Max(100, value));
+        set => SetValue(ClosePopupOnMouseDownDelayProperty, value);
     }
 
     /// <summary>Identifies the <see cref="IsSimplified"/> dependency property.</summary>
@@ -401,6 +421,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         RegisterPropertyChangedCallback(
             ItemsControl.ItemsSourceProperty,
             static (sender, _) => ((RibbonDropDownButton)sender).ResetFlyout());
+        InitializePopupOptions();
         QuickAccessHelper.AttachContextMenu(this);
 
         // RibbonDropDownButton derives from ItemsControl, which — unlike ButtonBase —
@@ -439,6 +460,7 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
 
         if (_button is not null)
         {
+            var target = _button;
             _button.IsTabStop = false;
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
                 _button,
@@ -448,6 +470,11 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
                 _button,
                 () =>
                 {
+                    if (!IsLoaded || !IsEnabled || !ReferenceEquals(_button, target))
+                    {
+                        return;
+                    }
+
                     Focus(FocusState.Pointer);
                     ToggleDropDown();
                 });
@@ -499,119 +526,14 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
             return;
         }
 
-        if (_flyout is null)
+#if WINDOWS
+        if (_nativeMenuPopupSource is { } menu)
         {
-            var panel = new StackPanel { MinWidth = 200 };
-
-            // Optional menu header
-            if (!string.IsNullOrEmpty(MenuHeader))
-            {
-                panel.Children.Add(new TextBlock
-                {
-                    Text = MenuHeader,
-                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                    FontSize = 12,
-                    Margin = new Thickness(12, 8, 12, 4),
-                });
-
-                panel.Children.Add(new Rectangle
-                {
-                    Height = 1,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    Margin = new Thickness(0, 2, 0, 4),
-                });
-            }
-
-            // Gallery section
-            if (Gallery is not null)
-            {
-                panel.Children.Add(Gallery);
-
-                panel.Children.Add(new Rectangle
-                {
-                    Height = 1,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    Margin = new Thickness(0, 4, 0, 4),
-                });
-            }
-
-            var dropDownItems = ItemsSource is System.Collections.IEnumerable source
-                ? source.Cast<object>().ToArray()
-                : Items.Cast<object>().ToArray();
-            foreach (var item in dropDownItems.OfType<IDropDownItemOwner>())
-            {
-                item.SetDropDownOwner(this);
-            }
-
-            foreach (var colorGallery in dropDownItems.OfType<ColorGallery>())
-            {
-                Fluent.Helpers.TouchTargetGeometry.PropagateCompactTargetSize(
-                    this,
-                    colorGallery);
-                colorGallery.RefreshTouchTargetGeometry();
-            }
-
-            var itemsHost = new ItemsControl
-            {
-                ItemsSource = dropDownItems,
-                ItemTemplate = ItemTemplate,
-                ItemTemplateSelector = ItemTemplateSelector,
-                ItemContainerStyle = ItemContainerStyle,
-                ItemsPanel = ItemsPanel,
-                FlowDirection = FlowDirection,
-            };
-            panel.Children.Add(itemsHost);
-
-            // Apply height constraints
-            if (!double.IsNaN(DropDownHeight))
-            {
-                var scrollViewer = new ScrollViewer
-                {
-                    Content = panel,
-                    Height = DropDownHeight,
-                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                };
-                _flyout = new Flyout
-                {
-                    Content = scrollViewer,
-                    Placement = FlyoutPlacementMode.Bottom,
-                };
-            }
-            else
-            {
-                if (!double.IsNaN(MaxDropDownHeight))
-                {
-                    panel.MaxHeight = MaxDropDownHeight;
-                }
-
-                _flyout = new Flyout
-                {
-                    Content = panel,
-                    Placement = FlyoutPlacementMode.Bottom,
-                };
-            }
-
-            _flyout.Opened += (s, e) =>
-            {
-                PopupDiag.Log($"RibbonDropDownButton Flyout Opened (Header={Header})");
-                IsDropDownOpen = true;
-                RaiseDropDownOpened();
-            };
-
-            _flyout.Closed += (s, e) =>
-            {
-                PopupDiag.Log($"RibbonDropDownButton Flyout Closed (Header={Header})");
-                IsDropDownOpen = false;
-                RaiseDropDownClosed();
-            };
+            menu.ShowNativeQuickAccessPopup(this);
+            return;
         }
-
-        var requestedFlyout = _flyout;
-        PopupDiag.Log($"RibbonDropDownButton.ShowDropDown -> ShowDeferred (Header={Header})");
-        FlyoutShowHelper.ShowDeferred(
-            requestedFlyout,
-            (FrameworkElement?)_button ?? this,
-            () => IsDropDownOpen && ReferenceEquals(_flyout, requestedFlyout));
+#endif
+        (_sharedQuickAccessSource ?? this).ShowSharedPopup(this);
     }
 
     internal void OpenDropDownForAutomation() => ShowDropDown();
@@ -644,6 +566,19 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
         DependencyPropertyChangedEventArgs args)
     {
         var button = (RibbonDropDownButton)sender;
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(button)
+            is Fluent.Automation.Peers.RibbonDropDownButtonAutomationPeer peer)
+        {
+            peer.RaiseIsDropDownOpenChanged(
+                (bool)args.OldValue,
+                (bool)args.NewValue);
+        }
+
+        if (button.IsDropDownOpen != (bool)args.NewValue)
+        {
+            return;
+        }
+
         if ((bool)args.NewValue)
         {
             PopupService.RegisterOpenDropDown(button);
@@ -658,13 +593,6 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
             button.HideDropDownPopup();
         }
 
-        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(button)
-            is Fluent.Automation.Peers.RibbonDropDownButtonAutomationPeer peer)
-        {
-            peer.RaiseIsDropDownOpenChanged(
-                (bool)args.OldValue,
-                (bool)args.NewValue);
-        }
     }
 
     /// <summary>
@@ -673,13 +601,26 @@ public partial class RibbonDropDownButton : ItemsControl, IRibbonControl, IScala
     /// </summary>
     private protected virtual void HideDropDownPopup()
     {
-        _flyout?.Hide();
+#if WINDOWS
+        if (_nativeMenuPopupSource is { } menu)
+        {
+            CancelMouseDownClose();
+            menu.HideNativeQuickAccessPopup(this);
+            return;
+        }
+#endif
+        (_sharedQuickAccessSource ?? this).HideSharedPopup(this);
+
+        if (IsDropDownOpen && IsLoaded && !_flyoutIsOpen && !_flyoutIsClosing)
+        {
+            ShowDropDown();
+        }
     }
 
     private void ResetFlyout()
     {
-        _flyout?.Hide();
-        _flyout = null;
+        ObservePopupItems();
+        RefreshPopupPresentation();
     }
 
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

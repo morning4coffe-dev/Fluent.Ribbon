@@ -11,12 +11,20 @@ public partial class Gallery
     /// <inheritdoc />
     protected override DependencyObject GetContainerForItemOverride()
     {
+#if WINDOWS
+        return GetNativeGalleryContainer() ?? new GalleryItem();
+#else
         return new GalleryItem();
+#endif
     }
 
     /// <inheritdoc />
     protected override bool IsItemItsOwnContainerOverride(object item)
     {
-        return item is GalleryItem or RibbonGalleryItem;
+#if WINDOWS
+        return base.IsItemItsOwnContainerOverride(item);
+#else
+        return item is UIElement;
+#endif
     }
 }

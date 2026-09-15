@@ -19,6 +19,12 @@ public partial class RibbonGallery : ListBox
 
     #region Dependency Properties
 
+    /// <summary>Identifies whether the gallery contains any items.</summary>
+    public static readonly DependencyProperty HasItemsProperty = Fluent.Helpers.ItemsControlBinding.HasItemsProperty;
+
+    /// <summary>Gets whether the gallery contains any items.</summary>
+    public bool HasItems => (bool)GetValue(HasItemsProperty);
+
     /// <summary>Identifies the <see cref="Items"/> dependency property.</summary>
     public static readonly DependencyProperty ItemsProperty =
         DependencyProperty.Register(
@@ -32,17 +38,17 @@ public partial class RibbonGallery : ListBox
     /// </summary>
     public new ObservableCollection<UIElement> Items
     {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        get
+        {
+            itemsBinding?.RefreshUnnotifiedNativeItems();
+            return (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        }
         private set => SetValue(ItemsProperty, value);
     }
 
     /// <summary>Identifies the <see cref="ItemsSource"/> dependency property.</summary>
     public new static readonly DependencyProperty ItemsSourceProperty =
-        DependencyProperty.Register(
-            nameof(ItemsSource),
-            typeof(IEnumerable),
-            typeof(RibbonGallery),
-            new PropertyMetadata(null, OnItemsSourceChanged));
+        ItemsControl.ItemsSourceProperty;
 
     /// <summary>
     /// Gets or sets the data source for gallery items.
@@ -55,11 +61,7 @@ public partial class RibbonGallery : ListBox
 
     /// <summary>Identifies the <see cref="ItemTemplate"/> dependency property.</summary>
     public new static readonly DependencyProperty ItemTemplateProperty =
-        DependencyProperty.Register(
-            nameof(ItemTemplate),
-            typeof(DataTemplate),
-            typeof(RibbonGallery),
-            new PropertyMetadata(null));
+        ItemsControl.ItemTemplateProperty;
 
     /// <summary>
     /// Gets or sets the data template used to display each item.
@@ -83,7 +85,11 @@ public partial class RibbonGallery : ListBox
     /// </summary>
     public new object? SelectedItem
     {
-        get => GetValue(SelectedItemProperty);
+        get
+        {
+            itemsBinding?.RefreshUnnotifiedNativeItems();
+            return GetValue(SelectedItemProperty);
+        }
         set => SetValue(SelectedItemProperty, value);
     }
 
@@ -100,7 +106,11 @@ public partial class RibbonGallery : ListBox
     /// </summary>
     public new int SelectedIndex
     {
-        get => (int)GetValue(SelectedIndexProperty);
+        get
+        {
+            itemsBinding?.RefreshUnnotifiedNativeItems();
+            return (int)GetValue(SelectedIndexProperty);
+        }
         set => SetValue(SelectedIndexProperty, value);
     }
 
@@ -212,7 +222,7 @@ public partial class RibbonGallery : ListBox
             nameof(GroupBy),
             typeof(string),
             typeof(RibbonGallery),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnGroupingChanged));
 
     /// <summary>
     /// Gets or sets the property name used to group items.
@@ -229,7 +239,7 @@ public partial class RibbonGallery : ListBox
             nameof(IsGrouped),
             typeof(bool),
             typeof(RibbonGallery),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnGroupingChanged));
 
     /// <summary>
     /// Gets or sets whether items are displayed in groups.
@@ -332,15 +342,22 @@ public partial class RibbonGallery : ListBox
     /// <summary>
     /// Occurs when the selected item changes.
     /// </summary>
-    public new event EventHandler<object?>? SelectionChanged;
+    public new event SelectionChangedEventHandler? SelectionChanged;
 
     #endregion
 
     #region Constructor
 
     private readonly Dictionary<RibbonGalleryItem, long> _selectionTokens = new();
+    private readonly Dictionary<RibbonGalleryItem, long> _groupTokens = new();
     private readonly HashSet<UIElement> _hookedItems = new();
+    private readonly Fluent.Helpers.ItemsControlBinding itemsBinding;
     private bool _isSynchronizingSelection;
+    private UIElement? selectedContainer;
+    private object? selectedValue;
+    private UIElement? notifiedSelectionContainer;
+    private object? notifiedSelectionValue;
+    private int selectionVersion;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonGallery"/> class.
@@ -349,10 +366,24 @@ public partial class RibbonGallery : ListBox
     {
         DefaultStyleKey = typeof(RibbonGallery);
         IsTabStop = false;
-        Items = new ObservableCollection<UIElement>();
-        Items.CollectionChanged += OnItemsChanged;
+        Items = Fluent.Helpers.ItemsControlBinding.CreateItems(this);
+        itemsBinding = new Fluent.Helpers.ItemsControlBinding(
+            this, Items,
+#if WINDOWS
+            IsCanonicalGalleryContainer, CreateCanonicalGalleryContainer,
+            PrepareContainerForItemOverride, ClearCanonicalGalleryContainer,
+#else
+            IsItemItsOwnContainerOverride, GetContainerForItemOverride,
+            PrepareContainerForItemOverride, ClearContainerForItemOverride,
+#endif
+            OnItemsChanged);
+#if WINDOWS
+        InitializeNativeGallery();
+#endif
         Filters = new ObservableCollection<GalleryGroupFilter>();
         Filters.CollectionChanged += OnFiltersChanged;
+        Loaded += OnGalleryLoaded;
+        Unloaded += OnGalleryUnloaded;
         RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
@@ -361,40 +392,126 @@ public partial class RibbonGallery : ListBox
     #region Item Container
 
     /// <summary>Creates a gallery item container for data items.</summary>
+#if WINDOWS
+    protected override DependencyObject GetContainerForItemOverride()
+    {
+        return GetNativeGalleryContainer() ?? new RibbonGalleryItem();
+    }
+#else
     protected override DependencyObject GetContainerForItemOverride() => new RibbonGalleryItem();
+#endif
 
-    /// <summary>Returns whether an item is already a gallery item container.</summary>
-    protected override bool IsItemItsOwnContainerOverride(object item) => item is RibbonGalleryItem;
+    /// <summary>Preserves directly authored UI elements as their own containers.</summary>
+#if WINDOWS
+    protected override bool IsItemItsOwnContainerOverride(object item)
+    {
+        if (!creatingCanonicalGalleryContainer && itemsBinding is { UsesNativeGenerator: true })
+        {
+            nativeContainerItem = item is ListBoxItem ? null : item;
+            hasNativeContainerItem = item is not ListBoxItem;
+            return item is ListBoxItem;
+        }
+        return item is UIElement;
+    }
+#else
+    protected override bool IsItemItsOwnContainerOverride(object item) => item is UIElement;
+#endif
+
+    /// <inheritdoc />
+#if WINDOWS
+    protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
+    {
+        if (!ReferenceEquals(element, item) && item is UIElement && element is ListBoxItem nativeContainer)
+        {
+            nativeContainer.Content = item;
+            return;
+        }
+        Fluent.Helpers.ItemsControlBinding.PrepareContent(this, element, item);
+    }
+#else
+    protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
+        => Fluent.Helpers.ItemsControlBinding.PrepareContent(this, element, item);
+#endif
+
+    /// <inheritdoc />
+#if WINDOWS
+    protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+    {
+        if (!clearingCanonicalGalleryContainer && itemsBinding is { UsesNativeGenerator: true }
+            && itemsBinding.ReleaseNativeContainer(element))
+        {
+            return;
+        }
+        Fluent.Helpers.ItemsControlBinding.ClearContent(element, item);
+    }
+#else
+    protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+        => Fluent.Helpers.ItemsControlBinding.ClearContent(element, item);
+#endif
+
+    /// <summary>Returns the live gallery container for a source item.</summary>
+    public new DependencyObject? ContainerFromItem(object item) => itemsBinding.ContainerFromItem(item);
+
+    /// <summary>Returns the live gallery container at an item index.</summary>
+    public new DependencyObject? ContainerFromIndex(int index) => itemsBinding.ContainerFromIndex(index);
+
+    /// <summary>Returns the source item represented by a live gallery container.</summary>
+    public new object? ItemFromContainer(DependencyObject container) => itemsBinding.ItemFromContainer(container);
+
+    /// <summary>Returns the index of a live gallery container.</summary>
+    public new int IndexFromContainer(DependencyObject container) => itemsBinding.IndexFromContainer(container);
+
+    internal object? GetSelectionValue(UIElement container) => itemsBinding.ItemFromContainer(container);
+
+    internal UIElement? FindSelectionContainer(object? value)
+    {
+        if (selectedContainer is not null
+            && Items.Contains(selectedContainer)
+            && ReferenceEquals(GetSelectionValue(selectedContainer), value))
+        {
+            return selectedContainer;
+        }
+
+        if (value is UIElement element && Items.Contains(element))
+        {
+            return element;
+        }
+
+        return value is null ? null : itemsBinding.ContainerFromItem(value);
+    }
 
     #endregion
 
     #region Template
 
     private ScrollViewer? _scrollViewer;
+#if !WINDOWS
     private UniformItemsPanel? _itemsPanel;
     private StackPanel? _groupedPanel;
+#endif
     private StackPanel? _filterButtons;
     private TextBlock? _filterLabel;
+#if !WINDOWS
     private readonly List<(string Group, FrameworkElement? Header, UIElement Panel)> _groupEntries = new();
+#endif
 
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
+        DetachItemsFromPanels();
         base.OnApplyTemplate();
 
         _scrollViewer = GetTemplateChild("PART_ScrollViewer") as ScrollViewer;
+#if !WINDOWS
         _itemsPanel = GetTemplateChild("PART_ItemsPanel") as UniformItemsPanel;
         _groupedPanel = GetTemplateChild("PART_GroupedPanel") as StackPanel;
+#endif
         _filterButtons = GetTemplateChild("PART_FilterButtons") as StackPanel;
         _filterLabel = GetTemplateChild(PART_FilterLabel) as TextBlock;
+#if WINDOWS
+        ApplyNativeGalleryTemplate();
+#endif
         RefreshLocalizedTemplateMetadata();
-
-        // Re-sync live children on load/unload so items are never orphaned between panels
-        // (a UIElement can only live under one parent at a time).
-        Loaded -= OnGalleryLoaded;
-        Unloaded -= OnGalleryUnloaded;
-        Loaded += OnGalleryLoaded;
-        Unloaded += OnGalleryUnloaded;
 
         SyncItems();
         SyncFilters();
@@ -413,34 +530,38 @@ public partial class RibbonGallery : ListBox
 
     private void OnGalleryLoaded(object? sender, RoutedEventArgs e)
     {
-        try
-        {
-            SyncItems();
-        }
-        catch
-        {
-            // Swallow any exceptions during load to avoid crashing the app at this point.
-        }
+        SyncItems();
+        UpdateItemTabStops();
     }
 
     private void OnGalleryUnloaded(object? sender, RoutedEventArgs e)
     {
-        try
+        DetachItemsFromPanels();
+    }
+
+    private void DetachItemsFromPanels()
+    {
+#if WINDOWS
+        // The native generator alone removes its children, including during unload/retemplate.
+        DetachNativeGalleryTemplate();
+#else
+        _itemsPanel?.Children.Clear();
+        foreach (var (_, _, panel) in _groupEntries)
         {
-            // Detach the live children so a subsequent reload can re-parent them cleanly.
-            _itemsPanel?.Children.Clear();
+            if (panel is Panel itemsPanel)
+            {
+                itemsPanel.Children.Clear();
+            }
         }
-        catch
-        {
-            // Ignore any errors during unload.
-        }
+#endif
     }
 
     #endregion
 
     #region Methods
 
-    private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    /// <summary>Reconciles gallery containers and selection after an item change.</summary>
+    protected virtual void OnItemsChanged(NotifyCollectionChangedEventArgs e)
     {
         foreach (var item in _hookedItems.Where(item => !Items.Contains(item)).ToList())
         {
@@ -448,59 +569,25 @@ public partial class RibbonGallery : ListBox
             UnhookItem(item);
         }
 
-        if (e.OldItems is not null)
+        foreach (var item in Items)
         {
-            foreach (var item in e.OldItems.OfType<UIElement>())
-            {
-                if (!Items.Contains(item))
-                {
-                    ResetRemovedItem(item);
-                    UnhookItem(item);
-                }
-            }
+            HookItem(item);
         }
 
-        if (e.NewItems is not null)
+        var selection = selectedContainer;
+        if (selection is not null && !Items.Contains(selection))
         {
-            foreach (var item in e.NewItems.OfType<UIElement>())
-            {
-                HookItem(item);
-            }
+            selection = Items.FirstOrDefault(item => ReferenceEquals(GetSelectionValue(item), selectedValue));
         }
 
-        if (SelectedItem is UIElement selected)
+        if (selection is null && selectedContainer is null)
         {
-            if (Items.Contains(selected))
-            {
-                var selectedIndex = Items.IndexOf(selected);
-                if (SelectedIndex != selectedIndex)
-                {
-                    SelectedIndex = selectedIndex;
-                }
-            }
-            else
-            {
-                SelectedItem = null;
-            }
-        }
-        else
-        {
-            var preselectedItem = Items
+            selection = Items
                 .OfType<RibbonGalleryItem>()
-                .FirstOrDefault(item => item.IsSelected);
-            if (preselectedItem is not null && !SelectItem(preselectedItem))
-            {
-                ResetRemovedItem(preselectedItem);
-            }
+                .FirstOrDefault(item => item.IsSelected && IsEnabled && item.IsEnabled);
         }
 
-        foreach (var item in Items
-                     .OfType<RibbonGalleryItem>()
-                     .Where(item => item.IsSelected && !ReferenceEquals(item, SelectedItem)))
-        {
-            ResetRemovedItem(item);
-        }
-
+        SetSelection(Selectable ? selection : null);
         SyncItems();
         UpdateItemTabStops();
     }
@@ -512,6 +599,7 @@ public partial class RibbonGallery : ListBox
             return;
         }
 
+        var wasSynchronizing = _isSynchronizingSelection;
         _isSynchronizingSelection = true;
         try
         {
@@ -519,7 +607,7 @@ public partial class RibbonGallery : ListBox
         }
         finally
         {
-            _isSynchronizingSelection = false;
+            _isSynchronizingSelection = wasSynchronizing;
         }
     }
 
@@ -541,6 +629,9 @@ public partial class RibbonGallery : ListBox
             _selectionTokens[selectableItem] = selectableItem.RegisterPropertyChangedCallback(
                 RibbonGalleryItem.IsSelectedProperty,
                 OnGalleryItemIsSelectedChanged);
+            _groupTokens[selectableItem] = selectableItem.RegisterPropertyChangedCallback(
+                RibbonGalleryItem.GroupProperty,
+                OnGalleryItemGroupChanged);
         }
     }
 
@@ -565,6 +656,11 @@ public partial class RibbonGallery : ListBox
                     RibbonGalleryItem.IsSelectedProperty,
                     token);
             }
+
+            if (_groupTokens.Remove(galleryItem, out var groupToken))
+            {
+                galleryItem.UnregisterPropertyChangedCallback(RibbonGalleryItem.GroupProperty, groupToken);
+            }
         }
     }
 
@@ -578,7 +674,14 @@ public partial class RibbonGallery : ListBox
 
     private void OnGalleryItemIsSelectedChanged(DependencyObject sender, DependencyProperty property)
     {
-        if (_isSynchronizingSelection || sender is not RibbonGalleryItem item)
+        if (itemsBinding.IsUpdating || sender is not RibbonGalleryItem item || !Items.Contains(item))
+        {
+            return;
+        }
+
+        // Only ignore the state being applied by SetSelection. A callback can make a
+        // conflicting request; the selection version then retires the interrupted update.
+        if (_isSynchronizingSelection && item.IsSelected == ReferenceEquals(selectedContainer, item))
         {
             return;
         }
@@ -587,20 +690,24 @@ public partial class RibbonGallery : ListBox
         {
             if (!SelectItem(item))
             {
-                _isSynchronizingSelection = true;
-                item.IsSelected = false;
-                _isSynchronizingSelection = false;
+                ResetRemovedItem(item);
             }
         }
-        else if (ReferenceEquals(SelectedItem, item))
+        else if (ReferenceEquals(selectedContainer, item))
         {
-            SelectedItem = null;
+            SetSelection(null);
         }
     }
 
+    private void OnGalleryItemGroupChanged(DependencyObject sender, DependencyProperty property) => SyncItems();
+
     private void SyncItems()
     {
-        if (_groupedPanel is null || _itemsPanel is null)
+#if WINDOWS
+        SyncNativeGallery();
+#else
+        if (itemsBinding is null || itemsBinding.IsUpdating || itemsBinding.IsSuspended
+            || _groupedPanel is null || _itemsPanel is null)
         {
             return;
         }
@@ -612,7 +719,7 @@ public partial class RibbonGallery : ListBox
         // removed from the tree. Detaching an item from a panel that has already been removed from
         // the visual tree leaves the item's native peer in a state where re-adding it elsewhere
         // throws COMException (0x800F1000) on the WinUI3 head, so the ordering here matters.
-        _itemsPanel.Children.Clear();
+        DetachItemsFromPanels();
         foreach (var item in Items)
         {
             DetachFromParent(item);
@@ -647,8 +754,10 @@ public partial class RibbonGallery : ListBox
 
             ApplyFilter();
         }
+#endif
     }
 
+#if !WINDOWS
     // A UIElement can only have a single parent; moving items between the flat and group panels
     // requires first detaching from whichever panel currently owns them. On the native WinUI head the
     // logical Parent reads null for elements hosted directly in a Panel's Children, so the host is
@@ -757,11 +866,16 @@ public partial class RibbonGallery : ListBox
 
         ApplyGroupFilter();
     }
+#endif
 
     // Toggles the visibility of each built group (header + items panel) to match the active filter,
     // without re-parenting any live item elements.
     private void ApplyGroupFilter()
     {
+#if WINDOWS
+        ApplyFilter();
+        SyncNativeGallery();
+#else
         var allowedGroups = GetAllowedGroupNames();
 
         foreach (var (groupName, header, panel) in _groupEntries)
@@ -780,6 +894,7 @@ public partial class RibbonGallery : ListBox
 
             panel.Visibility = visibility;
         }
+#endif
     }
 
     private void ApplyFilter()
@@ -814,6 +929,15 @@ public partial class RibbonGallery : ListBox
                    ?.ToString()
                ?? string.Empty;
     }
+
+#if WINDOWS
+    internal UIElement GetNativeGalleryItem(UIElement container)
+        => container is ListBoxItem { Content: UIElement item } && !Items.Contains(container)
+            ? item
+            : container;
+
+    internal string GetNativeGalleryGroup(UIElement item) => GetItemGroup(GetNativeGalleryItem(item));
+#endif
 
     private HashSet<string>? GetAllowedGroupNames()
     {
@@ -906,13 +1030,16 @@ public partial class RibbonGallery : ListBox
         if (d is RibbonGallery gallery)
         {
             var index = (int)e.NewValue;
-            var item = index >= 0 && index < gallery.Items.Count
+            if (gallery._isSynchronizingSelection
+                && index == (gallery.selectedContainer is null ? -1 : gallery.Items.IndexOf(gallery.selectedContainer)))
+            {
+                return;
+            }
+
+            var container = gallery.Selectable && index >= 0 && index < gallery.Items.Count
                 ? gallery.Items[index]
                 : null;
-            if (!ReferenceEquals(gallery.SelectedItem, item))
-            {
-                gallery.SelectedItem = item;
-            }
+            gallery.SetSelection(container);
         }
     }
 
@@ -920,47 +1047,92 @@ public partial class RibbonGallery : ListBox
     {
         if (d is RibbonGallery gallery && !(bool)e.NewValue)
         {
-            gallery.SelectedItem = null;
+            gallery.SetSelection(null);
         }
     }
 
     private void HandleSelectedItemChanged(object? oldValue, object? newValue)
     {
-        if (newValue is not null
-            && (!Selectable || newValue is not UIElement element || !Items.Contains(element)))
+        if (_isSynchronizingSelection && ReferenceEquals(newValue, selectedValue))
         {
-            SelectedItem = null;
             return;
         }
 
-        var newIndex = newValue is UIElement selected ? Items.IndexOf(selected) : -1;
-        if (SelectedIndex != newIndex)
+        var container = newValue is null ? null : FindSelectionContainer(newValue);
+        if (newValue is not null && (!Selectable || container is null))
         {
-            SelectedIndex = newIndex;
+            // An item that is not in the view cannot replace the current selection.
+            SetSelection(selectedContainer);
+            return;
         }
 
+        SetSelection(container);
+    }
+
+    private void SetSelection(UIElement? container)
+    {
+        var version = ++selectionVersion;
+        var newValue = container is null ? null : GetSelectionValue(container);
+        selectedContainer = container;
+        selectedValue = newValue;
+        var wasSynchronizing = _isSynchronizingSelection;
         _isSynchronizingSelection = true;
         try
         {
-            foreach (var item in Items.OfType<RibbonGalleryItem>())
+            SelectedItem = newValue;
+            if (version != selectionVersion)
             {
-                item.IsSelected = ReferenceEquals(item, newValue);
+                return;
+            }
+
+            SelectedIndex = container is null ? -1 : Items.IndexOf(container);
+            if (version != selectionVersion)
+            {
+                return;
+            }
+
+            foreach (var item in Items.OfType<RibbonGalleryItem>().ToArray())
+            {
+                item.IsSelected = ReferenceEquals(item, container);
+                if (version != selectionVersion)
+                {
+                    return;
+                }
             }
         }
         finally
         {
-            _isSynchronizingSelection = false;
+            _isSynchronizingSelection = wasSynchronizing;
         }
 
         UpdateItemTabStops();
+        if (version != selectionVersion)
+        {
+            return;
+        }
+
+        var oldContainer = notifiedSelectionContainer;
+        var oldValue = notifiedSelectionValue;
+        if (ReferenceEquals(oldContainer, container) && ReferenceEquals(oldValue, newValue))
+        {
+            return;
+        }
+
+        notifiedSelectionContainer = container;
+        notifiedSelectionValue = newValue;
         if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
             is Fluent.Automation.Peers.RibbonGalleryAutomationPeer peer)
         {
-            peer.RaiseSelectionChanged(oldValue as UIElement, newValue as UIElement);
+            peer.RaiseSelectionChanged(oldContainer, container);
         }
 
-        SelectionChanged?.Invoke(this, newValue);
+        var removed = oldContainer is null ? new List<object>() : new List<object> { oldValue! };
+        var added = container is null ? new List<object>() : new List<object> { newValue! };
+        OnSelectionChanged(new SelectionChangedEventArgs(removed, added));
     }
+
+    /// <summary>Raises a selection change with source items, not generated containers.</summary>
+    protected virtual void OnSelectionChanged(SelectionChangedEventArgs e) => SelectionChanged?.Invoke(this, e);
 
     internal bool SelectItem(UIElement item)
     {
@@ -969,19 +1141,19 @@ public partial class RibbonGallery : ListBox
             return false;
         }
 
-        SelectedItem = item;
-        return ReferenceEquals(SelectedItem, item);
+        SetSelection(item);
+        return ReferenceEquals(selectedContainer, item);
     }
 
     internal bool RemoveItemFromSelection(UIElement item)
     {
-        if (!IsEnabled || !IsItemEnabled(item) || !ReferenceEquals(SelectedItem, item))
+        if (!IsEnabled || !IsItemEnabled(item) || !ReferenceEquals(selectedContainer, item))
         {
             return false;
         }
 
-        SelectedItem = null;
-        return SelectedItem is null;
+        SetSelection(null);
+        return selectedContainer is null;
     }
 
     internal IEnumerable<UIElement> GetAutomationItems()
@@ -1028,7 +1200,7 @@ public partial class RibbonGallery : ListBox
         }
 
         var current = source is null ? null : FindContainingItem(source, items);
-        current ??= SelectedItem as UIElement;
+        current ??= selectedContainer;
         var currentIndex = current is null ? 0 : Math.Max(0, items.IndexOf(current));
         var columns = Orientation == Orientation.Vertical
             ? 1
@@ -1099,7 +1271,7 @@ public partial class RibbonGallery : ListBox
 
     private void UpdateItemTabStops()
     {
-        var focusTarget = SelectedItem as UIElement
+        var focusTarget = selectedContainer
                           ?? GetAutomationItems().FirstOrDefault(IsItemEnabled);
         SetRovingFocus(focusTarget);
     }
@@ -1115,146 +1287,8 @@ public partial class RibbonGallery : ListBox
     private static bool IsItemEnabled(UIElement item)
         => item is not Control control || control.IsEnabled;
 
-    private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is RibbonGallery gallery)
-        {
-            gallery.OnItemsSourceChanged(e.OldValue as IEnumerable, e.NewValue as IEnumerable);
-        }
-    }
-
-    private void OnItemsSourceChanged(IEnumerable? oldSource, IEnumerable? newSource)
-    {
-        // Unsubscribe from old collection
-        if (oldSource is INotifyCollectionChanged oldNotify)
-        {
-            oldNotify.CollectionChanged -= OnItemsSourceCollectionChanged;
-        }
-
-        // Clear existing items generated from source
-        Items.Clear();
-
-        // Subscribe to new collection and generate items
-        if (newSource is not null)
-        {
-            if (newSource is INotifyCollectionChanged newNotify)
-            {
-                newNotify.CollectionChanged += OnItemsSourceCollectionChanged;
-            }
-
-            foreach (var item in newSource)
-            {
-                Items.Add(CreateItemContainer(item));
-            }
-        }
-    }
-
-    private void OnItemsSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        switch (e.Action)
-        {
-            case NotifyCollectionChangedAction.Add:
-                if (e.NewItems is not null)
-                {
-                    var insertIndex = e.NewStartingIndex >= 0 ? e.NewStartingIndex : Items.Count;
-                    foreach (var item in e.NewItems)
-                    {
-                        Items.Insert(insertIndex++, CreateItemContainer(item));
-                    }
-                }
-                break;
-
-            case NotifyCollectionChangedAction.Remove:
-                if (e.OldItems is not null)
-                {
-                    for (var i = 0; i < e.OldItems.Count; i++)
-                    {
-                        if (e.OldStartingIndex >= 0 && e.OldStartingIndex < Items.Count)
-                        {
-                            Items.RemoveAt(e.OldStartingIndex);
-                        }
-                    }
-                }
-                break;
-
-            case NotifyCollectionChangedAction.Reset:
-                Items.Clear();
-                if (ItemsSource is not null)
-                {
-                    foreach (var item in ItemsSource)
-                    {
-                        Items.Add(CreateItemContainer(item));
-                    }
-                }
-                break;
-
-            case NotifyCollectionChangedAction.Replace:
-                if (e.NewItems is not null
-                    && e.NewStartingIndex >= 0
-                    && e.NewStartingIndex + e.NewItems.Count <= Items.Count)
-                {
-                    for (var index = 0; index < e.NewItems.Count; index++)
-                    {
-                        Items[e.NewStartingIndex + index] =
-                            CreateItemContainer(e.NewItems[index]!);
-                    }
-                }
-                else
-                {
-                    RebuildItemsFromSource();
-                }
-
-                break;
-
-            case NotifyCollectionChangedAction.Move:
-                if (e.OldItems?.Count == 1
-                    && e.OldStartingIndex >= 0
-                    && e.NewStartingIndex >= 0
-                    && e.OldStartingIndex < Items.Count
-                    && e.NewStartingIndex < Items.Count)
-                {
-                    Items.Move(e.OldStartingIndex, e.NewStartingIndex);
-                }
-                else
-                {
-                    RebuildItemsFromSource();
-                }
-
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    private void RebuildItemsFromSource()
-    {
-        Items.Clear();
-        if (ItemsSource is null)
-        {
-            return;
-        }
-
-        foreach (var item in ItemsSource)
-        {
-            Items.Add(CreateItemContainer(item));
-        }
-    }
-
-    private UIElement CreateItemContainer(object item)
-    {
-        if (item is UIElement element)
-        {
-            return element;
-        }
-
-        return new RibbonGalleryItem
-        {
-            Content = item,
-            ContentTemplate = ItemTemplate,
-            DataContext = item,
-        };
-    }
+    private static void OnGroupingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((RibbonGallery)d).SyncItems();
 
     private static void OnSelectedFilterChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

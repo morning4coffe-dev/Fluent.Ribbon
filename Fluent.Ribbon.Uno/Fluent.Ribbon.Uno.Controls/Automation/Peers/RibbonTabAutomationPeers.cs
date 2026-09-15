@@ -325,7 +325,7 @@ public partial class RibbonTabItemAutomationPeer : FrameworkElementAutomationPee
                 return ExpandCollapseState.Expanded;
             }
 
-            return IsSelected && tabControl.IsDropDownOpen
+            return IsSelected && tabControl.IsMinimizedPopupVisible
                 ? ExpandCollapseState.Expanded
                 : ExpandCollapseState.Collapsed;
         }
@@ -539,7 +539,7 @@ public partial class RibbonTabItemDataAutomationPeer : AutomationPeer,
                 return Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded;
             }
 
-            return IsSelected && tabControl.IsDropDownOpen
+            return IsSelected && tabControl.IsMinimizedPopupVisible
                 ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded
                 : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed;
         }

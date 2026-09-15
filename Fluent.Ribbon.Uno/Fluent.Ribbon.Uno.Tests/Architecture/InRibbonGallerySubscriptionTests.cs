@@ -12,6 +12,10 @@ public sealed class InRibbonGallerySubscriptionTests
     {
         var source = File.ReadAllText(FindSourceFile());
         var compatibilitySource = File.ReadAllText(FindCompatibilitySourceFile());
+        var quickAccessSource = File.ReadAllText(FindSourceFile(
+            "Fluent.Ribbon.Uno.Controls",
+            "Compatibility",
+            "InRibbonGallery.QuickAccess.cs"));
         var automationSource = File.ReadAllText(FindAutomationSourceFile());
 
         Assert.Multiple(() =>
@@ -24,7 +28,7 @@ public sealed class InRibbonGallerySubscriptionTests
                 Does.Contain("_subscribedItemsSource.CollectionChanged -= OnItemsSourceCollectionChanged;"));
             Assert.That(
                 source,
-                Does.Contain("newSource is INotifyCollectionChanged newNotify && IsLoaded"));
+                Does.Contain("newSource is INotifyCollectionChanged newNotify && (IsLoaded || _activeQuickAccessClone is not null)"));
             Assert.That(
                 source,
                 Does.Contain("_isRebuildingItemsSource = true;"));
@@ -32,8 +36,19 @@ public sealed class InRibbonGallerySubscriptionTests
                 source,
                 Does.Contain("RefreshSelectionContainerState();"));
             Assert.That(
-                compatibilitySource,
-                Does.Contain("clone.CopySourceItemMappingsFrom(owner, owner._quickAccessTransferredItems);"));
+                source,
+                Does.Contain("return owner.FindSelectionContainer(selectionValue, requireCurrentItem);"));
+            Assert.That(source, Does.Contain("owner.GetSelectionValue(container)"));
+            Assert.That(quickAccessSource, Does.Contain("clone.Items = Items;"));
+            Assert.That(
+                quickAccessSource,
+                Does.Contain("bindings.Bind(SelectedItemProperty, twoWay: true);"));
+            Assert.That(
+                quickAccessSource,
+                Does.Contain("copy._quickAccessDataActive = false;"));
+            Assert.That(
+                quickAccessSource,
+                Does.Contain("_quickAccessObservedItemsSource.CollectionChanged -= _quickAccessItemsSourceChanged;"));
             Assert.That(
                 compatibilitySource,
                 Does.Contain("private void SyncActiveQuickAccessClone()"));

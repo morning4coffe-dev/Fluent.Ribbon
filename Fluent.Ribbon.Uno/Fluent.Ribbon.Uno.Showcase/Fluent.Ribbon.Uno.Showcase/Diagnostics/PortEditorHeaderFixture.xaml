@@ -1,0 +1,129 @@
+<UserControl
+    x:Class="FluentRibbon.Uno.Showcase.Diagnostics.PortEditorHeaderFixture"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent"
+    xmlns:local="using:FluentRibbon.Uno.Showcase.Diagnostics">
+    <UserControl.Resources>
+        <DataTemplate x:Key="PrimaryHeaderTemplate">
+            <TextBlock Tag="PortEditorHeaderPrimary" Text="{Binding Title}" />
+        </DataTemplate>
+        <DataTemplate x:Key="AlternateHeaderTemplate">
+            <TextBlock Tag="PortEditorHeaderAlternate" Text="{Binding Title}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ExplicitHeaderTemplate">
+            <TextBlock Tag="PortEditorHeaderExplicit" Text="{Binding Title}" />
+        </DataTemplate>
+        <local:PortEditorHeaderTemplateSelector
+            x:Key="HeaderSelector"
+            PrimaryTemplate="{StaticResource PrimaryHeaderTemplate}"
+            AlternateTemplate="{StaticResource AlternateHeaderTemplate}" />
+        <local:PortEditorHeaderTemplateSelector
+            x:Key="ReplacementHeaderSelector"
+            PrimaryTemplate="{StaticResource ExplicitHeaderTemplate}"
+            AlternateTemplate="{StaticResource ExplicitHeaderTemplate}" />
+        <ControlTemplate x:Key="ConsumerTextTemplate" TargetType="fluent:TextBox">
+            <StackPanel>
+                <ContentPresenter
+                    x:Name="HeaderText"
+                    FontSize="12"
+                    Content="{TemplateBinding Header}"
+                    ContentTemplate="{Binding HeaderTemplate, RelativeSource={RelativeSource TemplatedParent}}"
+                    ContentTemplateSelector="{Binding HeaderTemplateSelector, RelativeSource={RelativeSource TemplatedParent}}" />
+                <TextBox
+                    x:Name="PART_TextBox"
+                    Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+            </StackPanel>
+        </ControlTemplate>
+        <ControlTemplate x:Key="ConsumerCoreTextTemplate" TargetType="fluent:RibbonTextBox">
+            <StackPanel>
+                <ContentPresenter
+                    x:Name="HeaderText"
+                    FontSize="12"
+                    Content="{TemplateBinding Header}"
+                    ContentTemplate="{Binding HeaderTemplate, RelativeSource={RelativeSource TemplatedParent}}"
+                    ContentTemplateSelector="{Binding HeaderTemplateSelector, RelativeSource={RelativeSource TemplatedParent}}" />
+                <TextBox
+                    x:Name="PART_TextBox"
+                    Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+            </StackPanel>
+        </ControlTemplate>
+        <ControlTemplate x:Key="NativeTextTemplate" TargetType="fluent:RibbonTextBox">
+            <Grid MinHeight="32">
+                <ScrollViewer
+                    x:Name="ContentElement"
+                    HorizontalScrollBarVisibility="Hidden"
+                    VerticalScrollBarVisibility="Hidden"
+                    HorizontalScrollMode="Auto"
+                    VerticalScrollMode="Auto" />
+            </Grid>
+        </ControlTemplate>
+    </UserControl.Resources>
+    <UserControl.DataContext>
+        <local:PortEditorHeaderState>
+            <local:PortEditorHeaderState.Header>
+                <local:PortEditorHeaderModel Title="Initial header model" />
+            </local:PortEditorHeaderState.Header>
+        </local:PortEditorHeaderState>
+    </UserControl.DataContext>
+    <StackPanel Spacing="6" HorizontalAlignment="Left">
+        <fluent:RibbonComboBox
+            x:Name="CoreCombo"
+            Width="420"
+            InputWidth="140"
+            IconGlyph="&#xE8D2;"
+            IsEditable="True"
+            Header="{Binding Header}"
+            HeaderTemplate="{Binding HeaderTemplate, Mode=TwoWay}" />
+        <fluent:ComboBox
+            x:Name="FacadeCombo"
+            Width="420"
+            InputWidth="140"
+            IconGlyph="&#xE8D2;"
+            IsEditable="True"
+            Header="{Binding Header}"
+            HeaderTemplate="{Binding HeaderTemplate, Mode=TwoWay}"
+            HeaderTemplateSelector="{Binding HeaderTemplateSelector, Mode=TwoWay}" />
+        <fluent:RibbonTextBox
+            x:Name="CoreText"
+            Width="420"
+            InputWidth="140"
+            IconGlyph="&#xE8D2;"
+            Text="Initial editor text"
+            Header="{Binding Header}"
+            HeaderTemplate="{Binding HeaderTemplate, Mode=TwoWay}"
+            HeaderTemplateSelector="{Binding HeaderTemplateSelector, Mode=TwoWay}" />
+        <fluent:TextBox
+            x:Name="FacadeText"
+            Width="420"
+            InputWidth="140"
+            IconGlyph="&#xE8D2;"
+            Text="Initial editor text"
+            Header="{Binding Header}"
+            HeaderTemplate="{Binding HeaderTemplate, Mode=TwoWay}"
+            HeaderTemplateSelector="{Binding HeaderTemplateSelector, Mode=TwoWay}" />
+        <fluent:RibbonSpinner
+            x:Name="CoreSpinner"
+            Width="420"
+            InputWidth="140"
+            IconGlyph="&#xE8D2;"
+            Minimum="0"
+            Maximum="100"
+            Value="7"
+            Header="{Binding Header}"
+            HeaderTemplate="{Binding HeaderTemplate, Mode=TwoWay}"
+            HeaderTemplateSelector="{Binding HeaderTemplateSelector, Mode=TwoWay}" />
+        <fluent:Spinner
+            x:Name="FacadeSpinner"
+            Width="420"
+            InputWidth="140"
+            IconGlyph="&#xE8D2;"
+            Minimum="0"
+            Maximum="100"
+            Value="7"
+            Header="{Binding Header}"
+            HeaderTemplate="{Binding HeaderTemplate, Mode=TwoWay}"
+            HeaderTemplateSelector="{Binding HeaderTemplateSelector, Mode=TwoWay}" />
+        <Button x:Name="FocusTarget" Content="Editor header focus target" />
+    </StackPanel>
+</UserControl>

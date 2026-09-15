@@ -15,13 +15,10 @@ using Windows.Foundation;
 public partial class QuickAccessToolBar : ILogicalChildSupport
 {
     private Fluent.Collections.ItemCollectionWithLogicalTreeSupport<QuickAccessMenuItem>? _quickAccessItems;
-    private readonly Dictionary<QuickAccessMenuItem, long> _quickAccessItemTokens = new();
-    private readonly Dictionary<QuickAccessMenuItem, long> _quickAccessTargetTokens = new();
-    private readonly Dictionary<QuickAccessMenuItem, IQuickAccessItemProvider>
-        _quickAccessSynchronizedProviders = new();
     private readonly HashSet<FrameworkElement> _trackedItems = new();
     private readonly HashSet<FrameworkElement> _overflowedItems = new();
     private bool _overflowUpdatePending;
+    private Ribbon? _customizationRibbon;
 
     internal WinUIButton? MenuButtonForAutomation => _menuButton;
 
@@ -72,6 +69,7 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
     private void InitializeCompatibility()
     {
         Loaded += OnCompatibilityLoaded;
+        Unloaded += OnCompatibilityUnloaded;
     }
 
     private void OnCompatibilityLoaded(object sender, RoutedEventArgs args)
@@ -87,6 +85,19 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
                 UpdateKeyTips();
                 Refresh();
             });
+    }
+
+    private void OnCompatibilityUnloaded(object sender, RoutedEventArgs args)
+    {
+        CloseCustomizationMenu();
+        DetachCustomizationRibbon();
+    }
+
+    internal void DetachCustomizationRibbon()
+    {
+        var ribbon = _customizationRibbon;
+        _customizationRibbon = null;
+        ribbon?.UnregisterQuickAccessCustomizationToolBar(this);
     }
 
     private void OnCompatibilityItemsChanged(NotifyCollectionChangedEventArgs args)
@@ -154,156 +165,34 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
         object? sender,
         NotifyCollectionChangedEventArgs args)
     {
-        if (args.OldItems is not null)
-        {
-            foreach (var item in args.OldItems.OfType<QuickAccessMenuItem>())
-            {
-                RemoveSynchronizedQuickAccessMenuItem(item);
-
-                if (_quickAccessItemTokens.Remove(item, out var token))
-                {
-                    item.UnregisterPropertyChangedCallback(
-                        QuickAccessMenuItem.IsCheckedProperty,
-                        token);
-                }
-
-                if (_quickAccessTargetTokens.Remove(item, out var targetToken))
-                {
-                    item.UnregisterPropertyChangedCallback(
-                        QuickAccessMenuItem.TargetProperty,
-                        targetToken);
-                }
-            }
-        }
-
-        if (args.NewItems is not null)
-        {
-            foreach (var item in args.NewItems.OfType<QuickAccessMenuItem>())
-            {
-                _quickAccessItemTokens[item] = item.RegisterPropertyChangedCallback(
-                    QuickAccessMenuItem.IsCheckedProperty,
-                    OnQuickAccessItemCheckedChanged);
-                _quickAccessTargetTokens[item] = item.RegisterPropertyChangedCallback(
-                    QuickAccessMenuItem.TargetProperty,
-                    OnQuickAccessItemTargetChanged);
-                SynchronizeQuickAccessMenuItem(item, initialize: true);
-            }
-        }
-
-        if (args.Action == NotifyCollectionChangedAction.Reset)
-        {
-            foreach (var item in _quickAccessSynchronizedProviders.Keys.ToArray())
-            {
-                RemoveSynchronizedQuickAccessMenuItem(item);
-            }
-
-            foreach (var (item, token) in _quickAccessItemTokens)
-            {
-                item.UnregisterPropertyChangedCallback(
-                    QuickAccessMenuItem.IsCheckedProperty,
-                    token);
-            }
-
-            _quickAccessItemTokens.Clear();
-
-            foreach (var (item, token) in _quickAccessTargetTokens)
-            {
-                item.UnregisterPropertyChangedCallback(
-                    QuickAccessMenuItem.TargetProperty,
-                    token);
-            }
-
-            _quickAccessTargetTokens.Clear();
-        }
-    }
-
-    private void OnQuickAccessItemCheckedChanged(
-        DependencyObject sender,
-        DependencyProperty property)
-    {
-        if (sender is QuickAccessMenuItem item)
-        {
-            SynchronizeQuickAccessMenuItem(item, initialize: false);
-        }
-    }
-
-    private void OnQuickAccessItemTargetChanged(
-        DependencyObject sender,
-        DependencyProperty property)
-    {
-        if (sender is QuickAccessMenuItem item)
-        {
-            SynchronizeQuickAccessMenuItem(item, initialize: true);
-        }
+        CloseCustomizationMenu();
+        GetCustomizationRibbon()?.OnQuickAccessCustomizationItemsChanged(this);
     }
 
     private void SynchronizeQuickAccessMenuItems()
     {
-        foreach (var item in QuickAccessItems)
-        {
-            SynchronizeQuickAccessMenuItem(item, initialize: true);
-        }
+        GetCustomizationRibbon()?.RegisterQuickAccessCustomizationToolBar(this);
     }
 
-    private void SynchronizeQuickAccessMenuItem(
-        QuickAccessMenuItem item,
-        bool initialize)
+    private Ribbon? GetCustomizationRibbon()
     {
-        if (QuickAccessHelper.FindOwningRibbon(this) is not { } ribbon)
+        var ribbon = QuickAccessHelper.FindOwningRibbon(this);
+        if (!ReferenceEquals(ribbon, _customizationRibbon))
         {
-            return;
+            _customizationRibbon?.UnregisterQuickAccessCustomizationToolBar(this);
+            _customizationRibbon = ribbon;
         }
 
-        var provider = item.Target as IQuickAccessItemProvider;
-        if (_quickAccessSynchronizedProviders.TryGetValue(item, out var previousProvider)
-            && !ReferenceEquals(previousProvider, provider))
-        {
-            ribbon.RemoveFromQuickAccessToolBar(previousProvider);
-            _quickAccessSynchronizedProviders.Remove(item);
-        }
-
-        if (provider is null)
-        {
-            return;
-        }
-
-        if (initialize && ribbon.IsInQuickAccessToolBar(provider))
-        {
-            item.IsChecked = true;
-            _quickAccessSynchronizedProviders[item] = provider;
-            return;
-        }
-
-        if (item.IsChecked)
-        {
-            ribbon.AddToQuickAccessToolBar(provider);
-            _quickAccessSynchronizedProviders[item] = provider;
-        }
-        else
-        {
-            ribbon.RemoveFromQuickAccessToolBar(provider);
-            _quickAccessSynchronizedProviders.Remove(item);
-        }
-    }
-
-    private void RemoveSynchronizedQuickAccessMenuItem(QuickAccessMenuItem item)
-    {
-        if (!_quickAccessSynchronizedProviders.Remove(item, out var provider))
-        {
-            return;
-        }
-
-        if (QuickAccessHelper.FindOwningRibbon(this) is not { } ribbon
-            || ribbon.QuickAccessItems.Contains(item))
-        {
-            return;
-        }
-
-        ribbon.RemoveFromQuickAccessToolBar(provider);
+        return ribbon;
     }
 
     private void AddQuickAccessCustomizationItems(StackPanel panel)
     {
+        if (GetCustomizationRibbon() is { CanCustomizeQuickAccessToolBarItems: false })
+        {
+            return;
+        }
+
         for (var index = 0; index < QuickAccessItems.Count; index++)
         {
             var item = QuickAccessItems[index];
@@ -339,6 +228,10 @@ public partial class QuickAccessToolBar : ILogicalChildSupport
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (double.IsPositiveInfinity(availableSize.Width))
+        {
+            RestoreNaturalItemVisibility();
+        }
         var result = base.MeasureOverride(availableSize);
         ScheduleOverflowUpdate(availableSize.Width);
         return result;

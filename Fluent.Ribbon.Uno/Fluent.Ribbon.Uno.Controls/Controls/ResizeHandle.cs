@@ -52,9 +52,12 @@ internal sealed partial class ResizeHandle : Control
 
 internal sealed partial class ResizeHandleAutomationPeer : FrameworkElementAutomationPeer, ITransformProvider
 {
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher;
+
     internal ResizeHandleAutomationPeer(ResizeHandle owner)
         : base(owner)
     {
+        dispatcher = owner.DispatcherQueue;
     }
 
     private ResizeHandle OwnerHandle => (ResizeHandle)Owner;
@@ -149,7 +152,7 @@ internal sealed partial class ResizeHandleAutomationPeer : FrameworkElementAutom
 
     private void RunOnOwnerThread(Action action)
     {
-        if (OwnerHandle.DispatcherQueue.HasThreadAccess)
+        if (dispatcher.HasThreadAccess)
         {
             action();
             return;
@@ -157,7 +160,7 @@ internal sealed partial class ResizeHandleAutomationPeer : FrameworkElementAutom
 
         using var completion = new System.Threading.ManualResetEventSlim();
         Exception? dispatchException = null;
-        if (!OwnerHandle.DispatcherQueue.TryEnqueue(
+        if (!dispatcher.TryEnqueue(
                 () =>
                 {
                     try
@@ -192,7 +195,10 @@ internal sealed partial class ResizeHandleAutomationPeer : FrameworkElementAutom
     private T RunOnOwnerThread<T>(Func<T> action)
     {
         T result = default!;
-        RunOnOwnerThread(() => result = action());
+        RunOnOwnerThread(() =>
+        {
+            result = action();
+        });
         return result;
     }
 }

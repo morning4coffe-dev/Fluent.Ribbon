@@ -15,6 +15,11 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
     private double _lastGroupSizingWidth = double.NaN;
     private bool _lastGroupSizingSimplified;
     private RibbonGroupBoxState[]? _lastGroupSizingStates;
+    private Ribbon? _ribbonOwner;
+    private bool _hasBeenAttachedToRibbon;
+    private bool _hasNameLinkedGroupValue;
+    private bool _isUpdatingNameLinkedGroup;
+    private RibbonContextualTabGroup? _activeContextualGroup;
 
     #region Dependency Properties
 
@@ -61,7 +66,7 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
             new PropertyMetadata(string.Empty));
 
     /// <summary>
-    /// Gets or sets the name of the contextual tab group this tab belongs to.
+    /// Gets or sets the header of the contextual group to resolve when Group is not explicitly set.
     /// </summary>
     public string ContextualTabGroupName
     {
@@ -100,7 +105,11 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
     public RibbonContextualTabGroup? Group
     {
         get => (RibbonContextualTabGroup?)GetValue(GroupProperty);
-        set => SetValue(GroupProperty, value);
+        set
+        {
+            _hasNameLinkedGroupValue = false;
+            SetValue(GroupProperty, value);
+        }
     }
 
     /// <summary>Identifies the <see cref="HasSeparator"/> dependency property.</summary>
@@ -259,6 +268,7 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 #endif
 
         _scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
+        _scrollViewer.Loaded += OnGroupsContentLoaded;
 
         Content = _scrollViewer;
         InitializeCompatibility();
@@ -651,34 +661,178 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
     private static void OnGroupChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is RibbonTabItem tab)
+        var tab = (RibbonTabItem)d;
+        if (!tab._isUpdatingNameLinkedGroup)
         {
-            if (e.OldValue is RibbonContextualTabGroup oldGroup)
-            {
-                oldGroup.RemoveTabItem(tab);
-            }
+            tab._hasNameLinkedGroupValue = false;
+            tab.UpdateContextualGroupLink();
+        }
+    }
 
-            if (e.NewValue is RibbonContextualTabGroup newGroup)
-            {
-                tab.IsContextual = true;
-                tab.ActiveTabBackground = newGroup.Background;
+    internal RibbonContextualTabGroup? ActiveContextualGroup => _activeContextualGroup;
 
-                if (!newGroup.Items.Contains(tab))
-                {
-                    newGroup.AppendTabItem(tab);
-                }
+    internal void AttachToRibbon(Ribbon ribbon)
+    {
+        if (_ribbonOwner is not null && !ReferenceEquals(_ribbonOwner, ribbon))
+        {
+            throw new InvalidOperationException("A ribbon tab cannot belong to more than one ribbon.");
+        }
+
+        _ribbonOwner = ribbon;
+        _hasBeenAttachedToRibbon = true;
+        UpdateContextualGroupLink();
+    }
+
+    internal void DetachFromRibbon(Ribbon ribbon)
+    {
+        if (!ReferenceEquals(_ribbonOwner, ribbon))
+        {
+            return;
+        }
+
+        _ribbonOwner = null;
+        ClearNameLinkedGroup();
+        SetActiveContextualGroup(null);
+    }
+
+    internal void UpdateContextualGroupLink()
+    {
+        if (_isUpdatingNameLinkedGroup)
+        {
+            return;
+        }
+
+        if (_ribbonOwner is { } ribbon)
+        {
+            // A null local value or an unresolved binding is still an authored Group value.
+            // Never replace it with a name link, even when the binding currently returns null.
+            var hasBinding = GetBindingExpression(GroupProperty) is not null;
+            var hasAuthoredGroup = hasBinding
+                                   || (!_hasNameLinkedGroupValue
+                                       && (ReadLocalValue(GroupProperty) != DependencyProperty.UnsetValue
+                                           || Group is not null));
+            if (hasAuthoredGroup)
+            {
+                _hasNameLinkedGroupValue = false;
             }
             else
             {
-                tab.IsContextual = false;
-                tab.ActiveTabBackground = null;
+                var namedGroup = string.IsNullOrEmpty(ContextualTabGroupName)
+                    ? null
+                    : ribbon.ContextualGroups.FirstOrDefault(
+                        group => group.Header == ContextualTabGroupName);
+                if (namedGroup is null)
+                {
+                    ClearNameLinkedGroup();
+                }
+                else if (!ReferenceEquals(Group, namedGroup))
+                {
+                    _isUpdatingNameLinkedGroup = true;
+                    try
+                    {
+                        _hasNameLinkedGroupValue = true;
+                        SetValue(GroupProperty, namedGroup);
+                    }
+                    finally
+                    {
+                        _isUpdatingNameLinkedGroup = false;
+                    }
+                }
             }
+
+            SetActiveContextualGroup(
+                Group is { } group && ribbon.ContextualGroups.Contains(group) ? group : null);
         }
+        else
+        {
+            // Detached tabs keep authored Group values, but binding updates must not reattach them.
+            SetActiveContextualGroup(_hasBeenAttachedToRibbon ? null : Group);
+        }
+    }
+
+    private void ClearNameLinkedGroup()
+    {
+        if (!_hasNameLinkedGroupValue)
+        {
+            return;
+        }
+
+        _hasNameLinkedGroupValue = false;
+        if (GetBindingExpression(GroupProperty) is not null)
+        {
+            return;
+        }
+
+        _isUpdatingNameLinkedGroup = true;
+        try
+        {
+            ClearValue(GroupProperty);
+        }
+        finally
+        {
+            _isUpdatingNameLinkedGroup = false;
+        }
+    }
+
+    private void SetActiveContextualGroup(RibbonContextualTabGroup? group)
+    {
+        if (!ReferenceEquals(_activeContextualGroup, group))
+        {
+            var previousGroup = _activeContextualGroup;
+            _activeContextualGroup = group;
+            previousGroup?.RemoveTabItem(this);
+        }
+
+        IsContextual = group is not null;
+        ActiveTabBackground = group?.Background;
+        group?.AppendTabItem(this);
     }
 
     #endregion
 
     #region Methods
+
+    internal void PrepareGroupsContent()
+    {
+        if (!ReferenceEquals(Content, _scrollViewer))
+        {
+            return;
+        }
+
+#if !WINDOWS
+        if (ReferenceEquals(VisualTreeHelper.GetParent(_scrollViewer), this))
+        {
+            Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            ApplyTemplate();
+        }
+#endif
+
+        if (_groupsPanel.Children.Count != Groups.Count
+            || _groupsPanel.Children.Where((child, index) => !ReferenceEquals(child, Groups[index])).Any())
+        {
+            SyncGroups();
+        }
+
+        if (!ReferenceEquals(_scrollViewer.Content, _groupsPanel))
+        {
+            _scrollViewer.Content = _groupsPanel;
+        }
+
+#if !WINDOWS
+        // Uno needs the content template realized independently of the hidden header.
+        // Native WinUI applies its default styles during Enter; pre-applying those
+        // templates would retire the initial items panel as the group is loaded.
+        _scrollViewer.ApplyTemplate();
+        foreach (var group in Groups)
+        {
+            group.ApplyTemplate();
+        }
+#endif
+        _groupsPanel.InvalidateMeasure();
+        _scrollViewer.InvalidateMeasure();
+    }
+
+    private void OnGroupsContentLoaded(object sender, RoutedEventArgs args) => PrepareGroupsContent();
 
     private void OnGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -701,6 +855,12 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         foreach (var group in Groups)
         {
             group.AutomationOwnerTab = this;
+            if (group.IsSimplified != IsSimplified)
+            {
+                group.IsSimplified = IsSimplified;
+                group.State = group.GetInitialStateForMode(IsSimplified);
+            }
+
             _groupsPanel.Children.Add(group);
         }
 

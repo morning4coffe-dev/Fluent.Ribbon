@@ -5,29 +5,38 @@
 
     <Style TargetType="fluent:StartScreen">
         <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Background" Value="{ThemeResource ApplicationPageBackgroundThemeBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:StartScreen">
-                    <Grid x:Name="RootGrid" IsHitTestVisible="{TemplateBinding IsOpen}">
+                    <Grid x:Name="PART_AdornerLayer" IsHitTestVisible="{TemplateBinding IsOpen}" Visibility="Collapsed">
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="OpenStates">
                                 <VisualState x:Name="Closed">
                                     <VisualState.Setters>
-                                        <Setter Target="RootGrid.Visibility" Value="Collapsed" />
+                                        <Setter Target="PART_AdornerLayer.Visibility" Value="Collapsed" />
+                                        <Setter Target="PART_AdornerLayer.Opacity" Value="0" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Closing">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_AdornerLayer.Visibility" Value="Visible" />
+                                        <Setter Target="PART_AdornerLayer.Opacity" Value="0" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Open">
                                     <VisualState.Setters>
-                                        <Setter Target="RootGrid.Visibility" Value="Visible" />
+                                        <Setter Target="PART_AdornerLayer.Visibility" Value="Visible" />
+                                        <Setter Target="PART_AdornerLayer.Opacity" Value="1" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
 
-                        <!-- Rendered inline (not in a Popup): opening a Popup during the first
-                             measure pass, before the control has a XamlRoot, fails native measure
-                             on the WinUI3 head (E_FAIL). An inline overlay behaves identically on
-                             the Skia and WinUI3 heads. -->
+                        <!-- Ribbon.StartScreen supplies a deferred window-sized host. The same
+                             template remains usable in an explicitly authored inline host. -->
                         <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />

@@ -7,7 +7,8 @@ public partial class DropDownButton
             nameof(DismissOnClickOutside),
             typeof(bool),
             typeof(DropDownButton),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, static (sender, _) =>
+                ((DropDownButton)sender).RefreshPopupDismissalOptions()));
 
     public bool DismissOnClickOutside
     {

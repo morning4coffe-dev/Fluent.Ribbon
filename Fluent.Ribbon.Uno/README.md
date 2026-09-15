@@ -178,10 +178,51 @@ In CI, use a `windows-latest` runner (which ships with the Windows SDK) together
 Run the deterministic validation entry point from the Uno directory:
 
 ```powershell
-.\Validate.ps1          # builds, API report, contract tests, XAML fixture, Desktop UI smoke
-.\Validate.ps1 -SkipUi  # same validation without launching the Showcase
-.\ValidatePackages.ps1  # packs Core + facade and builds a package-only consumer
+.\Validate.ps1                         # builds, API report, contracts, XAML, cumulative parity + UI smoke
+.\Validate.ps1 -PortParityPhase 3      # parity cases through phase 3, plus existing UI smoke
+.\Validate.ps1 -ApiMode enforce       # reject unapproved metadata compatibility gaps
+.\Validate.ps1 -SkipUi                # same non-UI validation without launching the Showcase
+.\ValidatePackages.ps1                # packs Core + facade and builds a package-only consumer
 ```
+
+`PortParityPhase` selects a cumulative runtime gate: API/data contracts (1),
+input/application state (2), QAT/popups (3), and presentation/configuration (4,
+the default). These gates exercise real controls; metadata comparison alone
+does not cover inherited framework APIs, rendered templates, or input behavior.
+Each run requires every registered case to complete and rejects crashes or
+diagnostic failures.
+
+The out-of-process tests normally launch the built Desktop Showcase. Set
+`SHOWCASE_AUTOTEST_APP` to a freshly built unpackaged WinUI Showcase executable
+to run the same native regressions against WinUI instead. This override does
+not build the executable; build the matching target first.
+
+For focused presentation/configuration QA, run the `DesktopPresentationContracts`
+test (and use the same executable override for WinUI). It covers both phase-4
+findings without claiming that earlier phases passed. Direct launches can use
+`--port-parity-phase=4 --port-parity-only-phase=4`; focused runs have a distinct
+`PORT-PARITY FOCUSED COMPLETE` marker and cannot satisfy the cumulative gate.
+
+An interactive driver can also launch the Showcase directly, including through
+a Windows shortcut, without changing the user's environment:
+
+```powershell
+.\Fluent.Ribbon.Uno.Showcase.exe --autotest=1 --port-parity-phase=3 `
+    --autotest-exit=1 --autotest-log="C:\QA\phase3.log"
+```
+
+These switches configure only the Showcase process. Existing environment
+variables take precedence. `--native-popup-external-input=1` enables the native
+outside-pointer rendezvous when an approved input driver and a connected,
+unlocked desktop are available; it does not generate pointer input itself.
+An accessibility Invoke action is not a physical pointer click.
+In external-input mode, the popup-options case runs first so the two physical
+clicks can be completed promptly. Every other selected case still runs afterward
+in its original order; the default automated order is unchanged.
+For a human-assisted run, `--native-popup-input-timeout=900` allows up to 15 minutes
+to respond at each pointer stage. This changes only the external response deadline,
+not layout settling, pointer requirements, or control behavior; the default is
+120 seconds and values outside 1–1800 seconds are rejected.
 
 For repeatable WPF/WinUI visual comparisons on Windows, run:
 
@@ -209,7 +250,22 @@ http://localhost:5000/?showcase-tab=5&showcase-state=touch
 The GitHub Actions matrix builds the controls, compatibility facade, WPF-style
 XAML fixture, and Showcase for WinUI, Desktop/Skia on Windows/Linux/macOS,
 WebAssembly, Android, and iOS. Desktop additionally runs the contract, API, and
-out-of-process UI smoke tests.
+diagnostic-option tests, cumulative phase-4 parity, and out-of-process UI smoke.
+WinUI also runs the focused presentation/configuration contracts; this is not
+approval of the separate native pointer/lifetime gate.
+
+### Native validation limitations
+
+Desktop and reference-target passes do not certify native WinUI input or
+mobile-platform execution. Full native cumulative qualification still requires
+the real outside-pointer stages and repeatable native lifetime collection.
+Those checks remain explicit failures when input is unavailable; focused
+phase-4 validation does not waive them.
+
+The strict WPF metadata exception ledger is validated against the Desktop
+assemblies. Native WinUI has additional framework-shape differences, including
+the sealed `ScrollViewer` wrapper and selector projections; a Desktop report of
+zero unapproved gaps must not be reported as an equivalent native result.
 
 ## Differences from WPF Fluent.Ribbon
 
@@ -222,12 +278,39 @@ are present, but several advanced behaviours are intentionally simplified:
 | Quick Access Toolbar | Add/remove from controls, customization menu, state persistence (`IQuickAccessItemProvider`) | Provider-backed add/remove, overflow, customization, checked-item persistence, and WPF-compatible provider clones |
 | Backstage / App Menu | Adorner overlay with open/close animations | Portable overlay with opt-out fade transitions; no WPF `AdornerLayer` dependency |
 | KeyTips | Full Alt-key navigation tree | Alt/F10 navigation, focus restoration, and nested Backstage scopes implemented |
-| Galleries | Grouping, filtering, live hover preview | Implemented for `RibbonGallery` and `InRibbonGallery`; Uno uses a custom control instead of WPF `Selector` inheritance |
+| Galleries | Grouping, filtering, live hover preview | Source-model selection, grouping, filtering and preview; native galleries keep one source-owned `ListBox` generator |
 | ComboBox popup | WPF-sized long list with optional `TopPopupContent` | Long-list sizing, top content, selection/item automation, and editable value automation are implemented; placement and open/close animation remain platform-native |
 | ColorGallery | Standard/theme/recent colors + custom-color dialog | Standard/theme/recent colors with injectable cross-platform picker and WinUI `ContentDialog` fallback |
 | ScreenTip | Rich tooltip + F1 help hook | `Title`/`Text`/`DisableReason` with F1 help integration |
-| Spinner | `TextToValueConverter`, full validation | Simplified numeric spinner |
+| Spinner | `TextToValueConverter`, full validation | Original-text conversion on Enter/focus loss, range coercion, formatting and Escape cancellation |
 | Theming | Theme generator (many themes) | Light / Dark / High Contrast via WinUI `ThemeDictionaries` |
+
+### Quick access provider content
+
+Menu providers choose the same action shape as WPF when the copy is created:
+`Button`, `RibbonToggleButton`, `DropDownButton`, or `RibbonSplitButton`.
+The `Ribbon*` names are the public core counterparts of the facade controls.
+Primary actions forward to the original command and event exactly once; a visible
+copy continues observing command availability when its original tab is unloaded.
+
+Drop-downs, split menus, groups, and in-ribbon galleries retain their original
+interactive content, data containers, templates, and selection. Managed copies
+borrow the provider's whole content host rather than copying child controls or
+displaying text substitutes. Native dropdown and menu copies instead reanchor
+the source's own template popup, keeping its presenter in the source template.
+Groups have an independent `QuickAccess` state;
+opening the copy does not require collapsing or selecting the source group.
+Closing, unloading, or removing a copy returns its content after native unload
+completion. Reinserting the same copy reconnects its live property bindings.
+Source collection observation is reference-counted while a presentation needs
+it. Cancellation and failed preparation release their leases; the last release
+restores the unloaded source's normal callback and polling-timer cleanup.
+
+For independently rendered headers and icons, prefer data values with templates,
+image sources, icon sources, or the supported native icon/text elements. A visual
+presentation that cannot be duplicated safely raises `NotSupportedException`
+instead of becoming a noninteractive text placeholder. This does not restrict
+arbitrary interactive elements inside the borrowed drop-down content.
 
 ## Modern extensions (beyond WPF)
 
@@ -254,9 +337,10 @@ Implemented (functional, some simplified — see the table above):
 - [x] Theming (Light / Dark / High Contrast)
 - [x] Localization (20 languages)
 
-No known portable WPF parity gaps remain. The intentional framework-specific
-exceptions are listed above and enforced by
-`ApiCompatibility\exceptions.wpf-only.json`.
+The 17 audited port gaps have dedicated cumulative runtime regressions. The
+intentional framework-specific API exceptions are listed above and enforced by
+`ApiCompatibility\exceptions.wpf-only.json`; passing that metadata ledger alone
+does not establish runtime or native-platform parity.
 
 ## Contributing
 

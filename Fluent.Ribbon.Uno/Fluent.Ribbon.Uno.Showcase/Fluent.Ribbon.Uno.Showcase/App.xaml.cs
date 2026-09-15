@@ -16,6 +16,7 @@ public partial class App : Application
     /// </summary>
     public App()
     {
+        ShowcaseDiagnosticOptions.ConfigureAutoTestProcess();
         LogAutoTestStartup("APP CONSTRUCTOR BEGIN");
         this.InitializeComponent();
         WireCrashCapture();

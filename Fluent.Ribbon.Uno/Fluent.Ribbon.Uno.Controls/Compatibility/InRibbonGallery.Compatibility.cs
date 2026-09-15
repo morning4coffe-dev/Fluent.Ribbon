@@ -35,8 +35,7 @@ public partial class InRibbonGallery :
     private bool _isSynchronizingSelection;
     private bool _isSnapped;
     private bool _isFrozen;
-    private InRibbonGallery? _quickAccessClone;
-    private InRibbonGallery? _quickAccessOwner;
+    private WeakReference<InRibbonGallery>? _quickAccessOwner;
     private List<UIElement>? _quickAccessTransferredItems;
     private UniformItemsPanel? _borrowedOwnerPanel;
     private InRibbonGallery? _activeQuickAccessClone;
@@ -514,7 +513,7 @@ public partial class InRibbonGallery :
             MinHeight = 24,
             FontSize = 16,
             Padding = new Thickness(4, 2, 4, 2),
-            _quickAccessOwner = this,
+            _quickAccessOwner = new(this),
         };
         AutomationProperties.SetName(
             clone,
@@ -528,9 +527,7 @@ public partial class InRibbonGallery :
         }
 
         clone.SelectedFilter = SelectedFilter;
-        clone.DropDownOpened += OnQuickAccessCloneOpened;
-        clone.DropDownClosed += OnQuickAccessCloneClosed;
-        _quickAccessClone = clone;
+        BindQuickAccessGallery(clone);
         return clone;
     }
 
@@ -781,7 +778,7 @@ public partial class InRibbonGallery :
         Scaled?.Invoke(this, EventArgs.Empty);
         ApplyCurrentFilter();
 
-        if (_isPopupOpen && !_suppressPopupRebuild)
+        if (_isPopupOpen)
         {
             PreparePopupContent();
         }
@@ -842,6 +839,16 @@ public partial class InRibbonGallery :
 
     private void HookItem(UIElement item)
     {
+        if (QuickAccessGalleryOwner is { } owner && !ReferenceEquals(owner._activeQuickAccessClone, this))
+        {
+            return;
+        }
+        if (_activeQuickAccessClone is { } clone)
+        {
+            clone.HookItem(item);
+            return;
+        }
+
         if (item is RibbonGalleryItem ownerItem)
         {
             ownerItem.GalleryOwner = this;
@@ -922,7 +929,9 @@ public partial class InRibbonGallery :
 
     private void OnGalleryItemIsSelectedChanged(DependencyObject sender, DependencyProperty property)
     {
-        if (_isSynchronizingSelection || sender is not RibbonGalleryItem item)
+        if (_isSynchronizingSelection || _quickAccessSelectionUpdating
+            || QuickAccessGalleryOwner?._isSynchronizingSelection == true
+            || sender is not RibbonGalleryItem item)
         {
             return;
         }
@@ -944,6 +953,28 @@ public partial class InRibbonGallery :
 
     private void HandleSelectedItemChanged(object? oldValue, object? newValue)
     {
+        var quickAccessOwner = QuickAccessGalleryOwner;
+        if (quickAccessOwner is not null && !_quickAccessSelectionUpdating)
+        {
+            _quickAccessSelectionUpdating = true;
+            try
+            {
+                if (!ReferenceEquals(quickAccessOwner.SelectedItem, newValue))
+                {
+                    quickAccessOwner.SelectedItem = newValue;
+                }
+                if (!ReferenceEquals(SelectedItem, quickAccessOwner.SelectedItem))
+                {
+                    SelectedItem = quickAccessOwner.SelectedItem;
+                    return;
+                }
+            }
+            finally
+            {
+                _quickAccessSelectionUpdating = false;
+            }
+        }
+
         var selectedContainer = newValue is null
             ? null
             : FindSelectionContainer(newValue);
@@ -963,7 +994,7 @@ public partial class InRibbonGallery :
         _isSynchronizingSelection = true;
         try
         {
-            foreach (var item in Items.OfType<RibbonGalleryItem>())
+            foreach (var item in quickAccessOwner is null ? Items.OfType<RibbonGalleryItem>() : [])
             {
                 item.IsSelected = ReferenceEquals(item, selectedContainer);
             }
@@ -973,7 +1004,10 @@ public partial class InRibbonGallery :
             _isSynchronizingSelection = false;
         }
 
-        UpdateItemTabStops();
+        if (quickAccessOwner is null)
+        {
+            UpdateItemTabStops();
+        }
         if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(this)
             is Fluent.Automation.Peers.RibbonInRibbonGalleryAutomationPeer peer)
         {
@@ -1016,6 +1050,7 @@ public partial class InRibbonGallery :
         else
         {
             PopupService.UnregisterOpenDropDown(gallery);
+            gallery.ReleaseQuickAccessGalleryContent();
 
             if (gallery._popup?.IsOpen == true)
             {
@@ -1092,6 +1127,19 @@ public partial class InRibbonGallery :
 
     private void PreparePopupContent()
     {
+        if (_borrowedOwnerPanel is { } borrowed)
+        {
+            ConfigurePanel(borrowed, MinItemsInDropDownRow, MaxItemsInDropDownRow);
+            if (!borrowed.IsLoaded)
+            {
+                return;
+            }
+            borrowed.ConfigureGrouping(
+                !string.IsNullOrWhiteSpace(GroupBy) || GroupByAdvanced is not null ? GetItemGroup : null);
+            ApplyCurrentFilter();
+            return;
+        }
+
         if (_popupScroller is null || _galleryPanel is null)
         {
             return;
@@ -1172,52 +1220,34 @@ public partial class InRibbonGallery :
             return;
         }
 
-        _popupPanel.Children.Clear();
+        if (QuickAccessGalleryOwner is null)
+        {
+            UpdateQuickAccessSupplementalItems();
+        }
+
+        if (_activeQuickAccessClone is not null)
+        {
+            return;
+        }
+
+        var children = new List<UIElement>();
 
         if (Filters.Count > 0)
         {
-            _popupFilterBar ??= new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 2,
-                Margin = new Thickness(4),
-            };
-            _popupFilterBar.Children.Clear();
-
-            for (var index = 0; index < Filters.Count; index++)
-            {
-                var filter = Filters[index];
-                var button = new WinUIButton
-                {
-                    Content = filter.Title,
-                    Tag = filter,
-                    MinHeight = 24,
-                    Padding = new Thickness(8, 2, 8, 2),
-                    FontWeight = ReferenceEquals(filter, SelectedFilter)
-                        ? Microsoft.UI.Text.FontWeights.Bold
-                        : Microsoft.UI.Text.FontWeights.Normal,
-                };
-                AutomationProperties.SetAutomationId(button, $"InRibbonGalleryFilter_{index}");
-                button.Click += OnFilterButtonClick;
-                _popupFilterBar.Children.Add(button);
-            }
-
-            _popupPanel.Children.Add(_popupFilterBar);
+            children.Add(UpdateQuickAccessFilterButtons());
         }
 
-        _popupPanel.Children.Add(_popupScroller);
+        children.Add(_popupScroller);
 
-        if (Menu is not null)
+        var supplemental = QuickAccessGalleryOwner is null
+            ? _popupSupplementalPanel
+            : _borrowedQuickAccessSupplementalPanel;
+        if (supplemental is not null)
         {
-            DetachFromParent(Menu);
-            _popupPanel.Children.Add(Menu);
+            children.Add(supplemental);
         }
 
-        foreach (var menuItem in MenuItems)
-        {
-            DetachFromParent(menuItem);
-            _popupPanel.Children.Add(menuItem);
-        }
+        SynchronizeQuickAccessPanel(_popupPanel, children);
     }
 
     private void ApplyDropDownDimensions()
@@ -1245,6 +1275,11 @@ public partial class InRibbonGallery :
 
     private void ApplyCurrentFilter()
     {
+        if (QuickAccessGalleryOwner is { } owner && !ReferenceEquals(owner._activeQuickAccessClone, this))
+        {
+            return;
+        }
+
         var allowed = GetAllowedGroups();
         foreach (var item in Items)
         {
@@ -1342,7 +1377,7 @@ public partial class InRibbonGallery :
         gallery.SelectedFilterGroups = filter?.Groups;
         gallery.ApplyCurrentFilter();
 
-        if (gallery._isPopupOpen)
+        if (gallery._isPopupOpen || gallery._activeQuickAccessClone is not null)
         {
             gallery.RebuildPopupSupplementalContent();
         }
@@ -1391,7 +1426,7 @@ public partial class InRibbonGallery :
         DependencyPropertyChangedEventArgs args)
     {
         var gallery = (InRibbonGallery)sender;
-        if (gallery._isPopupOpen)
+        if (gallery._isPopupOpen || gallery._activeQuickAccessClone is not null)
         {
             gallery.RebuildPopupSupplementalContent();
         }
@@ -1418,9 +1453,9 @@ public partial class InRibbonGallery :
 
     private void CancelPreviewForAutomation() => CancelPreview();
 
-    private void OnQuickAccessCloneOpened(object? sender, EventArgs args)
+    private static void OnQuickAccessCloneOpened(object? sender, EventArgs args)
     {
-        if (sender is not InRibbonGallery clone || clone._quickAccessOwner is not { } owner)
+        if (sender is not InRibbonGallery clone || clone.QuickAccessGalleryOwner is not { } owner)
         {
             return;
         }
@@ -1429,181 +1464,93 @@ public partial class InRibbonGallery :
         owner.IsSnapped = true;
         owner._activeQuickAccessClone = clone;
         owner._quickAccessTransferredItems = owner.Items.ToList();
-
-        // Mirror the owner's items into the clone's *logical* Items collection so the clone's
-        // selection, filtering and public Items surface behave like the owner — WITHOUT reparenting
-        // the item ELEMENTS. The elements stay children of the owner's _galleryPanel, which is
-        // borrowed wholesale into the clone's popup below. Suppressing popup-rebuild + inline sync
-        // guarantees that adding to Items never tries to re-home the shared elements into the clone's
-        // own panel; re-homing them out of the owner's (usually unrooted, off-tab) panel is exactly
-        // what corrupted native peers and threw COMException 0x800F1000. Only the event hooks move,
-        // which is peer-safe because it makes no visual-tree change.
-        clone._suppressPopupRebuild = true;
-        try
+        foreach (var item in owner.Items)
         {
-            foreach (var item in owner._quickAccessTransferredItems)
-            {
-                owner.UnhookItem(item);
-                clone.Items.Add(item);
-            }
-        }
-        finally
-        {
-            clone._suppressPopupRebuild = false;
+            owner.UnhookItem(item);
+            clone.HookItem(item);
         }
 
-        clone.CopySourceItemMappingsFrom(owner, owner._quickAccessTransferredItems);
         clone.SelectedItem = owner.SelectedItem;
         clone.SelectedFilter = owner.SelectedFilter;
         clone.RebuildPopupSupplementalContent();
 
         // Borrow the owner's whole gallery panel (all realized items intact) into the clone's popup
         // host, then apply the clone's current filter to the now-shared items.
-        clone.BorrowOwnerGalleryPanel(owner);
         clone.ApplyCurrentFilter();
     }
 
     private void SyncActiveQuickAccessClone()
     {
+        foreach (var reference in _quickAccessDataCopies.ToArray())
+        {
+            if (!reference.TryGetTarget(out var copy) || !copy._quickAccessDataActive)
+            {
+                continue;
+            }
+            copy._quickAccessSelectionUpdating = true;
+            try
+            {
+                if (!ReferenceEquals(copy.SelectedItem, SelectedItem))
+                {
+                    copy.SelectedItem = SelectedItem;
+                }
+                if (copy.SelectedIndex != SelectedIndex)
+                {
+                    copy.SelectedIndex = SelectedIndex;
+                }
+            }
+            finally
+            {
+                copy._quickAccessSelectionUpdating = false;
+            }
+        }
+
         if (_activeQuickAccessClone is not { } clone)
         {
             return;
         }
 
-        var selected = clone.SelectedItem;
-        clone._isRebuildingItemsSource = true;
-        clone._suppressPopupRebuild = true;
-        try
+        foreach (var removed in clone._hookedItems.Where(item => !Items.Contains(item)).ToArray())
         {
-            foreach (var item in clone.Items.ToList())
-            {
-                clone.UnhookItem(item);
-                clone.Items.Remove(item);
-            }
-
-            clone._sourceItemByContainer.Clear();
-            foreach (var item in Items)
-            {
-                UnhookItem(item);
-                clone.Items.Add(item);
-            }
-
-            clone.CopySourceItemMappingsFrom(this, Items);
+            clone.UnhookItem(removed);
         }
-        finally
+        foreach (var item in Items)
         {
-            clone._suppressPopupRebuild = false;
-            clone._isRebuildingItemsSource = false;
+            UnhookItem(item);
+            clone.HookItem(item);
         }
 
-        var restoredSelection = clone.FindSelectionContainer(selected) is not null
-            ? selected
-            : FindSelectionContainer(SelectedItem) is not null
-                ? SelectedItem
-                : null;
-        if (!ReferenceEquals(clone.SelectedItem, restoredSelection)
-            && !Equals(clone.SelectedItem, restoredSelection))
-        {
-            clone.SelectedItem = restoredSelection;
-        }
-        else
-        {
-            clone.RefreshSelectionContainerState();
-        }
         clone.RebuildPopupSupplementalContent();
         clone.ApplyCurrentFilter();
     }
 
-    // Moves the owner's whole gallery panel (with all realized item children intact) into this
-    // clone's popup host. Only the single container is reparented — never the individual items — so
-    // no native peer is invalidated even when the owner's tab is not selected and its panel is
-    // unrooted. Mirrors the inline<->popup container move performed by PreparePopupContent.
-    private void BorrowOwnerGalleryPanel(InRibbonGallery owner)
+    private static void OnQuickAccessCloneClosed(object? sender, EventArgs args)
     {
-        if (_popupScroller is null || owner._galleryPanel is not { } panel)
+        if (sender is not InRibbonGallery clone || clone.QuickAccessGalleryOwner is not { } owner)
         {
             return;
         }
 
-        if (owner._scrollViewer is not null && ReferenceEquals(owner._scrollViewer.Content, panel))
-        {
-            owner._scrollViewer.Content = null;
-        }
-
-        DetachFromParent(panel);
-        ConfigurePanel(panel, MinItemsInDropDownRow, MaxItemsInDropDownRow);
-        panel.ConfigureGrouping(
-            !string.IsNullOrWhiteSpace(GroupBy) || GroupByAdvanced is not null
-                ? GetItemGroup
-                : null);
-        _popupScroller.Content = panel;
-        _borrowedOwnerPanel = panel;
-    }
-
-    // Returns a previously borrowed owner panel to the owner's inline scroller, again moving only the
-    // single container so the shared items' native peers stay intact regardless of rooted state.
-    private void ReturnOwnerGalleryPanel(InRibbonGallery owner)
-    {
-        if (_borrowedOwnerPanel is not { } panel)
-        {
-            return;
-        }
-
-        _borrowedOwnerPanel = null;
-
-        if (_popupScroller is not null && ReferenceEquals(_popupScroller.Content, panel))
-        {
-            _popupScroller.Content = null;
-        }
-
-        DetachFromParent(panel);
-        panel.ConfigureGrouping(null);
-        owner.ConfigurePanel(panel, owner.MinItemsInRow, owner.GetCurrentItemsInRow());
-        if (owner._scrollViewer is not null)
-        {
-            owner._scrollViewer.Content = panel;
-        }
-    }
-
-    private void OnQuickAccessCloneClosed(object? sender, EventArgs args)
-    {
-        if (sender is not InRibbonGallery clone || clone._quickAccessOwner is not { } owner)
-        {
-            return;
-        }
-
-        var selected = clone.SelectedItem;
         owner._activeQuickAccessClone = null;
 
-        // Hand the borrowed panel (with the shared items still parented in it) back to the owner as a
-        // single container BEFORE clearing the clone's logical Items — never reparent the elements.
-        clone.ReturnOwnerGalleryPanel(owner);
+        // Only visual event ownership returns here; the public Items view remains canonical.
+        clone._borrowedOwnerPanel = null;
 
-        clone._isRebuildingItemsSource = true;
-        clone._suppressPopupRebuild = true;
-        try
+        foreach (var item in clone._hookedItems.ToArray())
         {
-            foreach (var item in clone.Items.ToList())
-            {
-                clone.UnhookItem(item);
-                clone.Items.Remove(item);
-                owner.HookItem(item);
-            }
-        }
-        finally
-        {
-            clone._suppressPopupRebuild = false;
-            clone._isRebuildingItemsSource = false;
+            clone.UnhookItem(item);
         }
 
-        clone._sourceItemByContainer.Clear();
-        owner.SelectedItem = owner.FindSelectionContainer(selected) is not null
-            ? selected
-            : null;
+        owner.HookAllItems();
+        clone.SelectedItem = owner.SelectedItem;
         owner.SelectedFilter = clone.SelectedFilter;
         owner.IsFrozen = false;
         owner.IsSnapped = false;
         owner._quickAccessTransferredItems = null;
+        if (!owner.IsLoaded)
+        {
+            owner.UnsubscribeItemsSource();
+        }
 
         // The owner's panel already holds every item (it only ever moved as a whole container), so a
         // full inline resync is unnecessary and unsafe (it would reparent items); just restore filter

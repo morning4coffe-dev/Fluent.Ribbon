@@ -58,6 +58,8 @@ internal static class CompatibilityQuickAccessBindings
     private static readonly IReadOnlyList<QuickAccessBindingContract> TextBoxContracts =
     [
         OneWay(nameof(TextBox.Header), static () => RibbonTextBox.HeaderProperty),
+        OneWay(nameof(TextBox.HeaderTemplate), static () => TextBox.HeaderTemplateProperty),
+        OneWay(nameof(TextBox.HeaderTemplateSelector), static () => TextBox.HeaderTemplateSelectorProperty),
         OneWay(nameof(TextBox.Icon), static () => TextBox.IconProperty),
         OneWay(nameof(TextBox.MediumIcon), static () => TextBox.MediumIconProperty),
         TwoWay(nameof(TextBox.Text), static () => Microsoft.UI.Xaml.Controls.TextBox.TextProperty),
@@ -68,6 +70,8 @@ internal static class CompatibilityQuickAccessBindings
     private static readonly IReadOnlyList<QuickAccessBindingContract> ComboBoxContracts =
     [
         OneWay(nameof(ComboBox.Header), static () => RibbonComboBox.HeaderProperty),
+        OneWay(nameof(ComboBox.HeaderTemplate), static () => ComboBox.HeaderTemplateProperty),
+        OneWay(nameof(ComboBox.HeaderTemplateSelector), static () => ComboBox.HeaderTemplateSelectorProperty),
         OneWay(nameof(ComboBox.Icon), static () => ComboBox.IconProperty),
         OneWay(nameof(ComboBox.MediumIcon), static () => ComboBox.MediumIconProperty),
         OneWay(nameof(ComboBox.ItemsSource), static () => Microsoft.UI.Xaml.Controls.ItemsControl.ItemsSourceProperty),
@@ -193,6 +197,13 @@ internal static class CompatibilityQuickAccessBindings
 
         foreach (var contract in GetContracts(source.GetType()))
         {
+            if (contract.SourceProperty == nameof(IHeaderedControl.Header))
+            {
+                QuickAccessBindingSession.For(source, target).BindPresentation(
+                    contract.SourcePropertyAccessor(), contract.TargetPropertyAccessor());
+                continue;
+            }
+
             Synchronize(
                 source,
                 contract.SourcePropertyAccessor(),

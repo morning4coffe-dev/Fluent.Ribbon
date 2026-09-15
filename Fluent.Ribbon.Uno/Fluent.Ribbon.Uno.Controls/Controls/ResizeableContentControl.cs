@@ -30,6 +30,7 @@ public partial class ResizeableContentControl : ContentControl
     private bool _isDragging;
     private bool _isDraggingBoth;
     private uint? _activePointerId;
+    private UIElement? _dragCoordinateRoot;
 
     #region Dependency Properties
 
@@ -99,6 +100,8 @@ public partial class ResizeableContentControl : ContentControl
     {
         DefaultStyleKey = typeof(ResizeableContentControl);
         RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedHandleMetadata);
+        Unloaded += (_, _) => CancelResize();
+        IsEnabledChanged += (_, _) => UpdateHandleAvailability();
     }
 
     #endregion
@@ -167,6 +170,7 @@ public partial class ResizeableContentControl : ContentControl
 
     private void DetachHandlers()
     {
+        CancelResize();
         if (_resizeBothThumb is not null)
         {
             _resizeBothThumb.PointerPressed -= OnResizeBothPointerPressed;
@@ -233,7 +237,13 @@ public partial class ResizeableContentControl : ContentControl
         PointerRoutedEventArgs e,
         bool isBoth)
     {
-        if (sender is not UIElement element)
+        if (sender is not UIElement element || !IsResizeHandleAvailable(isBoth))
+        {
+            return;
+        }
+
+        if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Mouse
+            && !e.GetCurrentPoint(element).Properties.IsLeftButtonPressed)
         {
             return;
         }
@@ -246,7 +256,8 @@ public partial class ResizeableContentControl : ContentControl
         _isDragging = true;
         _isDraggingBoth = isBoth;
         _activePointerId = e.Pointer.PointerId;
-        _dragStart = e.GetCurrentPoint(this).Position;
+        _dragCoordinateRoot = XamlRoot?.Content ?? this;
+        _dragStart = e.GetCurrentPoint(_dragCoordinateRoot).Position;
         _sizeAtDragStart = new Windows.Foundation.Size(
             GetEffectiveWidth(),
             GetEffectiveHeight());
@@ -262,9 +273,11 @@ public partial class ResizeableContentControl : ContentControl
             return;
         }
 
-        var current = e.GetCurrentPoint(this).Position;
+        var current = e.GetCurrentPoint(_dragCoordinateRoot ?? this).Position;
+        var horizontalChange = (current.X - _dragStart.X)
+                               * (FlowDirection == FlowDirection.RightToLeft ? -1 : 1);
         ResizeTo(
-            _sizeAtDragStart.Width + current.X - _dragStart.X,
+            _sizeAtDragStart.Width + horizontalChange,
             _sizeAtDragStart.Height + current.Y - _dragStart.Y,
             _isDraggingBoth);
         e.Handled = true;
@@ -281,6 +294,7 @@ public partial class ResizeableContentControl : ContentControl
 
         _isDragging = false;
         _activePointerId = null;
+        _dragCoordinateRoot = null;
         if (sender is UIElement element)
         {
             element.ReleasePointerCapture(e.Pointer);
@@ -300,6 +314,16 @@ public partial class ResizeableContentControl : ContentControl
 
         _isDragging = false;
         _activePointerId = null;
+        _dragCoordinateRoot = null;
+    }
+
+    private void CancelResize()
+    {
+        _isDragging = false;
+        _activePointerId = null;
+        _dragCoordinateRoot = null;
+        _resizeBothThumb?.ReleasePointerCaptures();
+        _resizeVerticalThumb?.ReleasePointerCaptures();
     }
 
     internal bool TryResizeFromKey(
@@ -319,7 +343,7 @@ public partial class ResizeableContentControl : ContentControl
         }
 
         ResizeBy(
-            horizontalChange,
+            horizontalChange * (FlowDirection == FlowDirection.RightToLeft ? -1 : 1),
             verticalChange,
             resizesBothDirections);
         return true;
@@ -391,12 +415,20 @@ public partial class ResizeableContentControl : ContentControl
         double height,
         bool resizeWidth)
     {
+        var handle = ResizeMode == ContextMenuResizeMode.Both ? _resizeBothThumb : _resizeVerticalThumb;
+        var handleWidth = handle is null ? 0 : Math.Max(handle.ActualWidth, handle.MinWidth);
+        var handleHeight = handle is null ? 0 : Math.Max(handle.ActualHeight, handle.MinHeight);
+        var minimumWidth = Math.Min(MaxWidth, Math.Max(
+            MinWidth, handleWidth + Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right));
+        var minimumHeight = Math.Min(MaxHeight, Math.Max(
+            MinHeight, handleHeight + Padding.Top + Padding.Bottom + BorderThickness.Top + BorderThickness.Bottom));
         if (resizeWidth)
         {
-            Width = ClampResizeDimension(width, MinWidth, MaxWidth);
+            Width = ClampResizeDimension(width, minimumWidth, MaxWidth);
         }
 
-        Height = ClampResizeDimension(height, MinHeight, MaxHeight);
+        Height = ClampResizeDimension(height, minimumHeight, MaxHeight);
+        PopupResizeHelper.RecordResize(this, resizeWidth);
     }
 
     private void ResizeBy(
@@ -418,6 +450,11 @@ public partial class ResizeableContentControl : ContentControl
 
     private void UpdateHandleAvailability()
     {
+        if (_isDragging && !IsResizeHandleAvailable(_isDraggingBoth))
+        {
+            CancelResize();
+        }
+
         if (_resizeBothThumb is null && _resizeVerticalThumb is null)
         {
             return;

@@ -54,6 +54,7 @@ public partial class ComboBox
         DropDownPopup =
             GetTemplateChild("Popup") as Microsoft.UI.Xaml.Controls.Primitives.Popup
             ?? GetTemplateChild("PART_Popup") as Microsoft.UI.Xaml.Controls.Primitives.Popup;
+        finalHeaderPresenter = CompatibilityHeaderTemplateAdapter.AttachEditorHeader(GetTemplateChild("HeaderText"));
         ApplyFinalHeaderTemplateSelector();
         ApplyFinalTopPopupPresentation();
     }
@@ -105,74 +106,51 @@ public partial class GalleryItem
     {
         if (IsDefinitive)
         {
-            CompatibilityVisualTree.CloseAncestorDropDown(this);
+            PopupService.RaiseDismissPopupEvent(this, DismissPopupMode.Always);
         }
     }
 }
 
 public partial class Spinner
 {
-    private Microsoft.UI.Xaml.Controls.TextBox? finalEditor;
+    /// <inheritdoc />
+    protected override void OnApplyTemplate() => base.OnApplyTemplate();
 
     /// <inheritdoc />
-    protected override void OnApplyTemplate()
+    protected override bool TryConvertTextToValue(string text, out double value)
     {
-        if (finalEditor is not null)
+        if (ReferenceEquals(TextToValueConverter, global::Fluent.Converters.SpinnerTextToValueConverter.DefaultInstance))
         {
-            finalEditor.LostFocus -= OnFinalEditorLostFocus;
-        }
-
-        base.OnApplyTemplate();
-        finalEditor = GetTemplateChild("PART_TextBox") as Microsoft.UI.Xaml.Controls.TextBox;
-        if (finalEditor is not null)
-        {
-            finalEditor.LostFocus += OnFinalEditorLostFocus;
-            ApplyFinalValueToEditor();
-        }
-    }
-
-    private void OnFinalEditorLostFocus(object sender, RoutedEventArgs e)
-    {
-        if (finalEditor is null)
-        {
-            return;
+            return base.TryConvertTextToValue(text, out value);
         }
 
         var parameter = Tuple.Create(Format, Value);
         var converted = TextToValueConverter is global::Fluent.Converters.SpinnerTextToValueConverter spinnerConverter
-            ? spinnerConverter.TextToDouble(
-                finalEditor.Text,
-                Format,
-                Value,
+            ? spinnerConverter.Convert(
+                text,
+                typeof(double),
+                parameter,
                 CultureInfo.CurrentCulture)
             : TextToValueConverter.Convert(
-                finalEditor.Text,
+                text,
                 typeof(double),
                 parameter,
                 CultureInfo.CurrentCulture.Name);
-        if (converted is double value)
-        {
-            Value = value;
-        }
+        value = converted is double number ? number : Value;
+        return converted is double && double.IsFinite(value);
     }
 
-    private void ApplyFinalValueToEditor()
+    /// <inheritdoc />
+    protected override string FormatValue(double value)
     {
-        if (finalEditor is null)
-        {
-            return;
-        }
-
         var converted = TextToValueConverter is global::Fluent.Converters.SpinnerTextToValueConverter spinnerConverter
-            ? spinnerConverter.DoubleToText(Value, Format, CultureInfo.CurrentCulture)
+            ? spinnerConverter.ConvertBack(value, typeof(string), Format, CultureInfo.CurrentCulture)
             : TextToValueConverter.ConvertBack(
-                Value,
+                value,
                 typeof(string),
                 Format,
                 CultureInfo.CurrentCulture.Name);
-        if (converted is string text)
-        {
-            finalEditor.Text = text;
-        }
+        return converted as string
+               ?? throw new InvalidOperationException("The spinner value converter must format values as strings.");
     }
 }

@@ -43,6 +43,7 @@ public partial class RibbonContextualGroupsContainer : Panel
     /// <inheritdoc />
     protected override Size ArrangeOverride(Size finalSize)
     {
+        PruneGroupPositions();
         // Clip to our own bounds so a header can never bleed past the right edge of the
         // title-bar area into the window caption buttons (or past the left edge). Without
         // this a header wider than its slot overflows and renders over the caption region.
@@ -70,6 +71,7 @@ public partial class RibbonContextualGroupsContainer : Panel
     // layout converges and then stops (no feedback loop).
     private void OnLayoutUpdated(object? sender, object e)
     {
+        PruneGroupPositions();
         if (Children.Count == 0)
         {
             return;
@@ -95,6 +97,16 @@ public partial class RibbonContextualGroupsContainer : Panel
             }
         }
     }
+
+    private void PruneGroupPositions()
+    {
+        foreach (var group in _lastStartX.Keys.Where(group => !Children.Contains(group)).ToArray())
+        {
+            _lastStartX.Remove(group);
+        }
+    }
+
+    internal void ForgetGroupPosition(RibbonContextualTabGroup group) => _lastStartX.Remove(group);
 
     // Computes the header rectangle for a group by aligning it above its contextual tabs.
     private Rect ComputeRect(UIElement child, Size finalSize)

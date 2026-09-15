@@ -14,6 +14,8 @@ namespace Fluent;
 /// <see cref="System.ArgumentOutOfRangeException"/> from <c>GetLayoutBoundsForDataIndex</c> during a
 /// layout pass. Because galleries only ever contain a handful of items, virtualization brings no
 /// benefit, so this simple measure/arrange panel replaces it and removes that crash class entirely.
+/// On Windows, a ListBox gallery uses this panel inside its own ItemsPresenter. Only that native
+/// generator owns the item children; group headings use a separate source-template layer.
 /// </remarks>
 public partial class UniformItemsPanel : Panel
 {
@@ -161,6 +163,12 @@ public partial class UniformItemsPanel : Panel
     /// <inheritdoc/>
     protected override Size MeasureOverride(Size availableSize)
     {
+#if WINDOWS
+        if (nativeGallery is not null)
+        {
+            return MeasureNativeGallery(availableSize);
+        }
+#endif
         var cellW = ItemWidth > 0 ? ItemWidth : 0;
         var cellH = ItemHeight > 0 ? ItemHeight : 0;
 
@@ -231,6 +239,12 @@ public partial class UniformItemsPanel : Panel
     /// <inheritdoc/>
     protected override Size ArrangeOverride(Size finalSize)
     {
+#if WINDOWS
+        if (nativeGallery is not null)
+        {
+            return ArrangeNativeGallery(finalSize);
+        }
+#endif
         var cellW = ItemWidth > 0 ? ItemWidth : 0;
         var cellH = ItemHeight > 0 ? ItemHeight : 0;
 

@@ -53,6 +53,8 @@
                     <Border Padding="{TemplateBinding Padding}">
                         <ContentPresenter
                             Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
                             Foreground="{TemplateBinding Foreground}" />
                     </Border>
                 </ControlTemplate>

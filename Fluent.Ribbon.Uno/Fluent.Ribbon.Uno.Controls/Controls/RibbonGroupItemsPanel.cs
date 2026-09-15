@@ -43,6 +43,21 @@ public partial class RibbonGroupItemsPanel : Panel
 
     private static ItemKind Classify(UIElement element)
     {
+        if (element is ContentControl or ContentPresenter)
+        {
+            DependencyObject current = element;
+            while (current is not IScalableRibbonControl
+                   && VisualTreeHelper.GetChildrenCount(current) == 1)
+            {
+                current = VisualTreeHelper.GetChild(current, 0);
+            }
+
+            if (current is UIElement content)
+            {
+                element = content;
+            }
+        }
+
         return element switch
         {
             RibbonSeparator => ItemKind.Separator,

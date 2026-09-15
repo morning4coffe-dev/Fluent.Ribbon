@@ -3,6 +3,9 @@ param(
     [ValidateSet("report", "enforce")]
     [string]$ApiMode = "report",
 
+    [ValidateRange(1, 4)]
+    [int]$PortParityPhase = 4,
+
     [switch]$SkipUi
 )
 
@@ -48,6 +51,16 @@ try {
         "-f", "net10.0",
         "-p:TargetFrameworks=net10.0",
         "--nologo"
+    )
+
+    Invoke-DotNet @(
+        "test",
+        ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.UITests\Fluent.Ribbon.Uno.UITests.csproj",
+        "-c", "Release",
+        "-f", "net10.0",
+        "-p:TargetFrameworks=net10.0",
+        "--nologo",
+        "--filter", "FullyQualifiedName~ShowcaseDiagnosticOptionsTests"
     )
 
     Invoke-DotNet @(
@@ -107,8 +120,10 @@ try {
                 "test",
                 ".\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.UITests\Fluent.Ribbon.Uno.UITests.csproj",
                 "-c", "Release",
+                "-f", "net10.0",
+                "-p:TargetFrameworks=net10.0",
                 "--nologo",
-                "--filter", "TestCategory=UI"
+                "--filter", "FullyQualifiedName~DesktopPortParityPhase$PortParityPhase|FullyQualifiedName~DesktopShowcaseShouldCompleteWithoutDiagnosticFailures"
             )
         }
         finally {

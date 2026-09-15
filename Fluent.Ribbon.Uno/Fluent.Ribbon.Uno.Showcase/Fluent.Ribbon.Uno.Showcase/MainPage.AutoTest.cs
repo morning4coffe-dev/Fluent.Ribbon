@@ -22,6 +22,8 @@
 //                               Run only normal/touch target geometry assertions.
 //   SHOWCASE_COMPACT_LAYOUT_AUTOTEST_ONLY=1
 //                               Run only simplified toolbar/gallery layout assertions.
+//   SHOWCASE_PORT_PARITY_AUTOTEST_PHASE=1..4
+//                               Run cumulative portable WPF parity regressions through a phase.
 //   SHOWCASE_DEFECT_AUTOTEST_ONLY=1
 //                               Run only the contextual-header/panel defect capture.
 //   SHOWCASE_OPEN_SURFACE=name  Leave fontNameCombo or fontSizeCombo open for visual capture.
@@ -176,7 +178,12 @@ public sealed partial class MainPage
             return;
         }
 
-        if (string.Equals(
+        var parityPhase = Environment.GetEnvironmentVariable("SHOWCASE_PORT_PARITY_AUTOTEST_PHASE");
+        if (!string.IsNullOrWhiteSpace(parityPhase))
+        {
+            await RunPortParityAutoTestAsync(parityPhase);
+        }
+        else if (string.Equals(
                 Environment.GetEnvironmentVariable("SHOWCASE_LOCALIZATION_AUTOTEST_ONLY"),
                 "1",
                 StringComparison.Ordinal))
@@ -313,29 +320,10 @@ public sealed partial class MainPage
 
     private static string? GetDiagnosticOption(string environmentVariable, string argumentName)
     {
-        var value = Environment.GetEnvironmentVariable(environmentVariable);
-        if (!string.IsNullOrEmpty(value))
+        var value = ShowcaseDiagnosticOptions.Get(environmentVariable, argumentName, App.LaunchArguments);
+        if (value is not null)
         {
             return value;
-        }
-
-        var prefix = $"--{argumentName}=";
-        foreach (var argument in Environment.GetCommandLineArgs())
-        {
-            if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return argument[prefix.Length..];
-            }
-        }
-
-        foreach (var argument in App.LaunchArguments.Split(
-                     ' ',
-                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return argument[prefix.Length..];
-            }
         }
 
 #if __WASM__
@@ -2793,8 +2781,22 @@ public sealed partial class MainPage
     private async Task VerifyInRibbonGalleryParityAsync()
     {
         AutoLog("IRGTEST BEGIN");
+        StackPanel? parityHost = null;
+        InRibbonGallery? parityClone = null;
         try
         {
+            var cloneHost = new StackPanel { MaxWidth = 360, HorizontalAlignment = HorizontalAlignment.Left };
+            var root = Content as Panel ?? throw new InvalidOperationException("The gallery regression requires the real page root.");
+            root.Children.Add(cloneHost);
+            try
+            {
+                await Diagnostics.PortGalleryCloneContractTests.VerifyAsync(cloneHost, () => SettleAsync(2, 50));
+            }
+            finally
+            {
+                root.Children.Remove(cloneHost);
+            }
+
             var previewCommand = new GalleryAutoTestCommand();
             var cancelPreviewCommand = new GalleryAutoTestCommand();
             var alpha = new RibbonGalleryItem
@@ -2864,6 +2866,11 @@ public sealed partial class MainPage
                 "data-bound gallery reload cleared an existing source selection");
             var quickAccessGallery =
                 (InRibbonGallery)boundGallery.CreateQuickAccessItem();
+            Require(
+                ReferenceEquals(quickAccessGallery.SelectedItem, boundItems[0])
+                && quickAccessGallery.SelectedIndex == 0
+                && ReferenceEquals(quickAccessGallery.Items, boundGallery.Items),
+                "A newly created Quick Access gallery did not expose canonical items and source selection");
             InvokePrivate(
                 quickAccessGallery,
                 "OnQuickAccessCloneOpened",
@@ -2883,7 +2890,9 @@ public sealed partial class MainPage
                 quickAccessGallery,
                 EventArgs.Empty);
             Require(
-                ReferenceEquals(boundGallery.SelectedItem, boundItems[0]),
+                ReferenceEquals(boundGallery.SelectedItem, boundItems[0])
+                && ReferenceEquals(quickAccessGallery.SelectedItem, boundItems[0])
+                && quickAccessGallery.Items.Count == boundItems.Count,
                 "Quick Access gallery close wrote a generated container to the owner");
             boundItems.RemoveAt(0);
             Require(
@@ -2924,11 +2933,24 @@ public sealed partial class MainPage
 
             var quickAccess = gallery.CreateQuickAccessItem() as InRibbonGallery;
             Require(quickAccess is not null, "quick access clone was not created");
+            parityClone = quickAccess;
+            parityHost = new StackPanel { Orientation = Orientation.Horizontal, MaxWidth = 600 };
+            parityHost.Children.Add(gallery);
+            parityHost.Children.Add(quickAccess!);
+            ((Panel)Content).Children.Add(parityHost);
+            await SettleAsync(2, 75);
             quickAccess!.IsDropDownOpen = true;
-            Require(gallery.IsFrozen, "source gallery was not frozen while the QAT clone was open");
+            await SettleAsync(2, 75);
+            Require(gallery.IsFrozen && quickAccess.DropDownPopup?.IsOpen == true
+                    && quickAccess.DropDownPopup.Child is FrameworkElement { IsLoaded: true, ActualWidth: > 0, ActualHeight: > 0 },
+                "source gallery was not frozen while the real QAT clone popup was open");
             Require(quickAccess.Items.Count == gallery.Items.Count, "QAT clone did not receive source items");
             quickAccess.IsDropDownOpen = false;
-            Require(!gallery.IsFrozen && quickAccess.Items.Count == 0, "QAT clone did not restore source state");
+            await SettleAsync(2, 75);
+            Require(!gallery.IsFrozen && quickAccess.DropDownPopup?.IsOpen == false
+                    && ReferenceEquals(quickAccess.Items, gallery.Items)
+                    && ReferenceEquals(quickAccess.SelectedItem, gallery.SelectedItem),
+                "QAT clone did not restore native ownership while preserving its public source-model view");
 
             var scaled = 0;
             gallery.Scaled += (_, _) => scaled++;
@@ -2998,6 +3020,18 @@ public sealed partial class MainPage
         catch (Exception ex)
         {
             AutoLog($"  IRGTEST THREW {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            if (parityClone is not null)
+            {
+                parityClone.IsDropDownOpen = false;
+            }
+            if (parityHost is not null && Content is Panel parent)
+            {
+                parent.Children.Remove(parityHost);
+                await SettleAsync(1, 25);
+            }
         }
 
         AutoLog("IRGTEST END");

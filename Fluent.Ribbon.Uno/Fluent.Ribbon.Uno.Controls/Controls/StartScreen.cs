@@ -14,8 +14,8 @@ public partial class StartScreen : Backstage, IKeyTipedControl
 {
     private const string PART_LeftPane = "PART_LeftPane";
     private const string PART_RightPane = "PART_RightPane";
-    private WeakReference<UIElement>? _focusBackup;
-    private Ribbon? _owningRibbon;
+    private bool _isSynchronizingContent;
+    private bool? _originalTitleBarCollapsed;
 
     #region Dependency Properties
 
@@ -25,7 +25,7 @@ public partial class StartScreen : Backstage, IKeyTipedControl
             nameof(Content),
             typeof(object),
             typeof(StartScreen),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnStartScreenContentChanged));
 
     /// <summary>
     /// Gets or sets the main content (right pane).
@@ -42,7 +42,7 @@ public partial class StartScreen : Backstage, IKeyTipedControl
             nameof(LeftPaneContent),
             typeof(object),
             typeof(StartScreen),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnLeftPaneContentChanged));
 
     /// <summary>
     /// Gets or sets the left pane content.
@@ -54,20 +54,15 @@ public partial class StartScreen : Backstage, IKeyTipedControl
     }
 
     /// <summary>Identifies the <see cref="IsOpen"/> dependency property.</summary>
-    public new static readonly DependencyProperty IsOpenProperty =
-        DependencyProperty.Register(
-            nameof(IsOpen),
-            typeof(bool),
-            typeof(StartScreen),
-            new PropertyMetadata(false, OnIsOpenChanged));
+    public new static readonly DependencyProperty IsOpenProperty = Backstage.IsOpenProperty;
 
     /// <summary>
     /// Gets or sets whether the start screen is open.
     /// </summary>
     public new bool IsOpen
     {
-        get => (bool)GetValue(IsOpenProperty);
-        set => SetValue(IsOpenProperty, value);
+        get => base.IsOpen;
+        set => base.IsOpen = value;
     }
 
     /// <summary>Identifies the <see cref="Shown"/> dependency property.</summary>
@@ -76,7 +71,7 @@ public partial class StartScreen : Backstage, IKeyTipedControl
             nameof(Shown),
             typeof(bool),
             typeof(StartScreen),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnShownChanged));
 
     /// <summary>
     /// Gets or sets whether this StartScreen has been shown at least once.
@@ -88,37 +83,27 @@ public partial class StartScreen : Backstage, IKeyTipedControl
     }
 
     /// <summary>Identifies the <see cref="KeyTip"/> dependency property.</summary>
-    public new static readonly DependencyProperty KeyTipProperty =
-        DependencyProperty.Register(
-            nameof(KeyTip),
-            typeof(string),
-            typeof(StartScreen),
-            new PropertyMetadata(string.Empty));
+    public new static readonly DependencyProperty KeyTipProperty = RibbonControl.KeyTipProperty;
 
     /// <summary>
     /// Gets or sets the key tip used to open the start screen.
     /// </summary>
     public new string? KeyTip
     {
-        get => (string?)GetValue(KeyTipProperty);
-        set => SetValue(KeyTipProperty, value);
+        get => base.KeyTip;
+        set => base.KeyTip = value;
     }
 
     /// <summary>Identifies the <see cref="CloseOnEsc"/> dependency property.</summary>
-    public new static readonly DependencyProperty CloseOnEscProperty =
-        DependencyProperty.Register(
-            nameof(CloseOnEsc),
-            typeof(bool),
-            typeof(StartScreen),
-            new PropertyMetadata(true));
+    public new static readonly DependencyProperty CloseOnEscProperty = Backstage.CloseOnEscProperty;
 
     /// <summary>
     /// Gets or sets whether Escape closes the start screen.
     /// </summary>
     public new bool CloseOnEsc
     {
-        get => (bool)GetValue(CloseOnEscProperty);
-        set => SetValue(CloseOnEscProperty, value);
+        get => base.CloseOnEsc;
+        set => base.CloseOnEsc = value;
     }
 
     /// <summary>Identifies the <see cref="LeftPaneWidth"/> dependency property.</summary>
@@ -148,9 +133,9 @@ public partial class StartScreen : Backstage, IKeyTipedControl
     public StartScreen()
     {
         DefaultStyleKey = typeof(StartScreen);
-        KeyDown += OnStartScreenKeyDown;
         Loaded += OnStartScreenLoaded;
         Unloaded += OnStartScreenUnloaded;
+        RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => UpdateTitleBar());
     }
 
     #endregion
@@ -168,132 +153,110 @@ public partial class StartScreen : Backstage, IKeyTipedControl
         VisualStateManager.GoToState(this, this.IsOpen ? "Open" : "Closed", false);
     }
 
-    private static void OnIsOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    /// <inheritdoc />
+    protected override bool HasDisplayContent => Content is not null || LeftPaneContent is not null;
+
+    /// <inheritdoc />
+    protected override DependencyObject FocusScope => this;
+
+    /// <inheritdoc />
+    protected override bool AffectsParentRibbon => PresentationOwner is not null;
+
+    private static void OnStartScreenContentChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
-        if (d is StartScreen screen)
-        {
-            var isOpen = (bool)e.NewValue;
-            if (isOpen)
-            {
-                screen.Shown = true;
-                screen._focusBackup =
-                    FocusRoutingHelper.CaptureFocusedElement(screen, onlyWhenOutsideOwner: true);
-            }
-
-            VisualStateManager.GoToState(screen, isOpen ? "Open" : "Closed", true);
-            screen.UpdateOwningRibbonState();
-
-            if (isOpen)
-            {
-                screen.DispatcherQueue?.TryEnqueue(() =>
-                {
-                    if (screen.IsOpen)
-                    {
-                        FocusRoutingHelper.FocusFirst(screen);
-                    }
-                });
-            }
-            else
-            {
-                FocusRoutingHelper.RestoreFocus(ref screen._focusBackup);
-            }
-
-            if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(screen)
-                is Fluent.Automation.Peers.RibbonStartScreenAutomationPeer peer)
-            {
-                peer.RaiseIsOpenChanged((bool)e.OldValue, isOpen);
-            }
-        }
-    }
-
-    private void OnStartScreenKeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        if (_owningRibbon?.AreAnyKeyTipsVisible == true)
+        var screen = (StartScreen)sender;
+        if (screen._isSynchronizingContent)
         {
             return;
         }
 
-        if (!args.Handled
-            && args.Key == Windows.System.VirtualKey.Escape
-            && CloseOnEsc
-            && IsOpen)
+        screen._isSynchronizingContent = true;
+        try
         {
-            IsOpen = false;
-            args.Handled = true;
+            ((Backstage)screen).Content = args.NewValue is UIElement element
+                ? element
+                : args.NewValue is null ? null : new ContentPresenter { Content = args.NewValue };
+        }
+        finally
+        {
+            screen._isSynchronizingContent = false;
+        }
+
+        screen.RefreshRequestedOpenState();
+    }
+
+    /// <inheritdoc />
+    protected override void OnBackstageContentChanged(UIElement? content)
+    {
+        if (!_isSynchronizingContent && !ReferenceEquals(Content, content))
+        {
+            _isSynchronizingContent = true;
+            try
+            {
+                Content = content;
+            }
+            finally
+            {
+                _isSynchronizingContent = false;
+            }
+        }
+
+        base.OnBackstageContentChanged(content);
+    }
+
+    private static void OnLeftPaneContentChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
+        ((StartScreen)sender).RefreshRequestedOpenState();
+
+    private static void OnShownChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        if (!(bool)args.NewValue)
+        {
+            ((StartScreen)sender).RefreshRequestedOpenState();
         }
     }
 
     private void OnStartScreenLoaded(object sender, RoutedEventArgs args)
     {
-        if (IsOpen && FocusRoutingHelper.IsEffectivelyVisible(this))
+        UpdateTitleBar();
+        if (IsOpen)
         {
-            UpdateOwningRibbonState();
-            DispatcherQueue?.TryEnqueue(() =>
-            {
-                if (IsOpen)
-                {
-                    FocusRoutingHelper.FocusFirst(this);
-                }
-            });
+            DispatcherQueue?.TryEnqueue(FocusPresentation);
         }
     }
 
-    private void OnStartScreenUnloaded(object sender, RoutedEventArgs args)
+    private void OnStartScreenUnloaded(object sender, RoutedEventArgs args) => RestoreTitleBar();
+
+    private void UpdateTitleBar()
     {
-        _focusBackup = null;
-        if (_owningRibbon is not null && IsOpen)
-        {
-            _owningRibbon.IsBackstageOrStartScreenOpen =
-                _owningRibbon.Menu is Backstage { IsOpen: true };
-        }
-
-        _owningRibbon = null;
-    }
-
-    private void UpdateOwningRibbonState()
-    {
-        _owningRibbon = FocusRoutingHelper.FindAncestor<Ribbon>(this);
-        if (_owningRibbon is null && XamlRoot?.Content is DependencyObject root)
-        {
-            _owningRibbon = FocusRoutingHelper.FindDescendant<Ribbon>(root);
-        }
-
-        if (_owningRibbon is null)
+        if (PresentationOwner?.TitleBar is not { } titleBar || !IsOpen)
         {
             return;
         }
 
-        // Ribbon.StartScreen is the unambiguous application-level ownership contract.
-        // A StartScreen can also be demonstrated inline inside ordinary tab content.
-        if (!ReferenceEquals(_owningRibbon.StartScreen, this))
+        _originalTitleBarCollapsed ??= titleBar.IsCollapsed;
+        titleBar.IsCollapsed = Visibility == Visibility.Visible;
+    }
+
+    private void RestoreTitleBar()
+    {
+        if (_originalTitleBarCollapsed is { } value && PresentationOwner?.TitleBar is { } titleBar)
         {
-            return;
+            titleBar.IsCollapsed = value;
         }
 
-        if (IsOpen && FocusRoutingHelper.IsEffectivelyVisible(this))
-        {
-            _owningRibbon.IsBackstageOrStartScreenOpen = true;
-        }
-        else
-        {
-            _owningRibbon.IsBackstageOrStartScreenOpen =
-                _owningRibbon.Menu is Backstage { IsOpen: true };
-        }
+        _originalTitleBarCollapsed = null;
     }
 
     /// <inheritdoc />
     public override KeyTipPressedResult OnKeyTipPressed()
     {
-        IsOpen = true;
-        return new KeyTipPressedResult(
-            pressedElementAquiredFocus: false,
-            pressedElementOpenedPopup: true);
+        return base.OnKeyTipPressed();
     }
 
     /// <inheritdoc />
     public override void OnKeyTipBack()
     {
-        IsOpen = false;
+        base.OnKeyTipBack();
     }
 
     /// <summary>
@@ -302,13 +265,20 @@ public partial class StartScreen : Backstage, IKeyTipedControl
     /// <returns><c>true</c> when the StartScreen was opened; otherwise <c>false</c>.</returns>
     protected override bool Show()
     {
-        if (Shown)
+        var isInline = PresentationOwner is null && VisualTreeHelper.GetParent(this) is not null;
+        if (Shown && !isInline)
         {
             return false;
         }
 
-        IsOpen = true;
-        return IsOpen;
+        if (!base.Show())
+        {
+            return false;
+        }
+
+        Shown = true;
+        UpdateTitleBar();
+        return true;
     }
 
     /// <summary>
@@ -316,7 +286,8 @@ public partial class StartScreen : Backstage, IKeyTipedControl
     /// </summary>
     protected override void Hide()
     {
-        IsOpen = false;
+        base.Hide();
+        RestoreTitleBar();
     }
 
     /// <inheritdoc />

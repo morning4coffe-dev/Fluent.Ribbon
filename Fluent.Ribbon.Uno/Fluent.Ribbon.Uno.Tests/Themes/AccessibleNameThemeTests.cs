@@ -23,6 +23,7 @@ public sealed class AccessibleNameThemeTests
         ("InRibbonGallery.xaml", "CollapsedContent"),
         ("QuickAccessToolBar.xaml", "PART_OverflowButton"),
         ("QuickAccessToolBar.xaml", "PART_MenuButton"),
+        ("Ribbon.xaml", "PART_DisplayOptionsButton"),
         ("RibbonGroupBox.xaml", "LauncherButton"),
         ("RibbonScrollViewer.xaml", "PART_LeftButton"),
         ("RibbonScrollViewer.xaml", "PART_RightButton"),

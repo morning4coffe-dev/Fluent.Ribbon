@@ -27,6 +27,20 @@
                                         <Setter Target="PART_CollapsedButton.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <VisualState x:Name="QuickAccess">
+                                    <VisualState.Setters>
+                                        <Setter Target="NormalContent.Visibility" Value="Collapsed" />
+                                        <Setter Target="PART_CollapsedButton.Visibility" Value="Visible" />
+                                        <Setter Target="PART_CollapsedButton.MinWidth" Value="24" />
+                                        <Setter Target="PART_CollapsedButton.Padding" Value="3,2" />
+                                        <Setter Target="PART_CollapsedGlyph.FontSize" Value="16" />
+                                        <Setter Target="PART_CollapsedImage.Width" Value="16" />
+                                        <Setter Target="PART_CollapsedImage.Height" Value="16" />
+                                        <Setter Target="PART_CollapsedHeaderContentControl.Visibility" Value="Collapsed" />
+                                        <Setter Target="PART_CollapsedChevron.FontSize" Value="6" />
+                                        <Setter Target="PART_CollapsedChevron.Margin" Value="0" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="SimplifiedStates">
                                 <VisualState x:Name="Classic" />
@@ -84,6 +98,7 @@
                                         x:Name="PART_HeaderPresenter"
                                         Content="{TemplateBinding Header}"
                                         ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                        ContentTemplateSelector="{TemplateBinding HeaderTemplateSelector}"
                                         HorizontalAlignment="Center" />
 
                                     <fluent:Button
@@ -221,6 +236,7 @@
                                     x:Name="PART_CollapsedHeaderContentControl"
                                     Content="{TemplateBinding Header}"
                                     ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                    ContentTemplateSelector="{TemplateBinding HeaderTemplateSelector}"
                                     FontSize="11"
                                     HorizontalContentAlignment="Center"
                                     Margin="0,2,0,0" />

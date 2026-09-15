@@ -19,11 +19,7 @@ public partial class RibbonGroupBox :
 
     /// <summary>Identifies the <see cref="HeaderTemplate"/> dependency property.</summary>
     public new static readonly DependencyProperty HeaderTemplateProperty =
-        DependencyProperty.Register(
-            nameof(HeaderTemplate),
-            typeof(DataTemplate),
-            typeof(RibbonGroupBox),
-            new PropertyMetadata(null));
+        HeaderedItemsControl.HeaderTemplateProperty;
 
     /// <summary>Gets or sets the group-header template.</summary>
     public new DataTemplate? HeaderTemplate
@@ -34,11 +30,7 @@ public partial class RibbonGroupBox :
 
     /// <summary>Identifies the <see cref="HeaderTemplateSelector"/> dependency property.</summary>
     public new static readonly DependencyProperty HeaderTemplateSelectorProperty =
-        DependencyProperty.Register(
-            nameof(HeaderTemplateSelector),
-            typeof(DataTemplateSelector),
-            typeof(RibbonGroupBox),
-            new PropertyMetadata(null));
+        HeaderedItemsControl.HeaderTemplateSelectorProperty;
 
     /// <summary>Gets or sets the group-header template selector.</summary>
     public new DataTemplateSelector? HeaderTemplateSelector
@@ -330,11 +322,13 @@ public partial class RibbonGroupBox :
 
         if ((bool)args.NewValue)
         {
+            PopupService.RegisterOpenDropDown(groupBox);
             groupBox.ExpandForAutomation();
             groupBox.DropDownOpened?.Invoke(groupBox, EventArgs.Empty);
         }
         else
         {
+            PopupService.UnregisterOpenDropDown(groupBox);
             groupBox.CollapseForAutomation();
             groupBox.DropDownClosed?.Invoke(groupBox, EventArgs.Empty);
         }
@@ -376,13 +370,17 @@ public partial class RibbonGroupBox :
     /// <inheritdoc />
     public virtual FrameworkElement CreateQuickAccessItem()
     {
-        var quickAccessButton = new RibbonButton
+        var quickAccessButton = new RibbonGroupBox
         {
-            Header = Header,
-            LargeIcon = LargeIcon as ImageSource,
-            MediumIcon = MediumIcon as ImageSource,
+            State = RibbonGroupBoxState.QuickAccess,
             CanAddToQuickAccessToolBar = false,
+            IsSeparatorVisible = false,
+            MinWidth = 24,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+            BorderThickness = new Thickness(0),
         };
+        BindQuickAccessGroup(quickAccessButton);
 
         var automationName =
             Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(Header);
@@ -397,7 +395,6 @@ public partial class RibbonGroupBox :
                 ? $"RibbonGroupBoxQuickAccess_{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}"
                 : $"{Name}_QuickAccess");
 
-        quickAccessButton.Click += (_, _) => IsDropDownOpen = true;
         return quickAccessButton;
     }
 

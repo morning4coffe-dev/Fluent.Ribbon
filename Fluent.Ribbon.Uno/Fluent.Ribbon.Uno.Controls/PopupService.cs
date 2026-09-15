@@ -153,6 +153,12 @@ public static class PopupService
                     continue;
                 }
 
+                // Preserve a real parent popup while opening a nested dropdown, not for leaf commands.
+                if (ShouldPreserveOpenAncestor(dropDown, sender))
+                {
+                    continue;
+                }
+
                 if (dropDown.IsDropDownOpen)
                 {
                     dropDown.IsDropDownOpen = false;
@@ -164,6 +170,52 @@ public static class PopupService
             isDismissing = false;
         }
     }
+
+    internal static bool ShouldPreserveOpenAncestor(object ancestor, object? sender) =>
+        sender is IDropDownControl { IsDropDownOpen: true }
+        && sender is DependencyObject opening
+        && ancestor is DependencyObject owner
+        && IsOwnedDescendantOf(owner, opening);
+
+    internal static bool IsOwnedDescendantOf(DependencyObject ancestor, DependencyObject element)
+    {
+        var openControls = GetOpenDropDownsSnapshot();
+        var visited = new HashSet<DependencyObject>();
+        for (var current = element; visited.Add(current);)
+        {
+            if (ReferenceEquals(ancestor, current) || IsAncestorOf(ancestor, current))
+            {
+                return true;
+            }
+
+            if (ancestor is IDropDownControl ancestorDropDown
+                && GetOpenContentRoot(ancestorDropDown) is { } ancestorContent
+                && (ReferenceEquals(ancestorContent, current) || IsAncestorOf(ancestorContent, current)))
+            {
+                return true;
+            }
+
+            var parent = openControls.FirstOrDefault(candidate =>
+                candidate is DependencyObject candidateElement
+                && !ReferenceEquals(candidateElement, current)
+                && GetOpenContentRoot(candidate) is { } content
+                && (ReferenceEquals(content, current) || IsAncestorOf(content, current)));
+            if (parent is not DependencyObject parentElement)
+            {
+                return false;
+            }
+
+            current = parentElement;
+        }
+
+        return false;
+    }
+
+    private static DependencyObject? GetOpenContentRoot(IDropDownControl control) =>
+        control.IsDropDownOpen
+            ? control.DropDownPopup?.Child
+              ?? (control as RibbonDropDownButton)?.OpenFlyoutContentRoot
+            : null;
 
     private static List<IDropDownControl> GetOpenDropDownsSnapshot()
     {

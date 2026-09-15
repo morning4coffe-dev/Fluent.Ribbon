@@ -38,6 +38,9 @@ public partial class KeyTipService
     private readonly KeyEventHandler _rootKeyDownHandler;
     private readonly KeyEventHandler _rootKeyUpHandler;
     private readonly PointerEventHandler _rootPointerPressedHandler;
+    private readonly HashSet<FrameworkElement> _hostedInputRoots = new();
+    private readonly HashSet<FrameworkElement> _scopeInputRoots = new();
+    private readonly HashSet<FrameworkElement> _attachedInputRoots = new();
 
     private FrameworkElement? _rootElement;
     private WeakReference<UIElement>? _focusBackup;
@@ -47,6 +50,7 @@ public partial class KeyTipService
     private bool _activationKeyIsDown;
     private bool _activationKeyWasUsedAsModifier;
     private int _scopeRefreshGeneration;
+    private bool _scopeRefreshPending;
     private string _typedKeys = string.Empty;
 
     /// <summary>
@@ -86,7 +90,10 @@ public partial class KeyTipService
     /// Gets whether at least one KeyTip is currently visible.
     /// </summary>
     public bool AreAnyKeyTipsVisible
-        => _isActive && _targets.Any(entry => entry.Visual.Visibility == Visibility.Visible);
+        => _isActive
+           && !_scopeStack.Any(frame => frame.Owner is { } owner && !IsEligible(owner))
+           && _targets.Any(entry =>
+            entry.Visual.Visibility == Visibility.Visible && IsEligible(entry.Element));
 
     /// <summary>
     /// Gets or sets whether this service processes keyboard input.
@@ -107,9 +114,14 @@ public partial class KeyTipService
         root.AddHandler(UIElement.KeyDownEvent, _rootKeyDownHandler, true);
         root.AddHandler(UIElement.KeyUpEvent, _rootKeyUpHandler, true);
         root.AddHandler(UIElement.PointerPressedEvent, _rootPointerPressedHandler, true);
+        _attachedInputRoots.Add(root);
         root.LostFocus += OnRootLostFocus;
         _ribbon.Unloaded += OnRibbonUnloaded;
         _isAttached = true;
+        foreach (var popupRoot in _hostedInputRoots)
+        {
+            AttachInputRoot(popupRoot);
+        }
     }
 
     /// <summary>
@@ -123,6 +135,7 @@ public partial class KeyTipService
             root.RemoveHandler(UIElement.KeyUpEvent, _rootKeyUpHandler);
             root.RemoveHandler(UIElement.PointerPressedEvent, _rootPointerPressedHandler);
             root.LostFocus -= OnRootLostFocus;
+            _attachedInputRoots.Remove(root);
         }
 
         if (_isAttached)
@@ -132,6 +145,11 @@ public partial class KeyTipService
 
         StopAltHoldTimer();
         Hide(restoreFocus: false);
+        foreach (var popupRoot in _hostedInputRoots)
+        {
+            DetachInputRoot(popupRoot);
+        }
+
         _focusBackup = null;
         _rootElement = null;
         _isAttached = false;
@@ -166,7 +184,9 @@ public partial class KeyTipService
         var nestedScope = GetInitiallyOpenScope();
         if (nestedScope is not null && !ReferenceEquals(nestedScope, _ribbon))
         {
-            _scopeStack.Push(new ScopeFrame(nestedScope, nestedScope));
+            var frame = new ScopeFrame(nestedScope, nestedScope);
+            _scopeStack.Push(frame);
+            WatchScope(frame);
         }
 
         OpenOverlay();
@@ -201,7 +221,9 @@ public partial class KeyTipService
         _typedKeys = string.Empty;
         StopAltHoldTimer();
         _targets.Clear();
-        _scopeStack.Clear();
+        ClearScopes();
+        ClearScopeInputRoots();
+        _scopeRefreshPending = false;
         _overlayCanvas.Children.Clear();
         _overlayPopup.IsOpen = false;
 
@@ -222,36 +244,44 @@ public partial class KeyTipService
 
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (!IsEnabled || !ShouldProcessKeyEvent(_isActive, args.Handled))
+        if (sender is FrameworkElement root
+            && ProcessKeyDown(root, args.Key, args.Handled, IsShiftDown()))
         {
-            return;
+            args.Handled = true;
+        }
+    }
+
+    internal bool ProcessKeyDown(FrameworkElement inputRoot, VirtualKey key, bool alreadyHandled, bool shiftDown)
+    {
+        if (!_isAttached || !_attachedInputRoots.Contains(inputRoot)
+            || !IsEnabled || !ShouldProcessKeyEvent(_isActive, alreadyHandled))
+        {
+            return false;
         }
 
         if (_isActive)
         {
             if (_activationKeyIsDown
-                && args.Key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
+                && key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
             {
                 _activationKeyWasUsedAsModifier = true;
                 Hide();
-                return;
+                return false;
             }
 
-            if (IsActivationKey(args.Key))
+            if (IsActivationKey(key))
             {
                 Hide();
-                args.Handled = true;
-                return;
+                return true;
             }
 
-            if (args.Key == VirtualKey.Escape)
+            if (key == VirtualKey.Escape)
             {
                 NavigateBack();
-                args.Handled = true;
-                return;
+                return true;
             }
 
-            if (args.Key == VirtualKey.Back)
+            if (key == VirtualKey.Back)
             {
                 if (_typedKeys.Length > 0)
                 {
@@ -263,61 +293,69 @@ public partial class KeyTipService
                     NavigateBack();
                 }
 
-                args.Handled = true;
-                return;
+                return true;
             }
 
-            if (TryGetCharacter(args.Key, out var character))
+            if (TryGetCharacter(key, out var character))
             {
                 AppendKey(character);
-                args.Handled = true;
+                return true;
             }
 
-            return;
+            return false;
         }
 
         if (_activationKeyIsDown
-            && args.Key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
+            && key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
         {
             _activationKeyWasUsedAsModifier = true;
             StopAltHoldTimer();
-            return;
+            return false;
         }
 
-        if (_activationKeyIsDown && !IsModifierKey(args.Key))
+        if (_activationKeyIsDown && !IsModifierKey(key))
         {
             _activationKeyWasUsedAsModifier = true;
             StopAltHoldTimer();
-            return;
+            return false;
         }
 
-        if (!IsActivationKey(args.Key))
+        if (!IsActivationKey(key))
         {
-            return;
+            return false;
         }
 
-        if (args.Key == VirtualKey.F10 && IsShiftDown())
+        if (key == VirtualKey.F10 && shiftDown)
         {
-            return;
+            return false;
         }
 
-        if (args.Key == VirtualKey.Menu)
+        if (key == VirtualKey.Menu)
         {
             _activationKeyIsDown = true;
             _activationKeyWasUsedAsModifier = false;
             StartAltHoldTimer();
-            return;
+            return false;
         }
 
         Show();
-        args.Handled = _isActive;
+        return _isActive;
     }
 
     private void OnRootKeyUp(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key != VirtualKey.Menu || !_activationKeyIsDown)
+        if (sender is FrameworkElement root && ProcessKeyUp(root, args.Key))
         {
-            return;
+            args.Handled = true;
+        }
+    }
+
+    internal bool ProcessKeyUp(FrameworkElement inputRoot, VirtualKey key)
+    {
+        if (!_isAttached || !_attachedInputRoots.Contains(inputRoot)
+            || !IsEnabled || key != VirtualKey.Menu || !_activationKeyIsDown)
+        {
+            return false;
         }
 
         var shouldShow = !_activationKeyWasUsedAsModifier && !_isActive;
@@ -328,8 +366,10 @@ public partial class KeyTipService
         if (shouldShow)
         {
             Show();
-            args.Handled = _isActive;
+            return _isActive;
         }
+
+        return false;
     }
 
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs args)
@@ -427,6 +467,10 @@ public partial class KeyTipService
         RefreshClosedScopes();
         var previousKeys = _typedKeys;
         _typedKeys += char.ToUpperInvariant(character);
+        if (_scopeRefreshPending)
+        {
+            return;
+        }
 
         var matches = GetMatches(_typedKeys);
         if (matches.Count == 0)
@@ -481,7 +525,7 @@ public partial class KeyTipService
             return;
         }
 
-        if (entry.Element is RibbonTab tab)
+        if (entry.Element is RibbonTabItem tab)
         {
             _ribbon.SelectedTab = tab;
             tab.IsSelected = true;
@@ -491,6 +535,12 @@ public partial class KeyTipService
             }
 
             PushScope(tab, tab);
+            return;
+        }
+
+        if (entry.Element is RibbonGroupBox { IsInButtonState: false } group)
+        {
+            PushScope(group, group);
             return;
         }
 
@@ -517,13 +567,16 @@ public partial class KeyTipService
     private void PushScope(FrameworkElement container, FrameworkElement owner)
     {
         _typedKeys = string.Empty;
-        _scopeStack.Push(new ScopeFrame(container, owner));
+        var frame = new ScopeFrame(container, owner);
+        _scopeStack.Push(frame);
+        WatchScope(frame);
         ScheduleScopeRefresh();
     }
 
     private void ScheduleScopeRefresh()
     {
         var generation = ++_scopeRefreshGeneration;
+        _scopeRefreshPending = true;
         _overlayCanvas.Children.Clear();
         _targets.Clear();
 
@@ -550,10 +603,18 @@ public partial class KeyTipService
             return;
         }
 
-        var current = _scopeStack.Pop();
+        var current = _scopeStack.Peek();
+        if (current.Owner is Backstage { IsOpen: true, CanChangeIsOpen: false })
+        {
+            return;
+        }
+
+        _scopeStack.Pop();
+        current.Unsubscribe?.Invoke();
+        StopScopeReadiness(current);
         switch (current.Owner)
         {
-            case RibbonTab:
+            case RibbonTabItem:
                 CloseMinimizedTabPopup();
                 break;
             case IKeyTipedControl keyTipedControl:
@@ -563,6 +624,11 @@ public partial class KeyTipService
 
         _typedKeys = string.Empty;
         RebuildTargets();
+        if (current.Owner is { } owner && IsEligible(owner))
+        {
+            owner.Focus(FocusState.Programmatic);
+        }
+
         FocusCurrentScope();
     }
 
@@ -571,7 +637,9 @@ public partial class KeyTipService
         var changed = false;
         while (_scopeStack.Count > 1 && IsScopeClosed(_scopeStack.Peek()))
         {
-            _scopeStack.Pop();
+            var removed = _scopeStack.Pop();
+            removed.Unsubscribe?.Invoke();
+            StopScopeReadiness(removed);
             changed = true;
         }
 
@@ -585,13 +653,21 @@ public partial class KeyTipService
 
     private bool IsScopeClosed(ScopeFrame frame)
     {
+        if (frame.Owner is { } owner && !IsEligible(owner))
+        {
+            return true;
+        }
+
         return frame.Owner switch
         {
+            RibbonTabItem tab => !_ribbon.Tabs.Contains(tab)
+                                 || !ReferenceEquals(_ribbon.SelectedTab, tab)
+                                 || (_ribbon.IsMinimized && !IsMinimizedTabPopupOpen()),
+            RibbonGroupBox group => group.IsInButtonState && !group.IsDropDownOpen,
             ApplicationMenu applicationMenu => !applicationMenu.IsDropDownOpen,
             StartScreen startScreen => !startScreen.IsOpen,
             Backstage backstage => !backstage.IsOpen,
             IDropDownControl dropDownControl => !dropDownControl.IsDropDownOpen,
-            RibbonTab => _ribbon.IsMinimized && !IsMinimizedTabPopupOpen(),
             _ => false,
         };
     }
@@ -612,23 +688,22 @@ public partial class KeyTipService
         }
 
         if (_ribbon.ActiveBackstage is { IsOpen: true } activeBackstage
+            && (activeBackstage is not StartScreen || ReferenceEquals(activeBackstage, _ribbon.StartScreen))
             && IsEligible(activeBackstage))
         {
             return activeBackstage;
-        }
-
-        if (_rootElement is not null
-            && FocusRoutingHelper.FindDescendant<Backstage>(_rootElement) is
-                { IsOpen: true } hostedBackstage
-            && IsEligible(hostedBackstage))
-        {
-            return hostedBackstage;
         }
 
         if (_ribbon.Menu is ApplicationMenu { IsDropDownOpen: true } applicationMenu
             && IsEligible(applicationMenu))
         {
             return applicationMenu;
+        }
+
+        if (_ribbon.IsMinimized && FindRibbonTabControl()?.IsMinimizedPopupVisible == true
+            && _ribbon.SelectedTab is { } selectedTab && IsEligible(selectedTab))
+        {
+            return selectedTab;
         }
 
         return null;
@@ -649,14 +724,24 @@ public partial class KeyTipService
             return;
         }
 
-        var scope = _scopeStack.Peek().Container;
+        var frame = _scopeStack.Peek();
+        var scope = frame.Container;
         if (!ReferenceEquals(scope, _ribbon))
         {
             if (_ribbon.XamlRoot is not { } xamlRoot
                 || FocusManager.GetFocusedElement(xamlRoot) is not DependencyObject focused
-                || !FocusRoutingHelper.IsDescendantOf(focused, scope))
+                || (!FocusRoutingHelper.IsDescendantOf(focused, scope)
+                    && !(focused is FrameworkElement element && IsLogicalDescendantOf(element, scope))))
             {
-                FocusRoutingHelper.FocusFirst(scope);
+                if (GetScopePresentationRoot(frame) is { } presentationRoot)
+                {
+                    FocusRoutingHelper.FocusFirst(presentationRoot);
+                }
+                else
+                {
+                    _targets.FirstOrDefault(entry => IsEligible(entry.Element))
+                        ?.Element.Focus(FocusState.Programmatic);
+                }
             }
 
             return;
@@ -680,9 +765,37 @@ public partial class KeyTipService
 
         _targets.Clear();
         _overlayCanvas.Children.Clear();
-        _typedKeys = string.Empty;
 
         var scope = _scopeStack.Peek();
+        if (scope.Owner is RibbonTabItem tab && FindRibbonTabControl()?.IsContentPresented(tab) != true)
+        {
+            _scopeRefreshPending = true;
+            return;
+        }
+
+        var presentationRoot = GetScopePresentationRoot(scope);
+        if (scope.Owner is IDropDownControl { IsDropDownOpen: true } dropDown
+            && (dropDown.DropDownPopup is { IsOpen: false }
+                || ReferenceEquals(presentationRoot, scope.Owner)
+                || presentationRoot is not { IsLoaded: true, ActualWidth: > 0, ActualHeight: > 0 }))
+        {
+            _scopeRefreshPending = true;
+            if (presentationRoot is not null && !ReferenceEquals(presentationRoot, scope.Owner))
+            {
+                WatchScopeReadiness(scope, presentationRoot);
+            }
+
+            return;
+        }
+
+        if (scope.Owner is Backstage { IsOpen: true } && presentationRoot?.IsLoaded != true)
+        {
+            _scopeRefreshPending = true;
+            return;
+        }
+
+        StopScopeReadiness(scope);
+        _scopeRefreshPending = false;
         var seen = new HashSet<FrameworkElement>();
 
         if (scope.Container is IKeyTipInformationProvider provider)
@@ -690,6 +803,7 @@ public partial class KeyTipService
             foreach (var information in provider.GetKeyTipInformations(hide: false))
             {
                 if (information.IsEnabled
+                    && IsEligible(information.AssociatedElement)
                     && IsInScope(information.AssociatedElement, scope)
                     && seen.Add(information.AssociatedElement))
                 {
@@ -699,8 +813,21 @@ public partial class KeyTipService
         }
 
         CollectVisualTargets(scope.Container, scope, seen);
+        if (presentationRoot is not null && !ReferenceEquals(presentationRoot, scope.Container))
+        {
+            CollectVisualTargets(presentationRoot, scope, seen);
+        }
+
         CollectLogicalTargets(scope.Container, scope, seen, new HashSet<DependencyObject>());
+        SynchronizeScopeInputRoots();
         ApplyPrefixFilter();
+        FocusCurrentScope();
+        if (_typedKeys.Length > 0
+            && GetMatches(_typedKeys).FirstOrDefault(entry =>
+                string.Equals(entry.Keys, _typedKeys, StringComparison.OrdinalIgnoreCase)) is { } buffered)
+        {
+            Activate(buffered);
+        }
     }
 
     private void CollectVisualTargets(
@@ -717,7 +844,7 @@ public partial class KeyTipService
                 TryAddTarget(element, element, scope, seen);
             }
 
-            if (child is RibbonGroupBox { State: RibbonGroupBoxState.Collapsed })
+            if (child is FrameworkElement frameworkElement && !ShouldDescendInto(frameworkElement, scope))
             {
                 continue;
             }
@@ -737,6 +864,12 @@ public partial class KeyTipService
             return;
         }
 
+        if (root is RibbonGroupBox { LauncherButton: { } launcher } group
+            && !string.IsNullOrWhiteSpace(group.LauncherKeys))
+        {
+            TryAddTarget(launcher, launcher, scope, seen, group.LauncherKeys);
+        }
+
         foreach (var child in EnumerateLogicalChildren(root))
         {
             TryAddTarget(child, child, scope, seen);
@@ -750,18 +883,19 @@ public partial class KeyTipService
 
     private bool ShouldDescendInto(FrameworkElement child, ScopeFrame scope)
     {
-        if (ReferenceEquals(scope.Container, _ribbon) && child is RibbonTab)
+        if (!IsEligible(child)
+            || (ReferenceEquals(scope.Container, _ribbon) && child is RibbonTabItem))
         {
             return false;
         }
 
         return child switch
         {
-            RibbonGroupBox { State: RibbonGroupBoxState.Collapsed } => false,
+            RibbonGroupBox group => !group.IsInButtonState,
             BackstageTabItem { IsSelected: false } => false,
             ApplicationMenu { IsDropDownOpen: false } => false,
-            Backstage { IsOpen: false } => false,
             StartScreen { IsOpen: false } => false,
+            Backstage { IsOpen: false } => false,
             IDropDownControl { IsDropDownOpen: false } => false,
             _ => true,
         };
@@ -771,19 +905,19 @@ public partial class KeyTipService
         FrameworkElement element,
         FrameworkElement visualTarget,
         ScopeFrame scope,
-        HashSet<FrameworkElement> seen)
+        HashSet<FrameworkElement> seen,
+        string? explicitKeys = null)
     {
         if (!IsInScope(element, scope)
-            || !IsEligible(element)
-            || !seen.Add(element))
+            || !IsEligible(element))
         {
             return;
         }
 
-        var keys = GetKeys(element);
-        if (!string.IsNullOrWhiteSpace(keys))
+        var keys = explicitKeys ?? GetKeys(element);
+        if (!string.IsNullOrWhiteSpace(keys) && seen.Add(element))
         {
-            AddTarget(element, visualTarget, keys);
+            AddTarget(element, element.XamlRoot is null ? _ribbon : visualTarget, keys);
         }
     }
 
@@ -853,12 +987,12 @@ public partial class KeyTipService
     {
         if (ReferenceEquals(scope.Container, _ribbon))
         {
-            if (element is RibbonTab)
+            if (element is RibbonTabItem)
             {
                 return true;
             }
 
-            return FocusRoutingHelper.FindAncestor<RibbonTab>(element) is null
+            return FocusRoutingHelper.FindAncestor<RibbonTabItem>(element) is null
                    && !_ribbon.Tabs.Any(tab => IsLogicalDescendantOf(element, tab));
         }
 
@@ -868,6 +1002,8 @@ public partial class KeyTipService
         }
 
         return FocusRoutingHelper.IsDescendantOf(element, scope.Container)
+               || (GetScopePresentationRoot(scope) is { } presentationRoot
+                   && FocusRoutingHelper.IsDescendantOf(element, presentationRoot))
                || IsLogicalDescendantOf(element, scope.Container);
     }
 
@@ -927,11 +1063,13 @@ public partial class KeyTipService
         IEnumerable? items = root switch
         {
             Ribbon ribbon => ribbon.Tabs.Cast<object>()
+                .Concat(ribbon.QuickAccessToolBarItems)
+                .Concat(ribbon.ToolBarItems)
                 .Concat(ribbon.Menu is null ? Array.Empty<object>() : new object[] { ribbon.Menu })
                 .Concat(ribbon.StartScreen is null
                     ? Array.Empty<object>()
                     : new object[] { ribbon.StartScreen }),
-            RibbonTab tab => tab.Groups,
+            RibbonTabItem tab => tab.Groups.Cast<object>().Concat(GetContentChildren(tab.Content)),
             RibbonGroupBox group => group.Items,
             ApplicationMenu applicationMenu => applicationMenu.Items
                 .Cast<object>()
@@ -942,7 +1080,7 @@ public partial class KeyTipService
                     dropDownButton.Gallery is null
                         ? Array.Empty<object>()
                         : new object[] { dropDownButton.Gallery }),
-            RibbonMenuItem menuItem => menuItem.Items,
+            MenuItem menuItem => menuItem.Items,
             StartScreen startScreen => GetContentChildren(
                 startScreen.LeftPaneContent,
                 startScreen.Content),
@@ -993,9 +1131,13 @@ public partial class KeyTipService
             ?.GetValue(element) as string;
     }
 
-    private static bool IsEligible(FrameworkElement element)
+    private bool IsEligible(FrameworkElement element)
     {
-        return FocusRoutingHelper.IsEffectivelyVisible(element)
+        return _ribbon.Visibility == Visibility.Visible
+               && _ribbon.IsEnabled
+               && (element.XamlRoot is not null
+                   || ReferenceEquals(element, _ribbon.StartScreen))
+               && FocusRoutingHelper.IsEffectivelyVisible(element)
                && FocusRoutingHelper.IsEffectivelyEnabled(element);
     }
 
@@ -1106,7 +1248,276 @@ public partial class KeyTipService
         string Keys,
         KeyTipVisual Visual);
 
-    private sealed record ScopeFrame(
-        FrameworkElement Container,
-        FrameworkElement? Owner);
+    private void WatchScope(ScopeFrame frame)
+    {
+        var dropDown = frame.Owner is RibbonTabItem
+            ? FindRibbonTabControl()
+            : frame.Owner as IDropDownControl;
+        if (dropDown is not null)
+        {
+            EventHandler opened = (_, _) =>
+            {
+                if (IsWatchingScope(frame))
+                {
+                    ScheduleScopeRefresh();
+                }
+            };
+            EventHandler closed = (_, _) =>
+            {
+                if (IsWatchingScope(frame))
+                {
+                    RefreshClosedScopes();
+                }
+            };
+            SelectionChangedEventHandler selectionChanged = (_, _) =>
+            {
+                if (IsWatchingScope(frame))
+                {
+                    RefreshClosedScopes();
+                }
+            };
+            EventHandler contentChanged = (_, _) =>
+            {
+                if (_isActive && _scopeStack.Any(current => ReferenceEquals(current, frame))
+                    && dropDown is RibbonTabControl currentControl
+                    && ReferenceEquals(currentControl.SelectedItem, frame.Container))
+                {
+                    ScheduleScopeRefresh();
+                }
+            };
+            var popup = dropDown.DropDownPopup;
+            EventHandler<object> popupOpened = (_, _) =>
+            {
+                if (IsWatchingScope(frame))
+                {
+                    ScheduleScopeRefresh();
+                }
+            };
+            dropDown.DropDownOpened += opened;
+            dropDown.DropDownClosed += closed;
+            if (popup is not null)
+            {
+                popup.Opened += popupOpened;
+            }
+            if (dropDown is RibbonTabControl tabControl)
+            {
+                tabControl.SelectionChanged += selectionChanged;
+                tabControl.ContentPresentationChanged += contentChanged;
+            }
+
+            frame.Unsubscribe = () =>
+            {
+                dropDown.DropDownOpened -= opened;
+                dropDown.DropDownClosed -= closed;
+                if (popup is not null)
+                {
+                    popup.Opened -= popupOpened;
+                }
+                if (dropDown is RibbonTabControl tabControl)
+                {
+                    tabControl.SelectionChanged -= selectionChanged;
+                    tabControl.ContentPresentationChanged -= contentChanged;
+                }
+            };
+        }
+        else if (frame.Owner is Backstage backstage)
+        {
+            EventHandler changed = (_, _) =>
+            {
+                if (backstage.IsOpen)
+                {
+                    ScheduleScopeRefresh();
+                }
+                else
+                {
+                    RefreshClosedScopes();
+                }
+            };
+            backstage.PresentationChanged += changed;
+            frame.Unsubscribe = () => backstage.PresentationChanged -= changed;
+        }
+    }
+
+    private void ClearScopes()
+    {
+        while (_scopeStack.Count > 0)
+        {
+            var frame = _scopeStack.Pop();
+            frame.Unsubscribe?.Invoke();
+            StopScopeReadiness(frame);
+        }
+    }
+
+    private bool IsWatchingScope(ScopeFrame frame) =>
+        _isActive && _scopeStack.Any(current => ReferenceEquals(current, frame));
+
+    private void WatchScopeReadiness(ScopeFrame frame, FrameworkElement root)
+    {
+        if (ReferenceEquals(frame.ReadinessRoot, root))
+        {
+            return;
+        }
+
+        StopScopeReadiness(frame);
+        frame.ReadinessRoot = root;
+        frame.ReadinessChanged = (_, _) =>
+        {
+            if (!ReferenceEquals(frame.ReadinessRoot, root) || !IsWatchingScope(frame))
+            {
+                return;
+            }
+
+            if (root.IsLoaded && root.ActualWidth > 0 && root.ActualHeight > 0)
+            {
+                StopScopeReadiness(frame);
+                ScheduleScopeRefresh();
+            }
+        };
+        root.LayoutUpdated += frame.ReadinessChanged;
+    }
+
+    private static void StopScopeReadiness(ScopeFrame frame)
+    {
+        if (frame.ReadinessRoot is { } root && frame.ReadinessChanged is { } changed)
+        {
+            root.LayoutUpdated -= changed;
+        }
+
+        frame.ReadinessRoot = null;
+        frame.ReadinessChanged = null;
+    }
+
+    private FrameworkElement? GetScopePresentationRoot(ScopeFrame frame)
+    {
+        if (frame.Owner is RibbonTabItem)
+        {
+            return FindRibbonTabControl()?.SelectedContentPresenter;
+        }
+
+        if (frame.Owner is RibbonGroupBox { IsInButtonState: false })
+        {
+            return frame.Container;
+        }
+
+        if (frame.Owner is IDropDownControl { DropDownPopup.Child: FrameworkElement popupChild })
+        {
+            return popupChild;
+        }
+
+        if (frame.Owner is RibbonDropDownButton { OpenFlyoutContentRoot: FrameworkElement flyoutContent })
+        {
+            return flyoutContent;
+        }
+
+        if (frame.Owner is Backstage backstage)
+        {
+            return backstage;
+        }
+
+        foreach (var child in EnumerateLogicalChildren(frame.Container))
+        {
+            if (FocusRoutingHelper.FindAncestor<FlyoutPresenter>(child) is { } presenter)
+            {
+                return presenter;
+            }
+        }
+
+        if (frame.Owner is IDropDownControl
+            && _ribbon.XamlRoot is { } xamlRoot
+            && FocusManager.GetFocusedElement(xamlRoot) is DependencyObject focused
+            && FocusRoutingHelper.FindAncestor<FlyoutPresenter>(focused) is { } focusedPresenter
+            && !FocusRoutingHelper.IsDescendantOf(frame.Container, focusedPresenter))
+        {
+            return focusedPresenter;
+        }
+
+        return frame.Container;
+    }
+
+    internal void RegisterInputRoot(FrameworkElement root)
+    {
+        if (_hostedInputRoots.Add(root) && _isAttached)
+        {
+            AttachInputRoot(root);
+        }
+
+        if (_isActive)
+        {
+            ScheduleScopeRefresh();
+        }
+    }
+
+    internal void UnregisterInputRoot(FrameworkElement root)
+    {
+        if (_hostedInputRoots.Remove(root) && !_scopeInputRoots.Contains(root))
+        {
+            DetachInputRoot(root);
+        }
+    }
+
+    private void SynchronizeScopeInputRoots()
+    {
+        ClearScopeInputRoots();
+        foreach (var frame in _scopeStack)
+        {
+            var root = GetScopePresentationRoot(frame);
+            if (root is null
+                || (_rootElement is not null && FocusRoutingHelper.IsDescendantOf(root, _rootElement))
+                || _hostedInputRoots.Any(host => FocusRoutingHelper.IsDescendantOf(root, host))
+                || _scopeInputRoots.Any(host => FocusRoutingHelper.IsDescendantOf(root, host)))
+            {
+                continue;
+            }
+
+            if (_scopeInputRoots.Add(root) && _isAttached)
+            {
+                AttachInputRoot(root);
+            }
+        }
+    }
+
+    private void ClearScopeInputRoots()
+    {
+        foreach (var root in _scopeInputRoots)
+        {
+            if (!_hostedInputRoots.Contains(root))
+            {
+                DetachInputRoot(root);
+            }
+        }
+
+        _scopeInputRoots.Clear();
+    }
+
+    private void AttachInputRoot(FrameworkElement root)
+    {
+        if (_rootElement is null || FocusRoutingHelper.IsDescendantOf(root, _rootElement)
+            || !_attachedInputRoots.Add(root))
+        {
+            return;
+        }
+
+        root.AddHandler(UIElement.KeyDownEvent, _rootKeyDownHandler, true);
+        root.AddHandler(UIElement.KeyUpEvent, _rootKeyUpHandler, true);
+        root.AddHandler(UIElement.PointerPressedEvent, _rootPointerPressedHandler, true);
+    }
+
+    private void DetachInputRoot(FrameworkElement root)
+    {
+        if (!_attachedInputRoots.Remove(root))
+        {
+            return;
+        }
+
+        root.RemoveHandler(UIElement.KeyDownEvent, _rootKeyDownHandler);
+        root.RemoveHandler(UIElement.KeyUpEvent, _rootKeyUpHandler);
+        root.RemoveHandler(UIElement.PointerPressedEvent, _rootPointerPressedHandler);
+    }
+
+    private sealed record ScopeFrame(FrameworkElement Container, FrameworkElement? Owner)
+    {
+        public Action? Unsubscribe { get; set; }
+        public FrameworkElement? ReadinessRoot { get; set; }
+        public EventHandler<object>? ReadinessChanged { get; set; }
+    }
 }

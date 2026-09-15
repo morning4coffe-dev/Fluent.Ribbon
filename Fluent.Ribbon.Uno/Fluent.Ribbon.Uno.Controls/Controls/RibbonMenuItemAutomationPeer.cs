@@ -73,11 +73,14 @@ public partial class RibbonMenuItemAutomationPeer :
     /// <inheritdoc/>
     protected override string GetNameCore()
     {
-        var name = base.GetNameCore();
-        return string.IsNullOrEmpty(name)
-            ? Fluent.Automation.Peers.AutomationPeerHelpers.GetObjectName(
-                OwnerItem.Header)
-            : name;
+        var explicitName = AutomationProperties.GetName(OwnerItem);
+        if (!string.IsNullOrEmpty(explicitName))
+        {
+            return explicitName;
+        }
+
+        var headerName = OwnerItem.GetMenuHeaderName();
+        return string.IsNullOrEmpty(headerName) ? base.GetNameCore() : headerName;
     }
 
     /// <inheritdoc/>
@@ -211,7 +214,8 @@ public partial class RibbonMenuItemAutomationPeer :
             {
                 ValidateProviderOperation(
                     IsExpandable,
-                    "This menu item cannot be expanded or collapsed.");
+                    "This menu item cannot be expanded or collapsed.",
+                    submenuAction: true);
                 OwnerItem.IsDropDownOpen = true;
             });
 
@@ -222,7 +226,8 @@ public partial class RibbonMenuItemAutomationPeer :
             {
                 ValidateProviderOperation(
                     IsExpandable,
-                    "This menu item cannot be expanded or collapsed.");
+                    "This menu item cannot be expanded or collapsed.",
+                    submenuAction: true);
                 OwnerItem.IsDropDownOpen = false;
             });
 
@@ -382,8 +387,9 @@ public partial class RibbonMenuItemAutomationPeer :
     private static bool IsGroupedMenuItem(MenuItem item)
         => item.IsCheckable && !string.IsNullOrEmpty(item.GroupName);
 
-    private void ValidateProviderOperation(bool isAvailable, string unavailableMessage)
+    private void ValidateProviderOperation(bool isAvailable, string unavailableMessage, bool submenuAction = false)
     {
+        AutomationProviderGuard.EnsureEnabled(submenuAction ? OwnerItem.CanOpenSubmenu : OwnerItem.CanInvoke);
         AutomationProviderGuard.EnsureEnabled(this);
         for (var owner = OwnerItem.DropDownOwner;
              owner is not null;

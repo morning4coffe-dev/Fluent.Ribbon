@@ -22,7 +22,10 @@ public partial class Ribbon : ILogicalChildSupport
     /// <summary>Minimal height at which a ribbon remains visible.</summary>
     public const double MinimalVisibleHeight = 250D;
 
-    /// <summary>Gets the quick-access customization menu items.</summary>
+    /// <summary>
+    /// Gets the customization items shared with the active quick access toolbar.
+    /// Direct edits to that toolbar's QuickAccessItems collection update this collection as well.
+    /// </summary>
     public ObservableCollection<QuickAccessMenuItem> QuickAccessItems =>
         _quickAccessItems;
 
@@ -105,7 +108,7 @@ public partial class Ribbon : ILogicalChildSupport
             nameof(IsDefaultContextMenuEnabled),
             typeof(bool),
             typeof(Ribbon),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnDefaultContextMenuEnabledChanged));
 
     /// <summary>Identifies the <see cref="IsBackstageOrStartScreenOpen"/> dependency property.</summary>
     public static readonly DependencyProperty IsBackstageOrStartScreenOpenProperty =
@@ -121,7 +124,7 @@ public partial class Ribbon : ILogicalChildSupport
             nameof(StartScreen),
             typeof(StartScreen),
             typeof(Ribbon),
-            new PropertyMetadata(null));
+            new PropertyMetadata(null, OnStartScreenChanged));
 
     /// <summary>Identifies the <see cref="QuickAccessToolBar"/> dependency property.</summary>
     public static readonly DependencyProperty QuickAccessToolBarProperty =
@@ -161,7 +164,7 @@ public partial class Ribbon : ILogicalChildSupport
             nameof(CanCustomizeQuickAccessToolBar),
             typeof(bool),
             typeof(Ribbon),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnQuickAccessCustomizationOptionsChanged));
 
     /// <summary>Identifies the <see cref="CanCustomizeQuickAccessToolBarItems"/> dependency property.</summary>
     public static readonly DependencyProperty CanCustomizeQuickAccessToolBarItemsProperty =
@@ -169,7 +172,7 @@ public partial class Ribbon : ILogicalChildSupport
             nameof(CanCustomizeQuickAccessToolBarItems),
             typeof(bool),
             typeof(Ribbon),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnQuickAccessCustomizationOptionsChanged));
 
     /// <summary>Identifies the <see cref="IsQuickAccessToolBarMenuDropDownVisible"/> dependency property.</summary>
     public static readonly DependencyProperty IsQuickAccessToolBarMenuDropDownVisibleProperty =
@@ -269,11 +272,13 @@ public partial class Ribbon : ILogicalChildSupport
 
     /// <summary>Gets the command that moves the quick access toolbar above the ribbon.</summary>
     public static readonly XamlUICommand ShowQuickAccessAboveCommand =
-        CreateRibbonCommand(string.Empty, ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = true);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = true,
+            ribbon => ribbon.IsQuickAccessToolBarVisible && ribbon.CanQuickAccessLocationChanging);
 
     /// <summary>Gets the command that moves the quick access toolbar below the ribbon.</summary>
     public static readonly XamlUICommand ShowQuickAccessBelowCommand =
-        CreateRibbonCommand(string.Empty, ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = false);
+        CreateRibbonCommand(string.Empty, ribbon => ribbon.ShowQuickAccessToolBarAboveRibbon = false,
+            ribbon => ribbon.IsQuickAccessToolBarVisible && ribbon.CanQuickAccessLocationChanging);
 
     /// <summary>Gets the command that toggles ribbon minimization.</summary>
     public static readonly XamlUICommand ToggleMinimizeTheRibbonCommand =
@@ -304,16 +309,19 @@ public partial class Ribbon : ILogicalChildSupport
     private static void RefreshCommandLabels()
     {
         var localization = RibbonLocalization.Current.Localization;
+        AddToQuickAccessCommand.Label = localization.RibbonContextMenuAddItem;
+        RemoveFromQuickAccessCommand.Label = localization.RibbonContextMenuRemoveItem;
         ShowQuickAccessAboveCommand.Label = localization.RibbonContextMenuShowAbove;
         ShowQuickAccessBelowCommand.Label = localization.RibbonContextMenuShowBelow;
         ToggleMinimizeTheRibbonCommand.Label = localization.RibbonContextMenuMinimizeRibbon;
         SwitchToTheClassicRibbonCommand.Label = localization.UseClassicRibbon;
         SwitchToTheSimplifiedRibbonCommand.Label = localization.UseSimplifiedRibbon;
-        CustomizeQuickAccessToolbarCommand.Label = localization.QuickAccessToolBarMenuHeader;
+        CustomizeQuickAccessToolbarCommand.Label = localization.RibbonContextMenuCustomizeQuickAccessToolBar;
         CustomizeTheRibbonCommand.Label = localization.RibbonContextMenuCustomizeRibbon;
     }
 
     /// <summary>Gets or sets whether the default ribbon context menu is enabled.</summary>
+    /// <remarks>Explicitly authored context flyouts are not replaced or disabled by this option.</remarks>
     public bool IsDefaultContextMenuEnabled
     {
         get => (bool)GetValue(IsDefaultContextMenuEnabledProperty);
@@ -364,14 +372,14 @@ public partial class Ribbon : ILogicalChildSupport
         set => SetValue(QuickAccessToolBarHeightProperty, value);
     }
 
-    /// <summary>Gets or sets whether quick access customization is available.</summary>
+    /// <summary>Gets or sets whether users can request the full quick access toolbar customization UI.</summary>
     public bool CanCustomizeQuickAccessToolBar
     {
         get => (bool)GetValue(CanCustomizeQuickAccessToolBarProperty);
         set => SetValue(CanCustomizeQuickAccessToolBarProperty, value);
     }
 
-    /// <summary>Gets or sets whether quick access items can be customized.</summary>
+    /// <summary>Gets or sets whether users can add or remove quick access items. Programmatic edits remain available.</summary>
     public bool CanCustomizeQuickAccessToolBarItems
     {
         get => (bool)GetValue(CanCustomizeQuickAccessToolBarItemsProperty);
@@ -476,56 +484,27 @@ public partial class Ribbon : ILogicalChildSupport
         _quickAccessElements.ToDictionary(pair => pair.Key, pair => pair.Value);
 
     /// <summary>Returns whether an element is represented in the quick access toolbar.</summary>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
     public bool IsInQuickAccessToolBar(UIElement? element) =>
-        element is not null && _quickAccessElements.ContainsKey(element);
+        TryGetQuickAccessEntry(element, out _, out _);
 
     /// <summary>Adds an element to the quick access toolbar when it can create a portable copy.</summary>
-    public void AddToQuickAccessToolBar(UIElement? element)
-    {
-        if (element is null
-            || _quickAccessElements.ContainsKey(element)
-            || element is not IQuickAccessItemProvider provider)
-        {
-            return;
-        }
-
-        var quickAccessItem = provider.CreateQuickAccessItem();
-        if (quickAccessItem is null)
-        {
-            return;
-        }
-
-        _quickAccessElements.Add(element, quickAccessItem);
-        RibbonProperties.SetIsElementInQuickAccessToolBar(element, true);
-        QuickAccessToolBarItems.Add(quickAccessItem);
-    }
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
+    public void AddToQuickAccessToolBar(UIElement? element) =>
+        AddToQuickAccessToolBar(ResolveQuickAccessProvider(element));
 
     /// <summary>Removes an element from the quick access toolbar.</summary>
-    public void RemoveFromQuickAccessToolBar(UIElement? element)
-    {
-        if (element is null || !_quickAccessElements.Remove(element, out var quickAccessItem))
-        {
-            return;
-        }
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
+    public void RemoveFromQuickAccessToolBar(UIElement? element) =>
+        RemoveQuickAccessEntry(element);
 
-        RibbonProperties.SetIsElementInQuickAccessToolBar(element, false);
-        QuickAccessToolBarItems.Remove(quickAccessItem);
-    }
-
-    /// <summary>Clears all dynamically created quick access elements.</summary>
+    /// <summary>Clears provider-created copies, preserving directly authored toolbar items.</summary>
     public void ClearQuickAccessToolBar()
     {
-        foreach (var element in _quickAccessElements.Keys)
+        foreach (var (source, _) in EnumerateQuickAccessEntries().ToArray())
         {
-            RibbonProperties.SetIsElementInQuickAccessToolBar(element, false);
+            RemoveQuickAccessEntry(source);
         }
-
-        foreach (var quickAccessItem in _quickAccessElements.Values)
-        {
-            QuickAccessToolBarItems.Remove(quickAccessItem);
-        }
-
-        _quickAccessElements.Clear();
     }
 
     /// <summary>Moves focus to the selected tab when the ribbon itself is focused.</summary>
@@ -591,6 +570,8 @@ public partial class Ribbon : ILogicalChildSupport
     private void InitializeCompatibility()
     {
         VerticalAlignment = VerticalAlignment.Top;
+        QuickAccessHelper.AttachContextMenu(this);
+        RegisterPropertyChangedCallback(IsEnabledProperty, (_, _) => RefreshQuickAccessOptions());
         Loaded += OnCompatibilityLoaded;
         Unloaded += OnCompatibilityUnloaded;
         _keyTipKeys.CollectionChanged += OnKeyTipKeysCollectionChanged;
@@ -608,11 +589,13 @@ public partial class Ribbon : ILogicalChildSupport
     private void UpdateCompatibilityTemplateParts()
     {
         TabControl = _tabControl;
-        QuickAccessToolBar = _quickAccessToolBar;
 
         if (_tabControl is not null)
         {
-            _tabControl.ContentHeight = ContentHeight;
+            BindTabControlOptions();
+            _tabControl.IsSimplified = IsSimplified;
+            _tabControl.IsMinimized = IsMinimized;
+            _tabControl.ContentHeight = IsSimplified ? SimplifiedContentHeight : ContentHeight;
         }
 
         UpdateCompatibilityQatSurface();
@@ -621,6 +604,8 @@ public partial class Ribbon : ILogicalChildSupport
 
     private void UpdateCompatibilityQatSurface()
     {
+        QuickAccessToolBar = ShowQuickAccessToolBarAboveRibbon ? _quickAccessToolBar : _belowRibbonQAT;
+
         if (_quickAccessToolBar is not null)
         {
             _quickAccessToolBar.CanQuickAccessLocationChanging = CanQuickAccessLocationChanging;
@@ -698,24 +683,63 @@ public partial class Ribbon : ILogicalChildSupport
 
     private static void OnQuickAccessMenuVisibilityChanged(
         DependencyObject sender,
-        DependencyPropertyChangedEventArgs args) =>
-        ((Ribbon)sender).UpdateCompatibilityQatSurface();
+        DependencyPropertyChangedEventArgs args)
+    {
+        var ribbon = (Ribbon)sender;
+        ribbon.UpdateCompatibilityQatSurface();
+        ribbon.RefreshQuickAccessOptions();
+    }
 
     private static void OnContentHeightChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var ribbon = (Ribbon)sender;
+        var height = ribbon.IsSimplified ? SimplifiedContentHeight : (double)args.NewValue;
+        foreach (var tab in ribbon.Tabs)
+        {
+            tab.SetContentHeight(height);
+        }
+
         if (ribbon._tabControl is { } tabControl)
         {
-            tabControl.ContentHeight = ribbon.IsSimplified
-                ? SimplifiedContentHeight
-                : (double)args.NewValue;
+            tabControl.ContentHeight = height;
         }
     }
 
     private static void OnCanQuickAccessLocationChangingChanged(
         DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var ribbon = (Ribbon)sender;
+        ribbon.UpdateCompatibilityQatSurface();
+        ribbon.RefreshQuickAccessOptions();
+    }
+
+    private static void OnDefaultContextMenuEnabledChanged(
+        DependencyObject sender,
         DependencyPropertyChangedEventArgs args) =>
-        ((Ribbon)sender).UpdateCompatibilityQatSurface();
+        QuickAccessHelper.CloseDefaultContextMenu((Ribbon)sender);
+
+    private static void OnQuickAccessCustomizationOptionsChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args) =>
+        ((Ribbon)sender).RefreshQuickAccessOptions();
+
+    private void RefreshQuickAccessOptions()
+    {
+        QuickAccessHelper.CloseDefaultContextMenu(this);
+        _quickAccessToolBar?.CloseCustomizationMenu();
+        _belowRibbonQAT?.CloseCustomizationMenu();
+        foreach (var toolbar in _quickAccessCustomizationToolBars.ToArray())
+        {
+            toolbar.CloseCustomizationMenu();
+        }
+
+        AddToQuickAccessCommand.NotifyCanExecuteChanged();
+        RemoveFromQuickAccessCommand.NotifyCanExecuteChanged();
+        ShowQuickAccessAboveCommand.NotifyCanExecuteChanged();
+        ShowQuickAccessBelowCommand.NotifyCanExecuteChanged();
+        CustomizeQuickAccessToolbarCommand.NotifyCanExecuteChanged();
+    }
 
     private static void OnToolBarVisibilityChanged(
         DependencyObject sender,
@@ -756,7 +780,8 @@ public partial class Ribbon : ILogicalChildSupport
         var command = new XamlUICommand { Label = label };
         command.ExecuteRequested += (_, args) =>
         {
-            if (ResolveRibbon(args.Parameter) is { } ribbon)
+            if (ResolveRibbon(args.Parameter) is { IsEnabled: true } ribbon
+                && (canExecute?.Invoke(ribbon) ?? true))
             {
                 execute(ribbon);
             }
@@ -764,7 +789,7 @@ public partial class Ribbon : ILogicalChildSupport
         command.CanExecuteRequested += (_, args) =>
         {
             var ribbon = ResolveRibbon(args.Parameter);
-            args.CanExecute = ribbon is not null && (canExecute?.Invoke(ribbon) ?? true);
+            args.CanExecute = ribbon is { IsEnabled: true } && (canExecute?.Invoke(ribbon) ?? true);
         };
         return command;
     }
@@ -774,7 +799,9 @@ public partial class Ribbon : ILogicalChildSupport
         var command = new XamlUICommand { Label = label };
         command.ExecuteRequested += (_, args) =>
         {
-            if (args.Parameter is not UIElement element || ResolveRibbon(element) is not { } ribbon)
+            if (args.Parameter is not UIElement element
+                || ResolveRibbon(element) is not { } ribbon
+                || !ribbon.CanCustomizeQuickAccessItem(element, add))
             {
                 return;
             }
@@ -796,11 +823,22 @@ public partial class Ribbon : ILogicalChildSupport
                 return;
             }
 
-            args.CanExecute = ribbon.CanCustomizeQuickAccessToolBarItems
-                              && (add
-                                  ? element is IQuickAccessItemProvider
-                                    && !ribbon.IsInQuickAccessToolBar(element)
-                                  : ribbon.IsInQuickAccessToolBar(element));
+            args.CanExecute = ribbon.CanCustomizeQuickAccessItem(element, add);
+        };
+        return command;
+    }
+
+    internal static XamlUICommand CreateGuardedMenuCommand(string label, Func<bool> canExecute, Action execute)
+    {
+        var command = new XamlUICommand { Label = label };
+        command.CanExecuteRequested += (_, args) => args.CanExecute = canExecute();
+        command.ExecuteRequested += (_, _) =>
+        {
+            // Native/posted menu execution need not be preceded by a fresh CanExecute query.
+            if (canExecute())
+            {
+                execute();
+            }
         };
         return command;
     }
@@ -812,17 +850,6 @@ public partial class Ribbon : ILogicalChildSupport
             return ribbon;
         }
 
-        var current = parameter as DependencyObject;
-        while (current is not null)
-        {
-            if (current is Ribbon parentRibbon)
-            {
-                return parentRibbon;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
+        return QuickAccessHelper.FindOwningRibbon(parameter as DependencyObject);
     }
 }

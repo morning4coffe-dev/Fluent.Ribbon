@@ -10,6 +10,8 @@ using Windows.System;
 public partial class MenuItem : InteractiveMenuItemBase
 {
     private const string PART_Icon = "PART_Icon";
+    private readonly Fluent.Helpers.ItemsControlBinding itemsBinding;
+    private readonly CommandAvailability commandAvailability;
 
     #region Events
 
@@ -27,17 +29,12 @@ public partial class MenuItem : InteractiveMenuItemBase
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
-    public static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(MenuItem),
-            new PropertyMetadata(null));
+    public new static readonly DependencyProperty HeaderProperty = HeaderedItemsControl.HeaderProperty;
 
     /// <summary>
     /// Gets or sets the header text of the menu item.
     /// </summary>
-    public object? Header
+    public new object? Header
     {
         get => GetValue(HeaderProperty);
         set => SetValue(HeaderProperty, value);
@@ -122,9 +119,13 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// <summary>
     /// Gets the collection of sub-menu items.
     /// </summary>
-    public ObservableCollection<UIElement> Items
+    public new ObservableCollection<UIElement> Items
     {
-        get => (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        get
+        {
+            itemsBinding?.RefreshUnnotifiedNativeItems();
+            return (ObservableCollection<UIElement>)GetValue(ItemsProperty);
+        }
         private set => SetValue(ItemsProperty, value);
     }
 
@@ -206,8 +207,22 @@ public partial class MenuItem : InteractiveMenuItemBase
     public MenuItem()
     {
         DefaultStyleKey = typeof(MenuItem);
-        Items = new ObservableCollection<UIElement>();
-        Items.CollectionChanged += OnItemsChanged;
+        menuEnabledConstraint = new EnabledStateConstraint(this);
+        commandAvailability = new CommandAvailability(
+            this, CommandProperty, CommandParameterProperty,
+            _ => UpdateMenuPresentation(), constrainOwner: false);
+        Items = Fluent.Helpers.ItemsControlBinding.CreateItems(this);
+        itemsBinding = new Fluent.Helpers.ItemsControlBinding(
+            this, Items,
+            IsItemItsOwnContainerOverride, GetContainerForItemOverride,
+            PrepareContainerForItemOverride, ClearContainerForItemOverride,
+            OnItemsChanged);
+#if WINDOWS
+        itemsBinding.UsesNativeGenerator = true;
+#endif
+        Unloaded += OnMenuUnloaded;
+        InitializeMenuPresentation();
+        InitializeSubmenuOptions();
     }
 
     #endregion
@@ -232,7 +247,7 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// <inheritdoc/>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (IsEnabled && HandleMenuNavigationKey(e.Key))
+        if (!e.Handled && IsEnabled && HandleMenuNavigationKey(e.Key))
         {
             e.Handled = true;
             return;
@@ -247,12 +262,28 @@ public partial class MenuItem : InteractiveMenuItemBase
     /// </summary>
     internal void InvokeItem()
     {
-        if (Command?.CanExecute(CommandParameter) == true)
+        if (!CanInvoke)
         {
-            Command.Execute(CommandParameter);
+            return;
         }
 
+        Internal.CommandHelper.Execute(Command, CommandParameter);
         Click?.Invoke(this, new RoutedEventArgs());
+    }
+
+    /// <summary>Gets whether this menu item and its command are enabled.</summary>
+    protected virtual bool IsEnabledCore => commandAvailability.CanExecute && IsEnabled;
+
+    internal bool CanInvoke
+    {
+        get
+        {
+            if (!IsEnabledCore)
+            {
+                return false;
+            }
+            return AreMenuAncestorsEnabled();
+        }
     }
 
     internal void InvokeFromQuickAccess() => OnClick();
@@ -279,15 +310,55 @@ public partial class MenuItem : InteractiveMenuItemBase
         }
     }
 
-    private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    /// <summary>Handles changes to the submenu items or their presentation.</summary>
+    protected virtual void OnItemsChanged(NotifyCollectionChangedEventArgs e)
     {
         HasSubItems = Items.Count > 0;
 
         foreach (var item in Items.OfType<IDropDownItemOwner>())
         {
-            item.SetDropDownOwner(this);
+            item.SetDropDownOwner(QuickAccessSubmenuOwner);
         }
+
+        if (submenuItemsHost is not null
+            && (IsDropDownOpen || !ReferenceEquals(QuickAccessSubmenuOwner, this)))
+        {
+            ValidateSubmenuGenerator();
+        }
+
+        if (!HasSubItems)
+        {
+            IsDropDownOpen = false;
+#if WINDOWS
+            NativeQuickAccessAnchor?.CloseDropDown();
+#endif
+        }
+
+        UpdateMenuPresentation();
+        UpdateSubmenuDimensions();
     }
+
+#if WINDOWS
+    private void OnMenuUnloaded(object sender, RoutedEventArgs e)
+    {
+        IsDropDownOpen = false;
+        QueueNativeSubmenuOpen();
+    }
+#else
+    private void OnMenuUnloaded(object sender, RoutedEventArgs e) => IsDropDownOpen = false;
+#endif
+
+    /// <summary>Returns the live submenu container for a source item.</summary>
+    public new DependencyObject? ContainerFromItem(object item) => itemsBinding.ContainerFromItem(item);
+
+    /// <summary>Returns the live submenu container at an item index.</summary>
+    public new DependencyObject? ContainerFromIndex(int index) => itemsBinding.ContainerFromIndex(index);
+
+    /// <summary>Returns the source item represented by a live submenu container.</summary>
+    public new object? ItemFromContainer(DependencyObject container) => itemsBinding.ItemFromContainer(container);
+
+    /// <summary>Returns the index of a live submenu container.</summary>
+    public new int IndexFromContainer(DependencyObject container) => itemsBinding.IndexFromContainer(container);
 
     /// <inheritdoc/>
     protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer()

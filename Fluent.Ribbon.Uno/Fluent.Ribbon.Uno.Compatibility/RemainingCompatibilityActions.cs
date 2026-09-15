@@ -13,13 +13,12 @@ public partial class SplitButton
         {
             Size = RibbonControlSize.Small,
             CanAddToQuickAccessToolBar = false,
-            CanAddButtonToQuickAccessToolBar = false,
-            ItemsSource = CreateQuickAccessItems()
+            CanAddButtonToQuickAccessToolBar = false
         };
 
         BindQuickAccessItem(clone);
+        BindPrimaryQuickAccessAvailability(clone);
         BindQuickAccessItemDropDownEvents(clone);
-        clone.Click += (_, args) => ForwardQuickAccessPrimaryAction(args);
         return clone;
     }
 
@@ -27,7 +26,11 @@ public partial class SplitButton
     protected override void BindQuickAccessItem(FrameworkElement element)
     {
         base.BindQuickAccessItem(element);
-        CompatibilityQuickAccessBindings.Apply(this, element);
+        BindQuickAccessProperty(element, DropDownToolTipProperty, DropDownToolTipProperty);
+        BindQuickAccessProperty(element, IsCheckableProperty, IsCheckableProperty);
+        BindQuickAccessProperty(element, IsButtonEnabledProperty, IsButtonEnabledProperty);
+        BindQuickAccessProperty(element, IsDefinitiveProperty, IsDefinitiveProperty);
+        BindQuickAccessProperty(element, IsCheckedProperty, IsCheckedProperty, twoWay: true);
     }
 
     /// <inheritdoc />

@@ -93,12 +93,12 @@ jobs:
             exit $LASTEXITCODE
           }
 
-      - name: Run Desktop UI smoke
+      - name: Run Desktop parity, UI smoke, and diagnostic-option contracts
         working-directory: Fluent.Ribbon.Uno
-        timeout-minutes: 5
+        timeout-minutes: 15
         env:
           RUN_UNO_UI_TESTS: '1'
-        run: dotnet test Fluent.Ribbon.Uno.UITests/Fluent.Ribbon.Uno.UITests.csproj -c Release --filter TestCategory=UI
+        run: dotnet test Fluent.Ribbon.Uno.UITests\Fluent.Ribbon.Uno.UITests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release --filter "FullyQualifiedName~DesktopPortParityPhase4|FullyQualifiedName~DesktopShowcaseShouldCompleteWithoutDiagnosticFailures|FullyQualifiedName~ShowcaseDiagnosticOptionsTests"
 
       - name: Build Windows external UIA tests
         working-directory: Fluent.Ribbon.Uno
@@ -150,6 +150,14 @@ jobs:
       - name: Build Showcase (WinUI 3)
         working-directory: Fluent.Ribbon.Uno
         run: msbuild Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj /r /t:Build /p:Configuration=Release /p:TargetFramework=net10.0-windows10.0.26100 /p:TargetFrameworks=net10.0-windows10.0.26100 /p:ShowcaseExternalUia=true
+
+      - name: Run WinUI presentation and configuration contracts
+        working-directory: Fluent.Ribbon.Uno
+        timeout-minutes: 10
+        env:
+          RUN_UNO_UI_TESTS: '1'
+          SHOWCASE_AUTOTEST_APP: '${{ github.workspace }}\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\bin\Release\net10.0-windows10.0.26100\Fluent.Ribbon.Uno.Showcase.exe'
+        run: dotnet test Fluent.Ribbon.Uno.UITests\Fluent.Ribbon.Uno.UITests.csproj -f net10.0 -p:TargetFrameworks=net10.0 -c Release --filter FullyQualifiedName~DesktopPresentationContracts
 
       - name: Build Windows external UIA tests
         working-directory: Fluent.Ribbon.Uno

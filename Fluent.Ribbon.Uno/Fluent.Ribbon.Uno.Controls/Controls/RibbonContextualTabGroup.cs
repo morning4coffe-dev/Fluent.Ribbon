@@ -199,8 +199,25 @@ public partial class RibbonContextualTabGroup : Control
     /// </summary>
     internal void RemoveTabItem(RibbonTabItem item)
     {
-        DetachTabItem(item);
         Items.Remove(item);
+        DetachTabItem(item);
+        UpdateInnerVisiblityAndGroupBorders();
+    }
+
+    internal void SynchronizeTabItems(IReadOnlyList<RibbonTabItem> items)
+    {
+        foreach (var removed in Items.Where(item => !items.Contains(item)).ToArray())
+        {
+            RemoveTabItem(removed);
+        }
+
+        Items.Clear();
+        foreach (var item in items)
+        {
+            Items.Add(item);
+            AttachTabItem(item);
+        }
+
         UpdateInnerVisiblityAndGroupBorders();
     }
 

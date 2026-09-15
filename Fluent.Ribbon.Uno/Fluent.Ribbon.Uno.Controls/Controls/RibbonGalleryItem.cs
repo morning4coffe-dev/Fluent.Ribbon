@@ -4,9 +4,16 @@ namespace Fluent;
 /// Represents a single selectable item in a <see cref="RibbonGallery"/>.
 /// </summary>
 [ContentProperty(Name = nameof(Content))]
+#if WINDOWS
+// Native ListBox removal requires ISelectorItem on realized gallery containers.
+public partial class RibbonGalleryItem : ListBoxItem, IKeyTipedControl
+#else
 public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
+#endif
 {
     internal object? GalleryOwner { get; set; }
+    private readonly CommandAvailability commandAvailability;
+    private Windows.System.VirtualKey? pendingActivationKey;
 #if !WINDOWS
     private bool isCompactHeight;
 #endif
@@ -14,7 +21,11 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     #region Dependency Properties
 
     /// <summary>Identifies the <see cref="IsSelected"/> dependency property.</summary>
+#if WINDOWS
+    public new static readonly DependencyProperty IsSelectedProperty =
+#else
     public static readonly DependencyProperty IsSelectedProperty =
+#endif
         DependencyProperty.Register(
             nameof(IsSelected),
             typeof(bool),
@@ -24,7 +35,11 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     /// <summary>
     /// Gets or sets whether this item is selected.
     /// </summary>
+#if WINDOWS
+    public new bool IsSelected
+#else
     public bool IsSelected
+#endif
     {
         get => (bool)GetValue(IsSelectedProperty);
         set => SetValue(IsSelectedProperty, value);
@@ -177,6 +192,24 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     {
         DefaultStyleKey = typeof(RibbonGalleryItem);
         IsTabStop = true;
+        commandAvailability = new CommandAvailability(
+            this, CommandProperty, CommandParameterProperty,
+            available =>
+            {
+                if (!available)
+                {
+                    CancelPendingActivation();
+                }
+                UpdateVisualState();
+            });
+        IsEnabledChanged += (_, _) =>
+        {
+            if (!IsEnabled)
+            {
+                CancelPendingActivation();
+            }
+            UpdateVisualState();
+        };
         PointerPressed += OnPointerPressedHandler;
         PointerReleased += OnPointerReleasedHandler;
         PointerEntered += OnPointerEnteredHandler;
@@ -194,15 +227,15 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
 
     private void OnPointerPressedHandler(object sender, PointerRoutedEventArgs e)
     {
-        IsPressed = true;
-        UpdateVisualState();
-        Activate();
+        if (HandleActivationPointerPressed(e.Handled, e.GetCurrentPoint(this).Properties.IsLeftButtonPressed))
+        {
+            e.Handled = true;
+        }
     }
 
     private void OnPointerReleasedHandler(object sender, PointerRoutedEventArgs e)
     {
-        IsPressed = false;
-        UpdateVisualState();
+        HandleActivationPointerReleased();
     }
 
     private void OnPointerEnteredHandler(object sender, PointerRoutedEventArgs e)
@@ -230,7 +263,8 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
 
     private void UpdateVisualState()
     {
-        var state = IsPressed ? "Pressed"
+        var state = !IsEnabled ? "Disabled"
+            : IsPressed ? "Pressed"
             : IsSelected ? "Selected"
             : _isPointerOver ? "PointerOver"
             : "Normal";
@@ -278,11 +312,8 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
     /// <inheritdoc/>
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (!e.Handled
-            && ReferenceEquals(e.OriginalSource, this)
-            && e.Key is Windows.System.VirtualKey.Enter or Windows.System.VirtualKey.Space)
+        if (HandleActivationKeyDown(e.Key, e.Handled, ReferenceEquals(e.OriginalSource, this)))
         {
-            Activate();
             e.Handled = true;
             return;
         }
@@ -301,10 +332,97 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
         base.OnKeyDown(e);
     }
 
+    /// <inheritdoc />
+    protected override void OnKeyUp(KeyRoutedEventArgs e)
+    {
+        if (HandleActivationKeyUp(e.Key, e.Handled, ReferenceEquals(e.OriginalSource, this)))
+        {
+            e.Handled = true;
+        }
+        base.OnKeyUp(e);
+    }
+
+    /// <summary>Arms an activation key; repeated key-down events do not invoke the item.</summary>
+    protected virtual bool HandleActivationKeyDown(
+        Windows.System.VirtualKey key, bool handled, bool isOriginalSource)
+    {
+        if (handled || !isOriginalSource
+            || key is not (Windows.System.VirtualKey.Enter or Windows.System.VirtualKey.Space)
+            || !CanActivate)
+        {
+            return false;
+        }
+
+        pendingActivationKey = key;
+        IsPressed = true;
+        UpdateVisualState();
+        return true;
+    }
+
+    /// <summary>Completes one matching, unhandled activation-key release.</summary>
+    protected virtual bool HandleActivationKeyUp(
+        Windows.System.VirtualKey key, bool handled, bool isOriginalSource)
+    {
+        if (pendingActivationKey != key)
+        {
+            return false;
+        }
+
+        CancelPendingActivation();
+        if (handled || !isOriginalSource)
+        {
+            return false;
+        }
+
+        Activate();
+        return true;
+    }
+
+    /// <summary>Handles the primary pointer activation shared by native input and derived controls.</summary>
+    protected virtual bool HandleActivationPointerPressed(bool handled, bool isPrimaryButton)
+    {
+        if (handled || !isPrimaryButton || !CanActivate)
+        {
+            return false;
+        }
+
+        IsPressed = true;
+        UpdateVisualState();
+        Activate();
+        return true;
+    }
+
+    /// <summary>Clears pointer feedback without invoking a second action.</summary>
+    protected virtual void HandleActivationPointerReleased()
+    {
+        IsPressed = false;
+        UpdateVisualState();
+    }
+
+    /// <inheritdoc />
+    protected override void OnLostFocus(RoutedEventArgs e)
+    {
+        CancelPendingActivation();
+        base.OnLostFocus(e);
+    }
+
+    private void CancelPendingActivation()
+    {
+        pendingActivationKey = null;
+        IsPressed = false;
+        UpdateVisualState();
+    }
+
+    /// <summary>Gets whether the item and its command are currently enabled.</summary>
+    protected virtual bool IsEnabledCore => commandAvailability.CanExecute && IsEnabled;
+
+    protected internal bool CanActivate
+        => IsEnabledCore
+           && GalleryOwner is not Control { IsEnabled: false };
+
     internal void Activate()
     {
-        if (!IsEnabled
-            || GalleryOwner is Control { IsEnabled: false })
+        if (!CanActivate)
         {
             return;
         }
@@ -322,10 +440,7 @@ public partial class RibbonGalleryItem : ContentControl, IKeyTipedControl
                 break;
         }
 
-        if (Command?.CanExecute(CommandParameter) == true)
-        {
-            Command.Execute(CommandParameter);
-        }
+        Internal.CommandHelper.Execute(Command, CommandParameter);
 
         Click?.Invoke(this, new RoutedEventArgs());
     }

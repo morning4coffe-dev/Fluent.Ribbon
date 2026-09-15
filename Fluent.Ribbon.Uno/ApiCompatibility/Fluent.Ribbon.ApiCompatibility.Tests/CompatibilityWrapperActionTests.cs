@@ -114,10 +114,12 @@ public sealed class CompatibilityWrapperActionTests
                 OneWay("Header"), OneWay("Icon"), OneWay("LargeIcon"), OneWay("MediumIcon"),
                 OneWay("Command"), OneWay("CommandParameter"), TwoWay("IsChecked"));
             yield return Contracts<global::Fluent.TextBox>(
-                OneWay("Header"), OneWay("Icon"), OneWay("MediumIcon"), TwoWay("Text"),
+                OneWay("Header"), OneWay("HeaderTemplate"), OneWay("HeaderTemplateSelector"),
+                OneWay("Icon"), OneWay("MediumIcon"), TwoWay("Text"),
                 OneWay("IsReadOnly"), OneWay("MaxLength"));
             yield return Contracts<global::Fluent.ComboBox>(
-                OneWay("Header"), OneWay("Icon"), OneWay("MediumIcon"), OneWay("ItemsSource"),
+                OneWay("Header"), OneWay("HeaderTemplate"), OneWay("HeaderTemplateSelector"),
+                OneWay("Icon"), OneWay("MediumIcon"), OneWay("ItemsSource"),
                 TwoWay("SelectedItem"), TwoWay("SelectedIndex"));
         }
     }

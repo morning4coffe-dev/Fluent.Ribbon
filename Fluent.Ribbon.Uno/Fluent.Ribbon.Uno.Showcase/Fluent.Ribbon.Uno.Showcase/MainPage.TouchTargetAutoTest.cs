@@ -91,6 +91,7 @@ public sealed partial class MainPage
             {
                 Header = "Overflow target",
                 Size = RibbonControlSize.Small,
+                Width = expectedTarget * 3,
             });
         var group = new RibbonGroupBox
         {
@@ -189,18 +190,6 @@ public sealed partial class MainPage
 
     private static void RevealNormallyConditionalTargets(TouchTargetProbe probe)
     {
-        foreach (var partName in new[]
-                 {
-                     "PART_OverflowButton",
-                     "PART_MenuButton",
-                 })
-        {
-            if (FindDescendantByName(probe.Host, partName) is FrameworkElement part)
-            {
-                part.Visibility = Visibility.Visible;
-            }
-        }
-
         if (FindDescendantByName(
                 probe.ScrollViewer,
                 "PART_ScrollViewer") is ScrollViewer innerScrollViewer)
@@ -221,6 +210,7 @@ public sealed partial class MainPage
         AssertTarget(probe.Gallery, "PART_UpButton", minimum);
         AssertTarget(probe.Gallery, "PART_DownButton", minimum);
         AssertTarget(probe.Gallery, "PART_ExpandButton", minimum);
+        Require(probe.QuickAccess.HasOverflowItems, "The touch-target fixture did not create real QAT overflow.");
         AssertTarget(probe.QuickAccess, "PART_OverflowButton", minimum);
         AssertTarget(probe.QuickAccess, "PART_MenuButton", minimum);
         AssertTarget(probe.Group, "LauncherButton", minimum);

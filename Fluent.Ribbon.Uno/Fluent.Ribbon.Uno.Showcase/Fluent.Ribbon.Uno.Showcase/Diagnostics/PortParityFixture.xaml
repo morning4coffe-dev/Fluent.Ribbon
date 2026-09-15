@@ -1,0 +1,34 @@
+<UserControl
+    x:Class="FluentRibbon.Uno.Showcase.Diagnostics.PortParityFixture"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:fluent="using:Fluent">
+    <UserControl.Resources>
+        <DataTemplate x:Key="PortParityItemTemplate">
+            <TextBlock
+                Tag="PortParityItemTemplate"
+                Text="{Binding Title}" />
+        </DataTemplate>
+        <DataTemplate x:Key="PortParityButtonTemplate">
+            <fluent:Button
+                Header="{Binding Title}"
+                Tag="PortParityButtonTemplate"
+                Size="Small" />
+        </DataTemplate>
+        <DataTemplate x:Key="PortParityHeaderTemplate">
+            <TextBlock
+                Tag="PortParityHeaderTemplate"
+                Text="Custom parity header" />
+        </DataTemplate>
+    </UserControl.Resources>
+    <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <ScrollViewer
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel
+                x:Name="ItemsHost"
+                Padding="12"
+                Spacing="8" />
+        </ScrollViewer>
+    </Border>
+</UserControl>

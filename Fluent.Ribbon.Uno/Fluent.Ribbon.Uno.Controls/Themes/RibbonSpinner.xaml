@@ -66,9 +66,11 @@
                                     Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
 
                                 <!-- Header -->
-                                <TextBlock
+                                <ContentPresenter
                                     x:Name="HeaderText"
-                                    Text="{TemplateBinding Header}"
+                                    Tag="Fluent.EditorHeader"
+                                    Content="{TemplateBinding Header}"
+                                    ContentTemplate="{TemplateBinding HeaderTemplate}"
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     VerticalAlignment="Center"
                                     FontSize="12"

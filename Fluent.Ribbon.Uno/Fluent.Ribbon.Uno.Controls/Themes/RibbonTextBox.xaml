@@ -3,6 +3,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:fluent="using:Fluent">
 
+    <DataTemplate x:Key="Fluent.Ribbon.EditorHeaderContentTemplate">
+        <ContentPresenter Content="{Binding}" />
+    </DataTemplate>
+
     <Style TargetType="fluent:RibbonTextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="{ThemeResource RibbonButtonPadding}" />
@@ -22,13 +26,11 @@
                                 <VisualState x:Name="Large">
                                     <VisualState.Setters>
                                         <Setter Target="GlyphIcon.FontSize" Value="16" />
-                                        <Setter Target="HeaderText.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Medium">
                                     <VisualState.Setters>
                                         <Setter Target="GlyphIcon.FontSize" Value="16" />
-                                        <Setter Target="HeaderText.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Small">
@@ -77,9 +79,11 @@
                                     Visibility="{Binding MediumIcon, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NullToCollapsedConverter}, FallbackValue=Collapsed}" />
 
                                 <!-- Header -->
-                                <TextBlock
+                                <ContentPresenter
                                     x:Name="HeaderText"
-                                    Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                    Tag="Fluent.EditorHeader"
+                                    Content="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                    ContentTemplate="{TemplateBinding HeaderTemplate}"
                                     Foreground="{ThemeResource RibbonTextBrush}"
                                     VerticalAlignment="Center"
                                     FontSize="12"

@@ -6,7 +6,6 @@ namespace Fluent;
 public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonControl, IMediumIconProvider, IQuickAccessItemProvider, IRibbonHeaderAlignable
 {
     private FrameworkElement? _headerPresenter;
-    private bool _synchronizingSelection;
     private TextBox? _textBox;
     private bool _redirectingFocus;
     private Microsoft.UI.Xaml.FocusState _delegatedFocusState;
@@ -15,11 +14,12 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
     public new static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(RibbonTextBox),
-            new PropertyMetadata(null));
+#if FLUENT_REFERENCE_TARGET
+        // Metadata inspection must not initialize Uno's UI-only TextBox statics.
+        DependencyProperty.Register(nameof(Header), typeof(object), typeof(RibbonTextBox), new PropertyMetadata(null));
+#else
+        TextBox.HeaderProperty;
+#endif
 
     /// <summary>
     /// Gets or sets the header/label of the text box.
@@ -175,10 +175,11 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     /// </summary>
     public RibbonTextBox()
     {
+        InitializeHeaderPresentation();
         DefaultStyleKey = typeof(RibbonTextBox);
         GettingFocus += OnRibbonTextBoxGettingFocus;
         GotFocus += OnRibbonTextBoxGotFocus;
-        SelectionChanged += OnOwnerSelectionChanged;
+        InitializeSelectionDelegation();
         QuickAccessHelper.AttachContextMenu(this);
     }
 
@@ -189,29 +190,41 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
-        if (_textBox is not null)
+        BeginSelectionTemplateChange();
+        try
         {
-            _textBox.SelectionChanged -= OnEditorSelectionChanged;
-            _textBox.GotFocus -= OnEditorGotFocus;
-            _textBox.LostFocus -= OnEditorLostFocus;
+            // The native view is replaced below; keep a stale range out of its
+            // initial foreground/selection update, then restore the saved range.
+            base.Select(0, 0);
+            if (_textBox is not null)
+            {
+                _textBox.GotFocus -= OnEditorGotFocus;
+                _textBox.LostFocus -= OnEditorLostFocus;
+            }
+
+            _textBox = null;
+            base.OnApplyTemplate();
+
+            _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
+            ApplyHeaderPresentation();
+            _textBox = GetTemplateChild("PART_TextBox") as TextBox;
+            if (_textBox is not null)
+            {
+                _textBox.IsTabStop = false;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+                    _textBox,
+                    Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+                _textBox.GotFocus += OnEditorGotFocus;
+                _textBox.LostFocus += OnEditorLostFocus;
+                AttachSelectionEditor();
+            }
+        }
+        finally
+        {
+            EndSelectionTemplateChange();
         }
 
-        base.OnApplyTemplate();
-
-        _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
-        _textBox = GetTemplateChild("PART_TextBox") as TextBox;
-        if (_textBox is not null)
-        {
-            _textBox.IsTabStop = false;
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
-                _textBox,
-                Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-            _textBox.SelectionChanged += OnEditorSelectionChanged;
-            _textBox.GotFocus += OnEditorGotFocus;
-            _textBox.LostFocus += OnEditorLostFocus;
-            SynchronizeEditorSelection();
-        }
-
+        UpdateVisualState();
         UpdateFocusVisualState(false);
     }
 
@@ -268,7 +281,7 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
 
         if (ReferenceEquals(focused, _textBox) && SelectAllTextOnFocus)
         {
-            _textBox.SelectAll();
+            SelectAll();
         }
     }
 
@@ -278,25 +291,6 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
             || (ReferenceEquals(e.NewFocusedElement, _textBox) && !_redirectingFocus))
         {
             _delegatedFocusState = e.FocusState;
-        }
-    }
-
-    private void OnEditorSelectionChanged(object sender, RoutedEventArgs e)
-    {
-        if (_textBox is null || _synchronizingSelection)
-        {
-            return;
-        }
-
-        _synchronizingSelection = true;
-        try
-        {
-            base.SelectionStart = _textBox.SelectionStart;
-            base.SelectionLength = _textBox.SelectionLength;
-        }
-        finally
-        {
-            _synchronizingSelection = false;
         }
     }
 
@@ -360,77 +354,6 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
         }
     }
 
-    private void OnOwnerSelectionChanged(object sender, RoutedEventArgs e)
-    {
-        if (_synchronizingSelection)
-        {
-            return;
-        }
-
-        SynchronizeEditorSelection();
-    }
-
-    private void SynchronizeEditorSelection()
-    {
-        if (_textBox is null || _synchronizingSelection)
-        {
-            return;
-        }
-
-        _synchronizingSelection = true;
-        try
-        {
-            var start = Math.Clamp(base.SelectionStart, 0, _textBox.Text.Length);
-            _textBox.Select(start, Math.Min(base.SelectionLength, _textBox.Text.Length - start));
-        }
-        finally
-        {
-            _synchronizingSelection = false;
-        }
-    }
-
-    /// <summary>Selects text in the editable template part.</summary>
-    public new void Select(int start, int length)
-    {
-        base.Select(start, length);
-        _textBox?.Select(start, length);
-    }
-
-    /// <summary>Selects all text in the editable template part.</summary>
-    public new void SelectAll()
-    {
-        base.SelectAll();
-        _textBox?.SelectAll();
-    }
-
-    /// <summary>Gets or sets the caret/selection start owned by the editable template part.</summary>
-    public new int SelectionStart
-    {
-        get => _textBox?.SelectionStart ?? base.SelectionStart;
-        set
-        {
-            base.SelectionStart = value;
-            if (_textBox is not null)
-            {
-                _textBox.SelectionStart = value;
-            }
-        }
-    }
-
-    /// <summary>Gets or sets the selection length owned by the editable template part.</summary>
-    public new int SelectionLength
-    {
-        get => _textBox?.SelectionLength ?? base.SelectionLength;
-        set
-        {
-            base.SelectionLength = value;
-            if (_textBox is not null)
-            {
-                _textBox.SelectionLength = value;
-            }
-        }
-    }
-
     internal bool FocusEditorForAutomation()
     {
         ApplyTemplate();
@@ -486,7 +409,6 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
     {
         var clone = new RibbonTextBox
         {
-            Header = QuickAccessHelper.ClonePresentationValue(Header),
             MediumIcon = MediumIcon,
             IconGlyph = IconGlyph,
             Size = RibbonControlSize.Small,
@@ -496,6 +418,9 @@ public partial class RibbonTextBox : TextBox, IHeaderedControl, IScalableRibbonC
         };
 
         RibbonControl.BindQuickAccessItem(this, clone);
+        QuickAccessBindingSession.For(this, clone).BindPresentation(HeaderProperty, HeaderProperty);
+        BindOneWay(HeaderTemplateProperty);
+        BindOneWay(HeaderTemplateSelectorProperty);
         BindOneWay(IsReadOnlyProperty);
         BindOneWay(MaxLengthProperty);
         BindTwoWay(TextProperty);

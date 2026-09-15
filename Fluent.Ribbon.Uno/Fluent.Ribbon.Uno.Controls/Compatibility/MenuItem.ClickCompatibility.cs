@@ -7,7 +7,16 @@ public partial class MenuItem
     {
         if (HasSubItems && IsSplit is false)
         {
-            IsDropDownOpen = true;
+            if (CanOpenSubmenu)
+            {
+                IsDropDownOpen = true;
+            }
+
+            return;
+        }
+
+        if (!CanInvoke)
+        {
             return;
         }
 
@@ -28,6 +37,7 @@ public partial class MenuItem
 
         if (IsDefinitive)
         {
+            IsDropDownOpen = false;
             PopupService.RaiseDismissPopupEvent(this, DismissPopupMode.Always);
         }
     }
@@ -42,6 +52,7 @@ public partial class MenuItem
         foreach (var peer in GetSiblingMenuItems())
         {
             if (!ReferenceEquals(peer, this)
+                && peer.IsCheckable
                 && string.Equals(
                     peer.GroupName,
                     GroupName,

@@ -28,11 +28,7 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
 
     /// <summary>Identifies the <see cref="Header"/> dependency property.</summary>
     public new static readonly DependencyProperty HeaderProperty =
-        DependencyProperty.Register(
-            nameof(Header),
-            typeof(object),
-            typeof(RibbonComboBox),
-            new PropertyMetadata(null));
+        ComboBox.HeaderProperty;
 
     /// <summary>
     /// Gets or sets the header/label of the combo box.
@@ -275,18 +271,11 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         _automationValue = GetAutomationValue();
         base.DropDownOpened += OnNativeDropDownOpened;
         base.DropDownClosed += OnNativeDropDownClosed;
+        InitializeComboPopup();
         DropDownOpened += (_, _) => { };
         DropDownClosed += (_, _) => { };
         QuickAccessHelper.AttachContextMenu(this);
-        RegisterPropertyChangedCallback(
-            Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty,
-            static (sender, _) => ((RibbonComboBox)sender).UpdateEditableAutomationName());
-        RegisterPropertyChangedCallback(
-            HeaderProperty,
-            static (sender, _) => ((RibbonComboBox)sender).UpdateEditableAutomationName());
-        RegisterPropertyChangedCallback(
-            PlaceholderTextProperty,
-            static (sender, _) => ((RibbonComboBox)sender).UpdateEditableAutomationName());
+        InitializeHeaderAutomation();
         RegisterPropertyChangedCallback(
             SelectedIndexProperty,
             static (sender, _) => ((RibbonComboBox)sender).OnAutomationSelectionChanged());
@@ -302,31 +291,14 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
+        DetachHeaderAutomation();
         base.OnApplyTemplate();
         _headerPresenter = GetTemplateChild("HeaderText") as FrameworkElement;
         _editableTextBox = GetTemplateChild("EditableText") as TextBox;
+        ApplyComboPopupTemplate();
+        AttachHeaderAutomation();
         UpdateEditableAutomationName();
         UpdateVisualState();
-    }
-
-    private void UpdateEditableAutomationName()
-    {
-        if (_editableTextBox is not null)
-        {
-            var name = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(this);
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                name = Fluent.Automation.Peers.AutomationPeerHelpers
-                    .GetHeaderOrPlaceholderName(this);
-            }
-
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                Fluent.Automation.Peers.AutomationPeerHelpers.SetNameIfUnsetOrGenerated(
-                    _editableTextBox,
-                    name);
-            }
-        }
     }
 
     /// <inheritdoc />
@@ -369,12 +341,15 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
 
     private void OnNativeDropDownOpened(object? sender, object e)
     {
+        ObserveComboPopupViewport(XamlRoot);
+        UpdateComboPopupDimensions(resetHeight: true);
         PopupService.RegisterOpenDropDown(this);
         DropDownOpened?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnNativeDropDownClosed(object? sender, object e)
     {
+        ObserveComboPopupViewport(null);
         PopupService.UnregisterOpenDropDown(this);
         DropDownClosed?.Invoke(this, EventArgs.Empty);
     }
@@ -430,7 +405,6 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
     {
         var clone = new RibbonComboBox
         {
-            Header = QuickAccessHelper.ClonePresentationValue(Header),
             MediumIcon = MediumIcon,
             IconGlyph = IconGlyph,
             Size = RibbonControlSize.Small,
@@ -462,14 +436,12 @@ public partial class RibbonComboBox : ComboBox, IHeaderedControl, IScalableRibbo
         }
 
         RibbonControl.BindQuickAccessItem(this, clone);
+        BindOneWay(HeaderTemplateProperty);
         BindOneWay(DisplayMemberPathProperty);
         BindOneWay(SelectedValuePathProperty);
         BindOneWay(PlaceholderTextProperty);
         BindOneWay(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
-        if (Header is not UIElement)
-        {
-            BindOneWay(HeaderProperty);
-        }
+        QuickAccessBindingSession.For(this, clone).BindPresentation(HeaderProperty, HeaderProperty);
 
         BindTwoWay(SelectedIndexProperty);
         if (IsEditable)

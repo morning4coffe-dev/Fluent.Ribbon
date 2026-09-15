@@ -46,14 +46,26 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="fluent:ResizeableContentControl">
-                    <Grid>
+                    <Grid
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <ContentPresenter
                             Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                             VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
 
                         <fluent:ResizeHandle
                             x:Name="PART_ResizeVerticalThumb"
+                            Grid.Row="1"
                             Width="{ThemeResource RibbonCompactTargetSize}"
                             MinHeight="{ThemeResource RibbonCompactTargetSize}"
                             MinWidth="{ThemeResource RibbonCompactTargetSize}"
@@ -68,6 +80,7 @@
 
                         <fluent:ResizeHandle
                             x:Name="PART_ResizeBothThumb"
+                            Grid.Row="1"
                             Width="{ThemeResource RibbonCompactTargetSize}"
                             Height="{ThemeResource RibbonCompactTargetSize}"
                             HorizontalAlignment="Right"

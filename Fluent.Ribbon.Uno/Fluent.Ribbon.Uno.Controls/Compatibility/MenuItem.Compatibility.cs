@@ -13,7 +13,13 @@ public partial class MenuItem :
     IDropDownControl,
     IToggleButton
 {
+#if WINDOWS
+    private ItemsPresenter? submenuItemsHost;
+#else
     private ItemsControl? submenuItemsHost;
+#endif
+    private object? nativeContainerItem;
+    private bool hasNativeContainerItem;
     private DependencyObject? dropDownOwner;
     private bool focusFirstSubmenuItemWhenOpened;
 
@@ -57,19 +63,65 @@ public partial class MenuItem :
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        DropDownPopup = GetTemplateChild("PART_Popup") as Popup ?? DropDownPopup;
+        ApplyMenuPresentationTemplate();
+        ApplySubmenuTemplate();
     }
 
     /// <summary>Creates the default item container.</summary>
-    protected virtual DependencyObject GetContainerForItemOverride()
+    protected override DependencyObject GetContainerForItemOverride()
     {
+        if (hasNativeContainerItem && itemsBinding is { UsesNativeGenerator: true, IsUpdating: false })
+        {
+            var item = nativeContainerItem;
+            hasNativeContainerItem = false;
+            nativeContainerItem = null;
+            var wasValidating = validatingSubmenuGenerator;
+            validatingSubmenuGenerator = true;
+            try
+            {
+                return itemsBinding.AcquireNativeContainer(item);
+            }
+            finally
+            {
+                validatingSubmenuGenerator = wasValidating;
+            }
+        }
         return new MenuItem();
     }
 
     /// <summary>Gets whether an item is already its own container.</summary>
-    protected virtual bool IsItemItsOwnContainerOverride(object item)
+    protected override bool IsItemItsOwnContainerOverride(object item)
     {
+        if (itemsBinding is { UsesNativeGenerator: true, IsUpdating: false } && item is not UIElement)
+        {
+            nativeContainerItem = item;
+            hasNativeContainerItem = true;
+        }
         return item is UIElement;
+    }
+
+    /// <inheritdoc />
+    protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
+        => Fluent.Helpers.ItemsControlBinding.PrepareContent(this, element, item);
+
+    /// <inheritdoc />
+    protected override void ClearContainerForItemOverride(DependencyObject element, object item)
+    {
+        if (itemsBinding is { UsesNativeGenerator: true, IsUpdating: false }
+            && itemsBinding.ReleaseNativeContainer(element))
+        {
+            return;
+        }
+
+        if (element is MenuItem menuItem
+            && (ReferenceEquals(menuItem.dropDownOwner, this)
+                || ReferenceEquals(menuItem.dropDownOwner, QuickAccessSubmenuOwner)))
+        {
+            menuItem.IsDropDownOpen = false;
+            menuItem.dropDownOwner = null;
+        }
+
+        Fluent.Helpers.ItemsControlBinding.ClearContent(element, item);
     }
 
     /// <summary>Handles context-menu opening.</summary>
@@ -94,8 +146,20 @@ public partial class MenuItem :
     /// <summary>Handles pointer entry.</summary>
     protected virtual void OnMouseEnter(PointerRoutedEventArgs e)
     {
-        if (!IsContextMenuOpened
-            && HasSubItems
+        if (IsEnabled && !IsContextMenuOpened && dropDownOwner is RibbonDropDownButton or MenuItem)
+        {
+            foreach (var sibling in GetSiblingMenuItems())
+            {
+                if (!ReferenceEquals(sibling, this))
+                {
+                    sibling.IsDropDownOpen = false;
+                }
+            }
+        }
+
+        if (CanOpenSubmenu
+            && !IsContextMenuOpened
+            && !IsSplit
             && dropDownOwner is RibbonDropDownButton or MenuItem)
         {
             IsDropDownOpen = true;
@@ -105,12 +169,8 @@ public partial class MenuItem :
     /// <summary>Handles pointer exit.</summary>
     protected virtual void OnMouseLeave(PointerRoutedEventArgs e)
     {
-        if (!IsContextMenuOpened
-            && HasSubItems
-            && dropDownOwner is RibbonDropDownButton)
-        {
-            IsDropDownOpen = false;
-        }
+        // The submenu is a separate popup tree. Leaving this item can mean entering
+        // that popup; sibling opening and light-dismiss perform the actual closure.
     }
 
     /// <summary>Handles primary-pointer release.</summary>
@@ -175,7 +235,14 @@ public partial class MenuItem :
 
     void IDropDownItemOwner.SetDropDownOwner(DependencyObject owner)
     {
+        if (ReferenceEquals(dropDownOwner, owner))
+        {
+            return;
+        }
+
         dropDownOwner = owner;
+        ReconcileCheckedGroup();
+        UpdateMenuPresentation();
     }
 
     internal DependencyObject? DropDownOwner => dropDownOwner;
@@ -272,16 +339,25 @@ public partial class MenuItem :
         {
             var items = dropDownButton.ItemsSource as IEnumerable
                         ?? dropDownButton.Items;
-            return items.Cast<object>().OfType<MenuItem>();
+            var siblings = items.Cast<object>().OfType<MenuItem>().ToArray();
+            if (siblings.Contains(this))
+            {
+                return siblings;
+            }
         }
 
-        for (DependencyObject? current = this;
+        for (DependencyObject? current = VisualTreeHelper.GetParent(this);
              current is not null;
              current = VisualTreeHelper.GetParent(current))
         {
             if (current is ItemsControl itemsControl)
             {
                 return itemsControl.Items.Cast<object>().OfType<MenuItem>();
+            }
+
+            if (current is Panel panel && panel.Children.OfType<MenuItem>().Any())
+            {
+                return panel.Children.OfType<MenuItem>();
             }
         }
 
@@ -290,7 +366,7 @@ public partial class MenuItem :
 
     internal void OpenSubmenuAndFocusFirstItem()
     {
-        if (!HasSubItems)
+        if (!CanOpenSubmenu)
         {
             return;
         }
@@ -337,9 +413,11 @@ public partial class MenuItem :
     private void FocusFirstEnabledSubmenuItem()
     {
         focusFirstSubmenuItemWhenOpened = false;
-        Items.OfType<MenuItem>()
-            .FirstOrDefault(IsKeyboardNavigable)
-            ?.Focus(FocusState.Keyboard);
+        var target = Items.OfType<MenuItem>().FirstOrDefault(IsKeyboardNavigable) as Control
+                     ?? (DropDownPopup?.Child is { } child
+                         ? FocusManager.FindFirstFocusableElement(child) as Control
+                         : null);
+        target?.Focus(FocusState.Keyboard);
     }
 
     private static bool IsKeyboardNavigable(MenuItem item)
@@ -349,64 +427,68 @@ public partial class MenuItem :
 
     private void ShowCompatibilitySubmenu()
     {
-        if (Items.Count == 0 || XamlRoot is null)
+#if WINDOWS
+        ShowNativeOwnSubmenu();
+#else
+        if (XamlRoot is null || !IsLoaded)
+        {
+            return;
+        }
+
+        if (!CanOpenSubmenu)
+        {
+            IsDropDownOpen = false;
+            return;
+        }
+
+        if (closingSubmenuPopup is not null || !PrepareOwnQuickAccessContent())
         {
             return;
         }
 
         if (DropDownPopup is null)
         {
-            foreach (var item in Items.OfType<IDropDownItemOwner>())
-            {
-                item.SetDropDownOwner(this);
-            }
-
-            submenuItemsHost = new ItemsControl
-            {
-                ItemsSource = Items,
-                MinWidth = Math.Max(160, ActualWidth),
-                FlowDirection = FlowDirection,
-            };
-            DropDownPopup = new Popup
-            {
-                Child = submenuItemsHost,
-                IsLightDismissEnabled = true,
-                XamlRoot = XamlRoot
-            };
-            DropDownPopup.Opened += OnCompatibilitySubmenuOpened;
-            DropDownPopup.Closed += (_, _) =>
-            {
-                if (IsDropDownOpen)
-                {
-                    IsDropDownOpen = false;
-                }
-            };
+            CreateCompatibilitySubmenu();
         }
-        else
+
+        foreach (var sibling in GetSiblingMenuItems())
         {
-            foreach (var item in Items.OfType<IDropDownItemOwner>())
+            if (!ReferenceEquals(sibling, this))
             {
-                item.SetDropDownOwner(this);
-            }
-
-            DropDownPopup.XamlRoot = XamlRoot;
-            if (submenuItemsHost is not null)
-            {
-                submenuItemsHost.ItemsSource = Items;
-                submenuItemsHost.MinWidth = Math.Max(160, ActualWidth);
-                submenuItemsHost.FlowDirection = FlowDirection;
+                sibling.IsDropDownOpen = false;
             }
         }
 
-        var origin = TransformToVisual(null)
-            .TransformPoint(new Windows.Foundation.Point(ActualWidth, 0));
-        DropDownPopup.HorizontalOffset = origin.X;
-        DropDownPopup.VerticalOffset = origin.Y;
-        FlyoutShowHelper.OpenDeferred(DropDownPopup);
+        foreach (var item in Items.OfType<IDropDownItemOwner>())
+        {
+            item.SetDropDownOwner(this);
+        }
+
+        DropDownPopup!.XamlRoot = XamlRoot;
+        if (submenuItemsHost is not null)
+        {
+            submenuItemsHost.FlowDirection = FlowDirection;
+            ValidateSubmenuGenerator();
+        }
+
+        ObserveSubmenuViewport(XamlRoot);
+        UpdateSubmenuDimensions();
+        UpdateSubmenuPosition();
+        var requestedPopup = DropDownPopup;
+        var requestedVersion = submenuRequestVersion;
+        FlyoutShowHelper.OpenDeferred(
+            requestedPopup,
+            () => IsDropDownOpen && IsLoaded && CanOpenSubmenu && closingSubmenuPopup is null
+                  && requestedVersion == submenuRequestVersion && ReferenceEquals(DropDownPopup, requestedPopup));
+#endif
     }
 
     private void HideCompatibilitySubmenu()
     {
+#if WINDOWS
+        HideNativeOwnSubmenu();
+#else
+        ObserveSubmenuViewport(null);
         if (DropDownPopup is not null)
         {
             var shouldRestoreFocus =
@@ -414,20 +496,41 @@ public partial class MenuItem :
                 && XamlRoot is { } xamlRoot
                 && FocusManager.GetFocusedElement(xamlRoot) is DependencyObject focused
                 && FocusRoutingHelper.IsDescendantOf(focused, child);
-            DropDownPopup.IsOpen = false;
+            if (DropDownPopup.IsOpen)
+            {
+                closingSubmenuPopup = DropDownPopup;
+                DropDownPopup.IsOpen = false;
+            }
             if (shouldRestoreFocus)
             {
                 Focus(FocusState.Keyboard);
             }
         }
+#endif
     }
 
     private void OnCompatibilitySubmenuOpened(object? sender, object args)
     {
+#if WINDOWS
+        OnNativeSubmenuOpened(sender);
+#else
+        if (!ReferenceEquals(sender, DropDownPopup) || !IsDropDownOpen || DropDownPopup?.IsOpen != true)
+        {
+            return;
+        }
+
+        UpdateSubmenuPosition();
+        if (!submenuOpenedNotified)
+        {
+            submenuOpenedNotified = true;
+            DropDownOpened?.Invoke(this, EventArgs.Empty);
+        }
+
         if (focusFirstSubmenuItemWhenOpened)
         {
             FocusFirstEnabledSubmenuItem();
         }
+#endif
     }
 
     private void RaiseInvokedAutomationEvent()

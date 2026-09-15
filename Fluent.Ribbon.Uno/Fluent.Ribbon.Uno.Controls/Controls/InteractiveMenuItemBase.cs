@@ -3,15 +3,15 @@ using Windows.System;
 namespace Fluent;
 
 /// <summary>
-/// Base class for the lightweight menu-item controls that derive directly from
-/// <see cref="Control"/> instead of <c>ButtonBase</c>, yet are expected to behave
+/// Base class for menu-item controls with headered item binding support that,
+/// unlike <c>ButtonBase</c>, supply their own activation behavior. They behave
 /// like a button. It drives the <c>CommonStates</c> visual state group
 /// (<c>Normal</c>/<c>PointerOver</c>/<c>Pressed</c>/<c>Disabled</c>), invokes on
 /// pointer-release and keyboard (Enter/Space), is focusable, and shows the system
 /// focus visual — so every consumer gets consistent, accessible click affordance.
 /// Concrete items implement <see cref="OnInvoke"/>.
 /// </summary>
-public abstract partial class InteractiveMenuItemBase : Control
+public abstract partial class InteractiveMenuItemBase : HeaderedItemsControl
 {
     private bool _isPointerOver;
     private bool _isPressed;
@@ -67,7 +67,7 @@ public abstract partial class InteractiveMenuItemBase : Control
     {
         base.OnPointerPressed(e);
 
-        if (!IsEnabled)
+        if (e.Handled || !IsEnabled)
         {
             return;
         }
@@ -83,7 +83,7 @@ public abstract partial class InteractiveMenuItemBase : Control
     {
         base.OnPointerReleased(e);
 
-        var shouldInvoke = _isPressed && IsEnabled;
+        var shouldInvoke = _isPressed && IsEnabled && !e.Handled;
         _isPressed = false;
         UpdateVisualState(true);
 
@@ -107,7 +107,7 @@ public abstract partial class InteractiveMenuItemBase : Control
     {
         base.OnKeyDown(e);
 
-        if (!IsEnabled)
+        if (e.Handled || !IsEnabled)
         {
             return;
         }
@@ -133,7 +133,7 @@ public abstract partial class InteractiveMenuItemBase : Control
 
         if (e.Key == VirtualKey.Space)
         {
-            var shouldInvoke = _isPressed && IsEnabled;
+            var shouldInvoke = _isPressed && IsEnabled && !e.Handled;
             _isPressed = false;
             UpdateVisualState(true);
 

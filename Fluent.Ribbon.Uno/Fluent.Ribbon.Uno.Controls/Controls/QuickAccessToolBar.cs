@@ -96,7 +96,7 @@ public partial class QuickAccessToolBar : Control
             nameof(CanQuickAccessLocationChanging),
             typeof(bool),
             typeof(QuickAccessToolBar),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnCustomizationOptionsChanged));
 
     /// <summary>
     /// Gets or sets whether the user can change the QAT location (above/below ribbon).
@@ -113,7 +113,7 @@ public partial class QuickAccessToolBar : Control
             nameof(IsMenuDropDownVisible),
             typeof(bool),
             typeof(QuickAccessToolBar),
-            new PropertyMetadata(true));
+            new PropertyMetadata(true, OnCustomizationOptionsChanged));
 
     /// <summary>
     /// Gets or sets whether the menu dropdown button is visible.
@@ -138,6 +138,8 @@ public partial class QuickAccessToolBar : Control
         Items.CollectionChanged += OnItemsCollectionChanged;
         SizeChanged += OnSizeChanged;
         InitializeCompatibility();
+        QuickAccessHelper.AttachContextMenu(this);
+        RegisterPropertyChangedCallback(IsEnabledProperty, (_, _) => CloseCustomizationMenu());
         RibbonLocalizationUpdateHelper.Track(this, RefreshLocalizedTemplateMetadata);
     }
 
@@ -148,6 +150,7 @@ public partial class QuickAccessToolBar : Control
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
+        CloseCustomizationMenu();
         base.OnApplyTemplate();
 
         _toolBarPanel = GetTemplateChild(PART_ToolBarPanel) as StackPanel;
@@ -249,25 +252,13 @@ public partial class QuickAccessToolBar : Control
         var availableWidth = availableWidthOverride ?? ActualWidth;
         if (availableWidth <= 0 || double.IsInfinity(availableWidth)) return;
 
-        // Reserve space for the overflow and menu buttons
+        // The overflow affordance consumes space only when the items do not fit.
         var reservedWidth = 0.0;
-        if (_overflowButton is not null)
-        {
-            _overflowButton.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-            reservedWidth += Math.Max(
-                _overflowButton.DesiredSize.Width,
-                _overflowButton.MinWidth);
-        }
-
         if (_menuButton is not null && IsMenuDropDownVisible)
         {
             _menuButton.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
             reservedWidth += _menuButton.DesiredSize.Width;
         }
-
-        var usableWidth = availableWidth - reservedWidth;
-        var accumulatedWidth = 0.0;
-        var hasOverflow = false;
 
         var measuredChildren = new List<(FrameworkElement Child, double Width)>();
         for (var i = 0; i < _toolBarPanel.Children.Count; i++)
@@ -292,6 +283,15 @@ public partial class QuickAccessToolBar : Control
             measuredChildren.Add((child, child.DesiredSize.Width));
         }
 
+        if (measuredChildren.Sum(item => item.Width) + reservedWidth > availableWidth)
+        {
+            _overflowButton.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            reservedWidth += Math.Max(_overflowButton.DesiredSize.Width, _overflowButton.MinWidth);
+        }
+
+        var usableWidth = availableWidth - reservedWidth;
+        var accumulatedWidth = 0.0;
+        var hasOverflow = false;
         foreach (var (child, width) in measuredChildren)
         {
             accumulatedWidth += width;
@@ -308,6 +308,20 @@ public partial class QuickAccessToolBar : Control
         if (_overflowButton is not null)
         {
             _overflowButton.Visibility = hasOverflow ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void RestoreNaturalItemVisibility()
+    {
+        foreach (var item in _overflowedItems)
+        {
+            item.Visibility = Visibility.Visible;
+        }
+        _overflowedItems.Clear();
+        HasOverflowItems = false;
+        if (_overflowButton is not null)
+        {
+            _overflowButton.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -376,52 +390,131 @@ public partial class QuickAccessToolBar : Control
         FlyoutShowHelper.ShowDeferred(_overflowFlyout, _overflowButton!);
     }
 
-    private void OnMenuButtonClick(object sender, RoutedEventArgs e)
+    private void OnMenuButtonClick(object sender, RoutedEventArgs e) => OpenCustomizationMenu();
+
+    private bool CanOpenCustomizationMenu() =>
+        IsLoaded
+        && XamlRoot is not null
+        && IsMenuDropDownVisible
+        && FocusRoutingHelper.IsEffectivelyEnabled(this)
+        && FocusRoutingHelper.IsEffectivelyVisible(this)
+        && _menuButton is { IsEnabled: true, Visibility: Visibility.Visible, Flyout: null };
+
+    internal Flyout? OpenCustomizationMenu()
     {
-        if (_menuFlyout is null)
+        if (!CanOpenCustomizationMenu())
         {
-            _menuFlyout = new Flyout
-            {
-                Placement = FlyoutPlacementMode.Bottom
-            };
+            return null;
         }
 
+        CloseCustomizationMenu();
+        var ribbon = GetCustomizationRibbon();
         var panel = new StackPanel { MinWidth = 200 };
         AddQuickAccessCustomizationItems(panel);
 
-        if (CanQuickAccessLocationChanging)
+        if (ribbon is { CanCustomizeQuickAccessToolBar: true, IsQuickAccessToolBarVisible: true })
         {
-            var locationLabel = ShowAboveRibbon
-                ? RibbonLocalization.Current.Localization.QuickAccessToolBarMenuShowBelow
-                : RibbonLocalization.Current.Localization.QuickAccessToolBarMenuShowAbove;
+            panel.Children.Add(CreateCustomizationAction(
+                RibbonLocalization.Current.Localization.RibbonContextMenuCustomizeQuickAccessToolBar,
+                "QuickAccessCustomizeButton",
+                () => ribbon.IsQuickAccessToolBarVisible
+                      && ((ICommand)Ribbon.CustomizeQuickAccessToolbarCommand).CanExecute(ribbon),
+                () => Internal.CommandHelper.Execute(Ribbon.CustomizeQuickAccessToolbarCommand, ribbon)));
+        }
 
-            var locationButton = new WinUIButton
+        if (CanChangeLocation())
+        {
+            var showAbove = !ShowAboveRibbon;
+            panel.Children.Add(CreateCustomizationAction(
+                showAbove
+                    ? RibbonLocalization.Current.Localization.QuickAccessToolBarMenuShowAbove
+                    : RibbonLocalization.Current.Localization.QuickAccessToolBarMenuShowBelow,
+                "QuickAccessLocationButton",
+                CanChangeLocation,
+                () => ShowAboveRibbon = showAbove));
+        }
+
+        if (panel.Children.Count == 0)
+        {
+            return null;
+        }
+
+        var flyout = new Flyout { Placement = FlyoutPlacementMode.Bottom, Content = panel };
+        flyout.Closing += OnCustomizationMenuClosing;
+        _menuFlyout = flyout;
+        FlyoutShowHelper.ShowDeferred(flyout, _menuButton,
+            () => ReferenceEquals(_menuFlyout, flyout) && CanOpenCustomizationMenu()
+                  && ReferenceEquals(GetCustomizationRibbon(), ribbon));
+        return flyout;
+
+        bool CanChangeLocation() =>
+            CanQuickAccessLocationChanging
+            && (ribbon is null || (ribbon.CanQuickAccessLocationChanging && ribbon.IsQuickAccessToolBarVisible));
+
+        WinUIButton CreateCustomizationAction(string label, string id, Func<bool> canExecute, Action execute)
+        {
+            var button = new WinUIButton
             {
-                Content = locationLabel,
+                Content = label,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(12, 8, 12, 8),
+                Command = Ribbon.CreateGuardedMenuCommand(
+                    label,
+                    () => CanOpenCustomizationMenu()
+                          && ReferenceEquals(GetCustomizationRibbon(), ribbon)
+                          && canExecute(),
+                    () =>
+                    {
+                        CloseCustomizationMenu();
+                        execute();
+                    }),
             };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(
-                locationButton,
-                "QuickAccessLocationButton");
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
-                locationButton,
-                locationLabel);
-
-            locationButton.Click += (s, args) =>
-            {
-                _menuFlyout?.Hide();
-                ShowAboveRibbon = !ShowAboveRibbon;
-            };
-
-            panel.Children.Add(locationButton);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(button, id);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
+            return button;
         }
+    }
 
-        _menuFlyout.Content = panel;
-        FlyoutShowHelper.ShowDeferred(_menuFlyout, _menuButton!);
+    internal void CloseCustomizationMenu()
+    {
+        if (_menuFlyout is { } flyout)
+        {
+            ReleaseCustomizationItems(flyout);
+            flyout.Hide();
+        }
+        _menuFlyout = null;
+    }
+
+    private void OnCustomizationMenuClosing(FlyoutBase sender, FlyoutBaseClosingEventArgs args)
+    {
+        if (!args.Cancel && sender is Flyout flyout)
+        {
+            ReleaseCustomizationItems(flyout);
+        }
+    }
+
+    private static void ReleaseCustomizationItems(Flyout flyout)
+    {
+        if (flyout.Content is not Panel panel)
+        {
+            return;
+        }
+        foreach (var item in panel.Children.OfType<QuickAccessMenuItem>().ToArray())
+        {
+            panel.Children.Remove(item);
+        }
+    }
+
+    private static void OnCustomizationOptionsChanged(
+        DependencyObject sender,
+        DependencyPropertyChangedEventArgs args)
+    {
+        var toolbar = (QuickAccessToolBar)sender;
+        toolbar.CloseCustomizationMenu();
+        toolbar.Refresh();
     }
 
     private static void InvokeOverflowItem(FrameworkElement original)
@@ -461,6 +554,7 @@ public partial class QuickAccessToolBar : Control
     {
         if (d is QuickAccessToolBar qat)
         {
+            qat.CloseCustomizationMenu();
             qat.ShowAboveRibbonChanged?.Invoke(qat, (bool)e.NewValue);
         }
     }

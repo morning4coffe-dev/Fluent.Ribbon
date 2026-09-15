@@ -9,7 +9,7 @@ public partial class SplitButton
     /// <inheritdoc />
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
-        if (!e.Handled)
+        if (!e.Handled && IsEnabled)
         {
             if (e.Key == VirtualKey.Escape && IsDropDownOpen)
             {
