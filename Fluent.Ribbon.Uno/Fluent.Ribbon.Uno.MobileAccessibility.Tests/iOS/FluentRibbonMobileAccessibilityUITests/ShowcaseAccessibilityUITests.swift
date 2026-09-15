@@ -13,7 +13,9 @@ final class ShowcaseAccessibilityUITests: XCTestCase {
         app.launch()
 
         defer {
-            let hierarchy = XCTAttachment(string: app.debugDescription)
+            let description = app.debugDescription
+            print("Showcase accessibility hierarchy:\n\(description)")
+            let hierarchy = XCTAttachment(string: description)
             hierarchy.name = "Showcase accessibility hierarchy"
             hierarchy.lifetime = .deleteOnSuccess
             add(hierarchy)
