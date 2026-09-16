@@ -45,6 +45,7 @@ class AndroidAccessibilityTest:
         self.dump_count = 0
         self.latest_xml: bytes | None = None
         self.latest_root: ET.Element | None = None
+        self.process_id: str | None = None
 
     def run(self) -> None:
         self.artifact_directory.mkdir(parents=True, exist_ok=True)
@@ -146,8 +147,14 @@ class AndroidAccessibilityTest:
             "Showcase process",
             lambda: bool(self._adb("shell", "pidof", self.package, check=False).stdout.strip()),
         )
+        processes = self._adb("shell", "pidof", self.package, check=False).stdout.split()
+        self._check(
+            len(processes) == 1 and processes[0].isdigit(),
+            f"Expected one live Showcase process after launch; found {processes}.",
+        )
+        self.process_id = processes[0]
         self._wait_until("Showcase foreground window", self._is_foreground)
-        print(f"Launched {component}")
+        print(f"Launched {component}, PID {self.process_id}")
 
     def _assert_initial_tree(self, root: ET.Element) -> None:
         ribbon = self._unique(root, "Fluent Ribbon Showcase")
@@ -247,6 +254,7 @@ class AndroidAccessibilityTest:
         deadline = time.monotonic() + self.timeout
         last_error = "no dump attempted"
         while time.monotonic() < deadline:
+            self._ensure_process_alive()
             self._adb("shell", "rm", "-f", REMOTE_DUMP, check=False)
             dump = self._adb(
                 "shell",
@@ -285,6 +293,15 @@ class AndroidAccessibilityTest:
                 last_error = (dump.stderr or dump.stdout).strip()
             self._bounded_wait(0.25)
         raise TestFailure(f"Timed out waiting for {name} hierarchy: {last_error}")
+
+    def _ensure_process_alive(self) -> None:
+        if self.process_id is None:
+            return
+        processes = self._adb("shell", "pidof", self.package, check=False).stdout.split()
+        self._check(
+            self.process_id in processes,
+            f"Showcase process {self.process_id} exited during accessibility validation; current PIDs: {processes}.",
+        )
 
     def _wait_until(self, description: str, predicate: Callable[[], bool]) -> None:
         deadline = time.monotonic() + self.timeout
@@ -388,6 +405,17 @@ class AndroidAccessibilityTest:
             logcat.stdout + logcat.stderr,
             encoding="utf-8",
         )
+        crash = self._adb("logcat", "-d", "-b", "crash", check=False)
+        (self.artifact_directory / "failure-crash-logcat.txt").write_text(
+            crash.stdout + crash.stderr,
+            encoding="utf-8",
+        )
+        if self.process_id is not None:
+            application_log = self._adb("logcat", "-d", f"--pid={self.process_id}", check=False)
+            (self.artifact_directory / "failure-application-logcat.txt").write_text(
+                application_log.stdout + application_log.stderr,
+                encoding="utf-8",
+            )
 
     def _clean_app_state(self) -> None:
         self._adb("shell", "am", "force-stop", self.package, check=False)

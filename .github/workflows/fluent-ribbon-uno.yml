@@ -366,6 +366,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test Android runner contracts
+        run: python3 -m unittest discover -s Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.MobileAccessibility.Tests/Android -p 'test_*.py'
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
