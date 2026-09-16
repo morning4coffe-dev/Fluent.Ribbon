@@ -258,6 +258,10 @@ The Android accessibility job requires hardware acceleration. Its Linux runner
 grants the current runner group read/write access to `/dev/kvm` and checks that
 access before starting the emulator; it does not fall back to slow software
 emulation or extend accessibility-test timeouts.
+The full-ribbon Android hierarchy contract runs on a tablet viewport, where its
+Clipboard and Font commands are expanded. A phone viewport legitimately reduces
+those groups to popup buttons; the tablet gate does not certify phone-layout
+accessibility.
 
 ### Native validation limitations
 

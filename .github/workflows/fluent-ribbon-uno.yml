@@ -361,7 +361,7 @@ jobs:
         run: dotnet build Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase.csproj -f net10.0-android -p:TargetFrameworks=net10.0-android -c Release
 
   android-accessibility:
-    name: Test Android native accessibility
+    name: Test Android tablet accessibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -420,7 +420,7 @@ jobs:
           api-level: 36
           arch: x86_64
           target: google_apis
-          profile: pixel_7
+          profile: pixel_tablet
           disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on

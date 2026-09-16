@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the Showcase through Android's out-of-process accessibility tree."""
+"""Exercise the expanded tablet ribbon through Android's accessibility tree."""
 
 from __future__ import annotations
 
