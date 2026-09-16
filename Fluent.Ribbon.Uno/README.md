@@ -276,6 +276,15 @@ assemblies. Native WinUI has additional framework-shape differences, including
 the sealed `ScrollViewer` wrapper and selector projections; a Desktop report of
 zero unapproved gaps must not be reported as an equivalent native result.
 
+Mobile and Skia/WebAssembly accessibility qualification is also incomplete with
+the pinned Uno runtime. UIKit exports named peer containers as leaves; Android
+queries provider interfaces without checking the currently advertised pattern,
+which can fail for conditional menu-item providers. The browser exporter has
+tab-realization and ARIA hierarchy gaps. The corresponding runtime checks remain
+enabled and failing rather than being waived. Prepared upstream patch drafts
+are not part of the shipped dependency and still require upstream runtime
+validation.
+
 ## Differences from WPF Fluent.Ribbon
 
 This Uno Platform version is a **reimplementation** of the WPF library. Most controls
