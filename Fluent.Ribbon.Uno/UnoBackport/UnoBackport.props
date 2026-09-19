@@ -1,0 +1,16 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)Version.props" Condition="'$(_FluentUnoBackportVersionPropsImported)' != 'true'" />
+  <PropertyGroup Condition="'$(FluentUnoBackport)' != ''">
+    <FluentUnoBackportRoot Condition="'$(FluentUnoBackportRoot)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)..\..\artifacts\UnoBackport'))</FluentUnoBackportRoot>
+    <_FluentUnoBackportFramework>net10.0-$(FluentUnoBackport)</_FluentUnoBackportFramework>
+    <RestoreConfigFile>$(FluentUnoBackportRoot)\feed\$(FluentUnoBackport)\NuGet.Config</RestoreConfigFile>
+    <RestorePackagesPath>$(FluentUnoBackportRoot)\consumer-packages\$(FluentUnoBackport)</RestorePackagesPath>
+    <RestoreFallbackFolders />
+    <DisableImplicitNuGetFallbackFolder>true</DisableImplicitNuGetFallbackFolder>
+    <BaseIntermediateOutputPath>$(FluentUnoBackportRoot)\consumer\$(FluentUnoBackport)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <BaseOutputPath>$(FluentUnoBackportRoot)\consumer\$(FluentUnoBackport)\bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)\</OutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)\bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

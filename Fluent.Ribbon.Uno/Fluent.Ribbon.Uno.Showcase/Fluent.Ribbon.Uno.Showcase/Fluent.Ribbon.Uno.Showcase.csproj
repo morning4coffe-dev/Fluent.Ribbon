@@ -1,4 +1,5 @@
-<Project Sdk="Uno.Sdk">
+<Project>
+  <Import Project="..\..\UnoBackport\Sdk.props" />
   <PropertyGroup>
     <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-windows10.0.26100;net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
 
@@ -93,4 +94,5 @@
           Condition="'@(_FluentThemeFiles)' != ''" />
   </Target>
 
+  <Import Project="..\..\UnoBackport\Sdk.targets" />
 </Project>

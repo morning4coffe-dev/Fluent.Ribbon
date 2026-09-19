@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <_FluentUnoBackportVersionPropsImported>true</_FluentUnoBackportVersionPropsImported>
+    <_FluentUnoBackportVersionPrefix>6.6.185-fluent-a11y.7</_FluentUnoBackportVersionPrefix>
+    <FluentUnoBackportVersion Condition="'$(FluentUnoBackport)' != ''">$(_FluentUnoBackportVersionPrefix).$(FluentUnoBackport)</FluentUnoBackportVersion>
+  </PropertyGroup>
+</Project>

@@ -27,8 +27,53 @@ on:
       - 'Directory.Packages.props'
       - '.github/workflows/fluent-ribbon-uno.yml'
   workflow_dispatch:
+    inputs:
+      uno-backport:
+        description: Build the pinned, unqualified Uno accessibility candidate and run the unchanged platform gates
+        type: boolean
+        default: false
 
 jobs:
+  desktop-backport:
+    name: Build opt-in Desktop Skia backport
+    if: inputs.uno-backport
+    runs-on: windows-latest
+    env:
+      FluentUnoBackport: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.102'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build pinned Desktop source, SDK, and private core package
+        shell: pwsh
+        run: .\Fluent.Ribbon.Uno\UnoBackport\Build.ps1 -Platform desktop
+      - name: Build isolated Desktop Showcase without launching it
+        shell: pwsh
+        run: |
+          dotnet build .\Fluent.Ribbon.Uno\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase\Fluent.Ribbon.Uno.Showcase.csproj `
+            -c Release -f net10.0-desktop -p:TargetFrameworks=net10.0-desktop -p:FluentUnoBackport=desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'artifacts\UnoBackport\consumer\desktop\bin\Fluent.Ribbon.Uno.Showcase\Release\net10.0-desktop\Fluent.Ribbon.Uno.Showcase.exe'
+          if (!(Test-Path -LiteralPath $exe)) { throw "The isolated Desktop executable was not produced: $exe" }
+          Get-FileHash -LiteralPath $exe -Algorithm SHA256
+
+  uno-backport-contracts:
+    name: Validate pinned Uno backport wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.102'
+
+      - name: Test source pins, package provenance, and MSBuild opt-in isolation
+        run: python3 -m unittest discover -s Fluent.Ribbon.Uno/UnoBackport/tests -p 'test_*.py' -v
+
   package-validation:
     name: Validate NuGet packages
     runs-on: windows-latest
@@ -224,6 +269,8 @@ jobs:
   browserwasm:
     name: Build and test WebAssembly accessibility
     runs-on: ubuntu-latest
+    env:
+      FluentUnoBackport: ${{ inputs.uno-backport && 'browserwasm' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -234,6 +281,53 @@ jobs:
 
       - name: Install WebAssembly workload
         run: dotnet workload install wasm-tools
+
+      - name: Setup pinned Uno source SDK
+        if: inputs.uno-backport
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.102'
+
+      - name: Setup backport source-test Node.js
+        if: inputs.uno-backport
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Build pinned Uno browser source and private packages
+        if: inputs.uno-backport
+        shell: pwsh
+        run: .\Fluent.Ribbon.Uno\UnoBackport\Build.ps1 -Platform browserwasm -CompileRuntimeTests
+
+      - name: Setup .NET 9 for Uno's headless unit-test target
+        if: inputs.uno-backport
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Test authored and generated container DataContext cleanup
+        if: inputs.uno-backport
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:GITHUB_WORKSPACE 'artifacts\UnoBackport'
+          $env:NUGET_PACKAGES = Join-Path $root 'source-packages'
+          $env:NUGET_HTTP_CACHE_PATH = Join-Path $root 'http-cache'
+          $results = Join-Path $root 'logs\browserwasm\own-container'
+          $project = Join-Path $root 'source\src\Uno.UI.Tests\Uno.UI.Unit.Tests.csproj'
+          $config = (Resolve-Path .\Fluent.Ribbon.Uno\UnoBackport\NuGet.Source.Config).Path
+          dotnet run --project $project `
+            -c Release -f net9.0 -p:UnoTargetFrameworkOverride=net9.0 `
+            -p:ManagePackageVersionsCentrally=false -p:UnoNugetOverrideVersion= `
+            -p:GeneratePackageOnBuild=false "-p:RestoreConfigFile=$config" `
+            -- --filter "FullyQualifiedName~When_Cleanup_" --report-trx --results-directory $results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $reports = @(Get-ChildItem -LiteralPath $results -Filter '*.trx' -File)
+          if ($reports.Count -ne 1) { throw 'Expected one focused cleanup test report.' }
+          [xml]$report = Get-Content -LiteralPath $reports[0].FullName
+          $counters = $report.TestRun.ResultSummary.Counters
+          if ([int]$counters.executed -ne 3 -or [int]$counters.passed -ne 3 -or [int]$counters.notExecuted -ne 0) {
+            throw 'All three authored/generated cleanup regressions must execute and pass.'
+          }
 
       - name: Build Controls
         working-directory: Fluent.Ribbon.Uno
@@ -257,6 +351,9 @@ jobs:
         run: |
           set -euo pipefail
           build_root='Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/bin/Release/net10.0-browserwasm'
+          if [[ "$FluentUnoBackport" == 'browserwasm' ]]; then
+            build_root='artifacts/UnoBackport/consumer/browserwasm/bin/Fluent.Ribbon.Uno.Showcase/Release/net10.0-browserwasm'
+          fi
           mapfile -t indexes < <(find "$build_root" -type f -name index.html -print)
           if [[ ${#indexes[@]} -ne 1 ]]; then
             printf 'Expected exactly one generated index.html under %s, found %s:\n' "$build_root" "${#indexes[@]}" >&2
@@ -329,6 +426,7 @@ jobs:
           path: |
             Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests/playwright-report
             Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.WebAssembly.Tests/test-results
+            artifacts/UnoBackport/logs/browserwasm
 
   android:
     name: Build Android
@@ -363,6 +461,8 @@ jobs:
   android-accessibility:
     name: Test Android tablet accessibility
     runs-on: ubuntu-latest
+    env:
+      FluentUnoBackport: ${{ inputs.uno-backport && 'android' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -376,6 +476,28 @@ jobs:
 
       - name: Install Android workload
         run: dotnet workload install android
+
+      - name: Setup pinned Uno source SDK
+        if: inputs.uno-backport
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.102'
+
+      - name: Setup backport source-test Node.js
+        if: inputs.uno-backport
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned source SDK Android workload
+        if: inputs.uno-backport
+        working-directory: Fluent.Ribbon.Uno/UnoBackport
+        run: dotnet workload install android
+
+      - name: Build pinned Uno Android source and private package
+        if: inputs.uno-backport
+        shell: pwsh
+        run: .\Fluent.Ribbon.Uno\UnoBackport\Build.ps1 -Platform android -CompileRuntimeTests
 
       - name: Build self-contained x86_64 Showcase APK
         working-directory: Fluent.Ribbon.Uno
@@ -398,6 +520,9 @@ jobs:
         run: |
           set -euo pipefail
           build_root='Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/bin/Debug/net10.0-android/android-x64'
+          if [[ "$FluentUnoBackport" == 'android' ]]; then
+            build_root='artifacts/UnoBackport/consumer/android/bin/Fluent.Ribbon.Uno.Showcase/Debug/net10.0-android/android-x64'
+          fi
           mapfile -t apks < <(find "$build_root" -maxdepth 1 -type f -name '*-Signed.apk' -print)
           if [[ ${#apks[@]} -ne 1 ]]; then
             printf 'Expected exactly one signed native x86_64 APK under %s, found %s:\n' "$build_root" "${#apks[@]}" >&2
@@ -440,11 +565,15 @@ jobs:
         with:
           name: android-native-accessibility-failures
           if-no-files-found: ignore
-          path: Fluent.Ribbon.Uno/TestResults/AndroidAccessibility
+          path: |
+            Fluent.Ribbon.Uno/TestResults/AndroidAccessibility
+            artifacts/UnoBackport/logs/android
 
   ios:
     name: Build and test iOS native accessibility
     runs-on: macos-latest
+    env:
+      FluentUnoBackport: ${{ inputs.uno-backport && 'ios' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -458,6 +587,28 @@ jobs:
 
       - name: Install iOS workload
         run: dotnet workload install ios
+
+      - name: Setup pinned Uno source SDK
+        if: inputs.uno-backport
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.102'
+
+      - name: Setup backport source-test Node.js
+        if: inputs.uno-backport
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned source SDK iOS workload
+        if: inputs.uno-backport
+        working-directory: Fluent.Ribbon.Uno/UnoBackport
+        run: dotnet workload install ios
+
+      - name: Build pinned Uno UIKit source and private package
+        if: inputs.uno-backport
+        shell: pwsh
+        run: .\Fluent.Ribbon.Uno\UnoBackport\Build.ps1 -Platform ios -CompileRuntimeTests
 
       - name: Select simulator runtime identifier
         id: simulator-rid
@@ -496,6 +647,9 @@ jobs:
         run: |
           set -euo pipefail
           build_root="Fluent.Ribbon.Uno/Fluent.Ribbon.Uno.Showcase/Fluent.Ribbon.Uno.Showcase/bin/Release/net10.0-ios/${{ steps.simulator-rid.outputs.value }}"
+          if [[ "$FluentUnoBackport" == 'ios' ]]; then
+            build_root="artifacts/UnoBackport/consumer/ios/bin/Fluent.Ribbon.Uno.Showcase/Release/net10.0-ios/${{ steps.simulator-rid.outputs.value }}"
+          fi
           apps=()
           while IFS= read -r app; do
             apps+=("$app")
@@ -526,4 +680,6 @@ jobs:
         with:
           name: ios-native-accessibility-failure
           if-no-files-found: ignore
-          path: Fluent.Ribbon.Uno/TestResults/iOSAccessibility
+          path: |
+            Fluent.Ribbon.Uno/TestResults/iOSAccessibility
+            artifacts/UnoBackport/logs/ios

@@ -25,21 +25,27 @@ internal static class PortNativeGalleryContractTests
     {
         App.LogAutoTestStartup("NATIVE GALLERY LIFETIME BEGIN");
         var retired = await ExerciseLifetimes(host, settle);
-        // Keep the UI dispatcher available to native reference-tracker cleanup.
-        await Task.Run(Collect);
-        await settle();
-        await DrainNativeReleaseQueue(host.DispatcherQueue);
-        await Task.Run(Collect);
+        await CollectRetiredObjectsAsync(host, settle);
         Require(retired.All(owner => !owner.Owner.TryGetTarget(out _) && !owner.Peer.TryGetTarget(out _)
                                     && !owner.Source.TryGetTarget(out _)),
             "Retired native gallery owners, peers, or sources remained rooted. "
             + string.Join("; ", retired.Select((owner, index) =>
-                $"{index}:owner={owner.Owner.TryGetTarget(out _)},peer={owner.Peer.TryGetTarget(out _)},source={owner.Source.TryGetTarget(out _)}")));
+                $"{index}:owner={owner.Owner.TryGetTarget(out _)},peer={owner.Peer.TryGetTarget(out _)},source={owner.Source.TryGetTarget(out _)}"))
+            + $"; focus={DescribeFocus(host)}");
         Require(retired.SelectMany(owner => owner.Containers).All(container => !container.TryGetTarget(out _)),
             "An obsolete native gallery container remained rooted.");
         Require(retired.SelectMany(owner => owner.Presentation).All(element => !element.TryGetTarget(out _)),
             "An obsolete native gallery presenter, panel, or group heading remained rooted.");
         App.LogAutoTestStartup("NATIVE GALLERY LIFETIME COMPLETE cycles=24 owners=24 authored-and-models=24");
+    }
+
+    internal static async Task CollectRetiredObjectsAsync(Panel host, Func<Task> settle)
+    {
+        // Keep the UI dispatcher available to native reference-tracker cleanup.
+        await Task.Run(Collect);
+        await settle();
+        await DrainNativeReleaseQueue(host.DispatcherQueue);
+        await Task.Run(Collect);
     }
 
     private static async Task DrainNativeReleaseQueue(DispatcherQueue dispatcher)
@@ -53,6 +59,15 @@ internal static class PortNativeGalleryContractTests
         }
         await completion.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string DescribeFocus(Panel host)
+        => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(host.XamlRoot) switch
+        {
+            FrameworkElement element => $"{element.GetType().Name}({element.Name}),loaded={element.IsLoaded}",
+            null => "<none>",
+            var element => element.GetType().Name,
+        };
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static async Task<List<RetiredGallery>> ExerciseLifetimes(Panel host, Func<Task> settle)
@@ -429,10 +444,21 @@ internal static class PortNativeGalleryContractTests
             new Rect(0, 0, framework.ActualWidth, framework.ActualHeight));
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void AssertPeer(FrameworkElementAutomationPeer peer, RibbonGallery gallery)
-        => Require(ReferenceEquals(peer.Owner, gallery)
-                   && ReferenceEquals(peer, FrameworkElementAutomationPeer.FromElement(gallery)),
+    {
+        Require(ReferenceEquals(peer.Owner, gallery)
+               && ReferenceEquals(peer, FrameworkElementAutomationPeer.FromElement(gallery)),
             "The original retained real gallery peer was lost or replaced.");
+        if (gallery.IsLoaded)
+        {
+            var children = peer.GetChildren();
+            var repeatedChildren = peer.GetChildren();
+            Require(children.Count == repeatedChildren.Count
+                   && children.Zip(repeatedChildren).All(pair => ReferenceEquals(pair.First, pair.Second)),
+               "A retained native gallery replaced a live item's cached automation peer.");
+        }
+    }
 
     private static DataTemplate Template() => (DataTemplate)XamlReader.Load("""
         <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">

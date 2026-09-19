@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "packageId": "Uno.Sdk.Private",
+  "baselinePackage": {
+    "id": "Uno.Sdk",
+    "version": "6.6.42",
+    "sha256": "4348559c759d5b1ba8cac8fdc6e2b64002629adbb4823d0be5e363834d6ce37a",
+    "manifestEntry": "targets/netstandard2.0/packages.json",
+    "manifestPath": "released-sdk-packages.json",
+    "manifestSha256": "a05d77e55d464fdc4376c57539897b948ef8816fd475dcef6a3e678ab71e7f69"
+  },
+  "patch": {
+    "path": "patches/sdk-manifest-input.patch",
+    "sha256": "a78fd1c824b83548b349e40c58e60eda9dff2b8b1c001b4066d05f197da5f9fd",
+    "files": [
+      {
+        "path": "src/Uno.Sdk/Uno.Sdk.csproj",
+        "sha256": "284cfb5dc153a5ded4ce2d752a0c271c360e6e2d44368709df47c1cec091fb19"
+      }
+    ]
+  }
+}

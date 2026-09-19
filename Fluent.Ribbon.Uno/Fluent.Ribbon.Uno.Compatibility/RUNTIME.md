@@ -41,6 +41,14 @@ stage and `NativePopupOutsideDismissTarget` automation ID. The test itself does
 not activate/reconnect desktops or inject system input. Without that mode it
 completes automated nonpointer contracts and reports the pointer case blocked;
 this is not full native gate approval.
+The persistent-popup rendezvous waits for a matching pointer press and release
+before checking the button's Click and popup state. A held pointer or an
+accessibility Invoke alone cannot complete that stage.
+Then invoke the target's `Prepare light-dismiss` action to arm the second stage
+after the input driver has finished restoring focus. This is setup, not pointer
+evidence. The light-dismiss stage requires both a new native content-island
+pointer press within the target and popup closure; focus loss or programmatic
+closure alone fails the gate.
 
 `InRibbonGallery` copies expose the source's canonical logical `Items` and
 source-model `SelectedItem`/`SelectedIndex` from creation, not only while their
@@ -49,6 +57,13 @@ copy's binding session is active. Closed copies do not populate another native
 items host or take visual item ownership; popup opening borrows the whole source
 panel and closing returns it intact. Source data observation is suspended when
 the last copy deactivates and reconciled when a retained copy is loaded again.
+
+Gallery automation peers cache non-gallery-item peers by weak item identity.
+Live items keep their canonical peers, but the cache does not keep removed
+authored items alive for the lifetime of the gallery.
+Tab group-sizing cancellation also detaches the dispatcher timer's Tick handler
+and invalidates queued sizing work, so retired timers cannot retain a tab or
+rewrite an unloaded presentation.
 
 Object icon values can be inspected explicitly:
 

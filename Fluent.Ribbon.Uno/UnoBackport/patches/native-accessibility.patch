@@ -1,0 +1,478 @@
+diff --git a/src/SourceGenerators/Uno.UI.SourceGenerators.Internal/Mixins/FrameworkElementUIKitMixinGenerator.cs b/src/SourceGenerators/Uno.UI.SourceGenerators.Internal/Mixins/FrameworkElementUIKitMixinGenerator.cs
+index b36f60e2..b29d55ae 100644
+--- a/src/SourceGenerators/Uno.UI.SourceGenerators.Internal/Mixins/FrameworkElementUIKitMixinGenerator.cs
++++ b/src/SourceGenerators/Uno.UI.SourceGenerators.Internal/Mixins/FrameworkElementUIKitMixinGenerator.cs
+@@ -1304,6 +1304,14 @@ public sealed class FrameworkElementUIKitMixinGenerator : IIncrementalGenerator
+ 		sb.AppendLine("\t\t\tset => base.IsAccessibilityElement = value;");
+ 		sb.AppendLine("\t\t}");
+ 		sb.AppendLine();
++		sb.AppendLine("\t\t[global::Foundation.Export(\"accessibilityContainerType\")]");
++		sb.AppendLine("\t\tpublic global::UIKit.UIAccessibilityContainerType GetUnoAccessibilityContainerType()");
++		sb.AppendLine("\t\t\t=> GetAutomationPeer()?.GetNativeAccessibilityContainerType() ?? global::UIKit.UIAccessibilityContainerType.None;");
++		sb.AppendLine();
++		sb.AppendLine("\t\t[global::Foundation.Export(\"accessibilityElements\")]");
++		sb.AppendLine("\t\tpublic global::Foundation.NSObject[] GetUnoAccessibilityElements()");
++		sb.AppendLine("\t\t\t=> GetAutomationPeer()?.GetNativeAccessibilityChildren();");
++		sb.AppendLine();
+ 		sb.AppendLine("\t\t#endregion");
+ 
+ 		sb.AppendLine("\t}");
+diff --git a/src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_NativeAutomationBridge.cs b/src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_NativeAutomationBridge.cs
+new file mode 100644
+index 00000000..54cfc88c
+--- /dev/null
++++ b/src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_NativeAutomationBridge.cs
+@@ -0,0 +1,194 @@
++#if HAS_UNO && (__ANDROID__ || __APPLE_UIKIT__)
++using System;
++using System.Collections.Generic;
++using System.Threading.Tasks;
++using Microsoft.UI.Xaml;
++using Microsoft.UI.Xaml.Automation;
++using Microsoft.UI.Xaml.Automation.Peers;
++using Microsoft.UI.Xaml.Automation.Provider;
++using Microsoft.UI.Xaml.Controls;
++using Microsoft.VisualStudio.TestTools.UnitTesting;
++using Uno.UI.RuntimeTests.Helpers;
++
++namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation;
++
++[TestClass]
++public partial class Given_NativeAutomationBridge
++{
++	[TestMethod]
++	[RunsOnUIThread]
++	public async Task When_BuiltIn_List_Item_Preserves_Selected_State()
++	{
++		var owner = new ListViewItem { Content = "Native selection state" };
++		await UITestHelper.Load(owner);
++		var peer = FrameworkElementAutomationPeer.CreatePeerForElement(owner);
++		Assert.IsNotNull(peer);
++
++		foreach (var selected in new[] { false, true, false })
++		{
++			owner.IsSelected = selected;
++			await UITestHelper.WaitForIdle();
++#if __ANDROID__
++#pragma warning disable CA1422
++			using var info = Android.Views.Accessibility.AccessibilityNodeInfo.Obtain();
++#pragma warning restore CA1422
++			peer.OnInitializeAccessibilityNodeInfo(info);
++			Assert.AreEqual(selected, info.Selected);
++#else
++			peer.UpdateAccessibilityElement();
++			Assert.AreEqual(selected,
++				(owner.AccessibilityTraits & UIKit.UIAccessibilityTrait.Selected) != 0);
++#endif
++		}
++	}
++
++	[TestMethod]
++	[RunsOnUIThread]
++	public void When_Default_Activation_Uses_Advertised_Patterns()
++	{
++		var owner = new Button();
++		var peer = new ConditionalPeer(owner);
++
++		Assert.IsFalse(peer.InvokeAutomationPeer());
++		Assert.AreEqual(0, peer.InvokeCount);
++		Assert.AreEqual(0, peer.ToggleCount);
++
++		peer.ActivePattern = PatternInterface.Toggle;
++		Assert.IsTrue(peer.InvokeAutomationPeer());
++		Assert.AreEqual(1, peer.ToggleCount);
++		Assert.AreEqual(0, peer.InvokeCount);
++
++		peer.ActivePattern = PatternInterface.ExpandCollapse;
++		Assert.IsTrue(peer.InvokeAutomationPeer());
++		Assert.AreEqual(ExpandCollapseState.Expanded, peer.ExpandCollapseState);
++		Assert.IsTrue(peer.InvokeAutomationPeer());
++		Assert.AreEqual(ExpandCollapseState.Collapsed, peer.ExpandCollapseState);
++	}
++
++#if __ANDROID__
++	[TestMethod]
++	[RunsOnUIThread]
++	public void When_Android_Queries_A_Conditional_Toggle_Provider()
++	{
++		var owner = new Button();
++		var peer = new ConditionalPeer(owner);
++#pragma warning disable CA1422
++		using var info = Android.Views.Accessibility.AccessibilityNodeInfo.Obtain();
++#pragma warning restore CA1422
++		peer.OnInitializeAccessibilityNodeInfo(info);
++		Assert.IsFalse(info.Checkable);
++		Assert.IsFalse(info.Checked);
++		Assert.AreEqual(0, peer.ToggleStateReads);
++
++		peer.ActivePattern = PatternInterface.Toggle;
++		peer.OnInitializeAccessibilityNodeInfo(info);
++		Assert.IsTrue(info.Checkable);
++		Assert.IsTrue(info.Checked);
++		Assert.AreEqual(1, peer.ToggleStateReads);
++
++		peer.ActivePattern = PatternInterface.ExpandCollapse;
++		peer.OnInitializeAccessibilityNodeInfo(info);
++		Assert.IsFalse(info.Checkable);
++		Assert.IsFalse(info.Checked);
++		Assert.IsTrue(info.Clickable);
++		Assert.AreEqual(1, peer.ToggleStateReads);
++	}
++#endif
++
++#if __APPLE_UIKIT__
++	[TestMethod]
++	[RunsOnUIThread]
++	public async Task When_UIKit_Named_Group_Exposes_Real_Child_Views()
++	{
++		var owner = new NativeContainer { Width = 300, Height = 100 };
++		var first = new Button { Content = "First", Width = 100, Height = 30 };
++		var hidden = new Button { Content = "Hidden", Visibility = Visibility.Collapsed };
++		owner.Children.Add(first);
++		owner.Children.Add(hidden);
++		AutomationProperties.SetName(owner, "Named group");
++		await UITestHelper.Load(owner);
++
++		var peer = (ContainerPeer)FrameworkElementAutomationPeer.CreatePeerForElement(owner);
++		Assert.IsFalse(owner.IsAccessibilityElement);
++		Assert.AreEqual("Named group", owner.AccessibilityLabel);
++		Assert.AreEqual(UIKit.UIAccessibilityContainerType.SemanticGroup, peer.GetNativeAccessibilityContainerType());
++		CollectionAssert.AreEqual(new Foundation.NSObject[] { first }, peer.GetNativeAccessibilityChildren());
++
++		var second = new Button { Content = "Second", Width = 100, Height = 30 };
++		owner.Children.Remove(first);
++		owner.Children.Add(second);
++		await UITestHelper.WaitForIdle();
++		CollectionAssert.AreEqual(new Foundation.NSObject[] { second }, peer.GetNativeAccessibilityChildren());
++
++		second.Visibility = Visibility.Collapsed;
++		await UITestHelper.WaitForIdle();
++		CollectionAssert.AreEqual(Array.Empty<Foundation.NSObject>(), peer.GetNativeAccessibilityChildren());
++		second.Visibility = Visibility.Visible;
++		await UITestHelper.WaitForIdle();
++		CollectionAssert.AreEqual(new Foundation.NSObject[] { second }, peer.GetNativeAccessibilityChildren());
++
++		AutomationProperties.SetName(owner, "Renamed group");
++		Assert.IsFalse(owner.IsAccessibilityElement);
++		Assert.AreEqual("Renamed group", owner.AccessibilityLabel);
++
++		await UITestHelper.Load(new Grid());
++		Assert.IsFalse(owner.IsAccessibilityElement);
++		Assert.IsNull(peer.GetNativeAccessibilityChildren());
++	}
++
++	public sealed partial class NativeContainer : StackPanel
++	{
++		protected override AutomationPeer OnCreateAutomationPeer() => new ContainerPeer(this);
++	}
++
++	private sealed class ContainerPeer(NativeContainer owner) : FrameworkElementAutomationPeer(owner)
++	{
++		protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Group;
++
++		protected override IList<AutomationPeer> GetChildrenCore()
++		{
++			var result = new List<AutomationPeer>();
++			foreach (var child in owner.Children)
++			{
++				if (CreatePeerForElement(child) is { } peer)
++				{
++					result.Add(peer);
++				}
++			}
++			return result;
++		}
++	}
++#endif
++
++	private sealed class ConditionalPeer(FrameworkElement owner) :
++		FrameworkElementAutomationPeer(owner), IInvokeProvider, IToggleProvider, IExpandCollapseProvider
++	{
++		internal PatternInterface? ActivePattern { get; set; }
++		internal int InvokeCount { get; private set; }
++		internal int ToggleCount { get; private set; }
++		internal int ToggleStateReads { get; private set; }
++
++		protected override object GetPatternCore(PatternInterface patternInterface)
++			=> patternInterface == ActivePattern ? this : null;
++
++		public ToggleState ToggleState
++		{
++			get
++			{
++				if (ActivePattern != PatternInterface.Toggle)
++				{
++					throw new InvalidOperationException("An unadvertised Toggle provider must not be queried.");
++				}
++				ToggleStateReads++;
++				return ToggleState.On;
++			}
++		}
++
++		public ExpandCollapseState ExpandCollapseState { get; private set; } = ExpandCollapseState.Collapsed;
++		public void Expand() => ExpandCollapseState = ExpandCollapseState.Expanded;
++		public void Collapse() => ExpandCollapseState = ExpandCollapseState.Collapsed;
++		public void Invoke() => InvokeCount++;
++		public void Toggle() => ToggleCount++;
++	}
++}
++#endif
+diff --git a/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.UIKit.cs b/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.UIKit.cs
+index fd3e39e4..814b1096 100644
+--- a/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.UIKit.cs
++++ b/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.UIKit.cs
+@@ -18,5 +18,11 @@ namespace Microsoft.UI.Xaml.Automation.Peers
+ 		{
+ 			return false;
+ 		}
++
++		internal virtual UIKit.UIAccessibilityContainerType GetNativeAccessibilityContainerType()
++			=> UIKit.UIAccessibilityContainerType.None;
++
++		internal virtual Foundation.NSObject[] GetNativeAccessibilityChildren()
++			=> null;
+ 	}
+ }
+diff --git a/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.cs b/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.cs
+index c8508e5d..cf68f74c 100644
+--- a/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.cs
++++ b/src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.cs
+@@ -318,22 +318,34 @@ public partial class AutomationPeer : DependencyObject
+ 	// TODO (DOTI) Not in WinUI?
+ 	internal bool InvokeAutomationPeer()
+ 	{
+-		// TODO: Add support for ComboBox, Slider, CheckBox, ToggleButton, RadioButton, ToggleSwitch, Selector, etc.
+-		if (this is IInvokeProvider invokeProvider)
++		if (GetPattern(PatternInterface.Invoke) is IInvokeProvider invokeProvider)
+ 		{
+ 			invokeProvider.Invoke();
+ 			return true;
+ 		}
+-		else if (this is IToggleProvider toggleProvider)
++		else if (GetPattern(PatternInterface.Toggle) is IToggleProvider toggleProvider)
+ 		{
+ 			toggleProvider.Toggle();
+ 			return true;
+ 		}
+-		else if (this is ISelectionItemProvider selectionItemProvider)
++		else if (GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider)
+ 		{
+ 			selectionItemProvider.Select();
+ 			return true;
+ 		}
++		else if (GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider expandCollapseProvider)
++		{
++			if (expandCollapseProvider.ExpandCollapseState == ExpandCollapseState.Collapsed)
++			{
++				expandCollapseProvider.Expand();
++				return true;
++			}
++			if (expandCollapseProvider.ExpandCollapseState == ExpandCollapseState.Expanded)
++			{
++				expandCollapseProvider.Collapse();
++				return true;
++			}
++		}
+ 
+ 		return false;
+ 	}
+diff --git a/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.Android.cs b/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.Android.cs
+index c07d9f7c..f8d340df 100644
+--- a/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.Android.cs
++++ b/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.Android.cs
+@@ -58,7 +58,7 @@ public partial class FrameworkElementAutomationPeer : AutomationPeer
+ 
+ 	private bool GetScrollable()
+ 	{
+-		return this is IScrollProvider;
++		return GetPattern(PatternInterface.Scroll) is IScrollProvider;
+ 	}
+ 
+ 	private int GetMaxTextLength()
+@@ -68,8 +68,9 @@ public partial class FrameworkElementAutomationPeer : AutomationPeer
+ 
+ 	private bool GetSelected()
+ 	{
+-		// TODO: return this is ISelectionItemProvider selectionItemProvider && selectionItemProvider.IsSelected;
+-		return Owner is SelectorItem selectorItem && selectorItem.IsSelected;
++		return GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider
++			? selectionItemProvider.IsSelected
++			: Owner is SelectorItem { IsSelected: true };
+ 	}
+ 
+ 	private bool GetMultiline()
+@@ -90,18 +91,20 @@ public partial class FrameworkElementAutomationPeer : AutomationPeer
+ 
+ 	private bool GetCheckable()
+ 	{
+-		return this is IToggleProvider;
++		return GetPattern(PatternInterface.Toggle) is IToggleProvider;
+ 	}
+ 
+ 	private bool GetChecked()
+ 	{
+-		return this is IToggleProvider toggleProvider && toggleProvider.ToggleState == ToggleState.On;
++		return GetPattern(PatternInterface.Toggle) is IToggleProvider toggleProvider
++			&& toggleProvider.ToggleState == ToggleState.On;
+ 	}
+ 
+ 	private bool GetClickable()
+ 	{
+-		return this is IInvokeProvider
+-			|| this is IToggleProvider
+-			|| this is ISelectionItemProvider;
++		return GetPattern(PatternInterface.Invoke) is IInvokeProvider
++			|| GetPattern(PatternInterface.Toggle) is IToggleProvider
++			|| GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider
++			|| GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider;
+ 	}
+ }
+diff --git a/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.UIKit.cs b/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.UIKit.cs
+index c6ca51c5..80571c92 100644
+--- a/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.UIKit.cs
++++ b/src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.UIKit.cs
+@@ -1,8 +1,10 @@
+ ﻿using System;
+ using System.Collections.Generic;
+ using System.Linq;
++using Foundation;
+ using UIKit;
+ using Uno;
++using Microsoft.UI.Xaml.Automation.Provider;
+ using Microsoft.UI.Xaml.Controls;
+ using Microsoft.UI.Xaml.Controls.Primitives;
+ 
+@@ -22,7 +24,7 @@ public partial class FrameworkElementAutomationPeer : AutomationPeer
+ 			return false;
+ 		}
+ 
+-		var isAccessible = AutomationProperties.GetAccessibilityView(Owner) != AccessibilityView.Raw;
++		var isAccessible = IsControlElement() && IsNativeAccessibilityVisible(Owner);
+ 		if (isAccessible && Owner is UIView view)
+ 		{
+ 			view.AccessibilityLabel = GetName();
+@@ -35,7 +37,101 @@ public partial class FrameworkElementAutomationPeer : AutomationPeer
+ 			//view.AccessibilityNavigationStyle
+ 		}
+ 
+-		return isAccessible;
++		// UIKit treats accessibility elements as leaves, even if they have subviews.
++		// A named semantic group must remain a container to expose its real children.
++		return isAccessible && !IsNativeAccessibilityContainer();
++	}
++
++	internal override UIAccessibilityContainerType GetNativeAccessibilityContainerType()
++		=> AutomationConfiguration.IsAccessibilityEnabled && IsControlElement()
++			&& IsNativeAccessibilityVisible(Owner) && IsNativeAccessibilityContainer()
++			? UIAccessibilityContainerType.SemanticGroup
++			: UIAccessibilityContainerType.None;
++
++	internal override NSObject[] GetNativeAccessibilityChildren()
++	{
++		if (!AutomationConfiguration.IsAccessibilityEnabled || !IsControlElement()
++			|| !IsNativeAccessibilityVisible(Owner) || !IsNativeAccessibilityContainer())
++		{
++			return null;
++		}
++
++		var children = new List<NSObject>();
++		var visited = new HashSet<AutomationPeer>();
++		AddNativeAccessibilityChildren(this, children, visited);
++		return children.ToArray();
++	}
++
++	private bool IsNativeAccessibilityContainer()
++	{
++		if (GetPattern(PatternInterface.Invoke) is IInvokeProvider
++			|| GetPattern(PatternInterface.Toggle) is IToggleProvider
++			|| GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider
++			|| GetPattern(PatternInterface.Value) is IValueProvider
++			|| GetPattern(PatternInterface.RangeValue) is IRangeValueProvider)
++		{
++			return false;
++		}
++
++		if (GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider expansion
++			&& expansion.ExpandCollapseState == ExpandCollapseState.Collapsed)
++		{
++			return false;
++		}
++
++		return GetChildren() is { Count: > 0 };
++	}
++
++	private static void AddNativeAccessibilityChildren(
++		AutomationPeer parent,
++		List<NSObject> children,
++		HashSet<AutomationPeer> visited)
++	{
++		if (!visited.Add(parent) || parent.GetChildren() is not { } peers)
++		{
++			return;
++		}
++
++		foreach (var peer in peers)
++		{
++			if (visited.Contains(peer)
++				|| peer is FrameworkElementAutomationPeer frameworkPeer && !IsNativeAccessibilityVisible(frameworkPeer.Owner))
++			{
++				continue;
++			}
++
++			if (peer.IsControlElement() && peer is FrameworkElementAutomationPeer { Owner: UIView view })
++			{
++				visited.Add(peer);
++				if (!children.Contains(view))
++				{
++					children.Add(view);
++				}
++			}
++			else
++			{
++				AddNativeAccessibilityChildren(peer, children, visited);
++			}
++		}
++	}
++
++	private static bool IsNativeAccessibilityVisible(UIView view)
++	{
++		// The shared IsOffscreen implementation is Skia-only. UIKit owns native
++		// attachment and inherited visibility; collapsed children must not leak
++		// through an explicit accessibilityElements array.
++		if (view?.Window is null)
++		{
++			return false;
++		}
++		for (var current = view; current is not null; current = current.Superview)
++		{
++			if (current.Hidden || current.Alpha <= 0)
++			{
++				return false;
++			}
++		}
++		return true;
+ 	}
+ 
+ 	private UIAccessibilityTrait GetAccessibilityTraits()
+@@ -76,9 +172,18 @@ public partial class FrameworkElementAutomationPeer : AutomationPeer
+ 				break;
+ 		}
+ 
+-		if (Owner is SelectorItem selectorItem && selectorItem.IsSelected
+-		|| Owner is ToggleButton toggleButton && toggleButton.IsChecked == true
+-		|| Owner is ToggleSwitch toggleSwitch && toggleSwitch.IsOn)
++		if (GetPattern(PatternInterface.Invoke) is IInvokeProvider
++			|| GetPattern(PatternInterface.Toggle) is IToggleProvider
++			|| GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider
++			|| GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider)
++		{
++			accessibilityTrait |= UIAccessibilityTrait.Button;
++		}
++
++		var isSelected = GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selection
++			? selection.IsSelected
++			: Owner is SelectorItem { IsSelected: true };
++		if (isSelected || GetPattern(PatternInterface.Toggle) is IToggleProvider toggle && toggle.ToggleState == ToggleState.On)
+ 		{
+ 			accessibilityTrait |= UIAccessibilityTrait.Selected;
+ 		}

@@ -12,4 +12,7 @@
     -->
     <NoWarn>$(NoWarn);NU1507;NETSDK1201;PRI257</NoWarn>
   </PropertyGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)..\UnoBackport\UnoBackport.props"
+          Condition="'$(UsingUnoSdk)' == 'true' And '$(FluentUnoBackport)' != ''" />
 </Project>

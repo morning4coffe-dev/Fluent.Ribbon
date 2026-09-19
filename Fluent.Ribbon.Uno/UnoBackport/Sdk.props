@@ -1,0 +1,9 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)Version.props" />
+  <PropertyGroup Condition="'$(FluentUnoBackport)' != ''">
+    <FluentUnoBackportRoot Condition="'$(FluentUnoBackportRoot)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)..\..\artifacts\UnoBackport'))</FluentUnoBackportRoot>
+    <_FluentUnoBackportSdkDirectory>$(FluentUnoBackportRoot)\sdk\$(FluentUnoBackport)\$(FluentUnoBackportVersion)</_FluentUnoBackportSdkDirectory>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Uno.Sdk" Condition="'$(FluentUnoBackport)' == ''" />
+  <Import Project="$(_FluentUnoBackportSdkDirectory)\Sdk\Sdk.props" Condition="'$(FluentUnoBackport)' != ''" />
+</Project>

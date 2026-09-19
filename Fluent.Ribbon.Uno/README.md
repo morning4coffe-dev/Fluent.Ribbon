@@ -216,6 +216,10 @@ variables take precedence. `--native-popup-external-input=1` enables the native
 outside-pointer rendezvous when an approved input driver and a connected,
 unlocked desktop are available; it does not generate pointer input itself.
 An accessibility Invoke action is not a physical pointer click.
+After the first click completes, invoke the target's `Prepare light-dismiss`
+action to arm the second stage, then deliver the second physical click.
+Arming is setup only: the second stage independently requires a native
+content-island pointer press within the target and actual popup closure.
 In external-input mode, the popup-options case runs first so the two physical
 clicks can be completed promptly. Every other selected case still runs afterward
 in its original order; the default automated order is unchanged.
@@ -270,6 +274,11 @@ mobile-platform execution. Full native cumulative qualification still requires
 the real outside-pointer stages and repeatable native lifetime collection.
 Those checks remain explicit failures when input is unavailable; focused
 phase-4 validation does not waive them.
+The outside-pointer case has been exercised with two independent native input
+stages. Native cumulative qualification remains open because gallery and
+authored-tab object collection fail and some runs encounter native
+compositor/teardown crashes. The authored-tab regression retains its reload,
+binding-identity, and retired-object assertions.
 
 The strict WPF metadata exception ledger is validated against the Desktop
 assemblies. Native WinUI has additional framework-shape differences, including
@@ -281,9 +290,28 @@ the pinned Uno runtime. UIKit exports named peer containers as leaves; Android
 queries provider interfaces without checking the currently advertised pattern,
 which can fail for conditional menu-item providers. The browser exporter has
 tab-realization and ARIA hierarchy gaps. The corresponding runtime checks remain
-enabled and failing rather than being waived. Prepared upstream patch drafts
-are not part of the shipped dependency and still require upstream runtime
-validation.
+enabled and failing rather than being waived. A [pinned source backport
+integration](UnoBackport/README.md) is available behind an explicit per-platform
+opt-in. It builds private source packages into isolated feeds and checks package
+identity/provenance; it does not replace the shipped dependency or imply runtime
+qualification. The workflow's optional `uno-backport` dispatch input runs those
+candidates through the unchanged browser and mobile gates. Source-contract,
+syntax, or build passes do not close the remaining platform failures.
+
+The released Uno dependency also clears authored tab `DataContext` values during
+unload/reload. The opt-in own-container lifecycle patch preserves those local
+values and bindings without changing generated-container cleanup. Its
+`fluent-a11y.5.desktop` candidate passed all 17 cumulative Desktop parity cases,
+including the expanded authored-tab reload regression. The released/default
+dependency is unchanged; this Desktop result does not qualify browser, mobile,
+or native WinUI execution.
+The subsequent `.6` candidate fixes a reviewed transformed-accessibility-bounds
+regression. The `.7` revision also preserves built-in mobile selector state
+when no selection provider is advertised. Its serialized Desktop run passed
+all 17 cases. Its Android source, native fixtures, and Debug/Release APKs build,
+but emulator system/System UI ANR dialogs blocked the foreground/accessibility
+gate on API 36 and API 34. This is not an Android runtime pass. Browser and
+native WinUI limitations remain open, and the backport remains opt-in.
 
 ## Differences from WPF Fluent.Ribbon
 

@@ -1,5 +1,6 @@
 namespace Fluent.Automation.Peers;
 
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -314,7 +315,7 @@ public partial class RibbonGroupHeaderAutomationPeer : FrameworkElementAutomatio
 public partial class RibbonGalleryAutomationPeer : SelectorAutomationPeer,
     ISelectionProvider
 {
-    private readonly Dictionary<UIElement, AutomationPeer> _itemPeers = new();
+    private readonly ConditionalWeakTable<UIElement, AutomationPeer> _itemPeers = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonGalleryAutomationPeer"/> class.
@@ -371,13 +372,7 @@ public partial class RibbonGalleryAutomationPeer : SelectorAutomationPeer,
                    ?? new GalleryItemWrapperAutomationPeer(galleryItem);
         }
 
-        if (!_itemPeers.TryGetValue(item, out var peer))
-        {
-            peer = new GalleryItemAutomationPeer(item, this);
-            _itemPeers[item] = peer;
-        }
-
-        return peer;
+        return _itemPeers.GetValue(item, key => new GalleryItemAutomationPeer(key, this));
     }
 
     internal void RaiseSelectionChanged(UIElement? oldItem, UIElement? newItem)
@@ -411,7 +406,7 @@ public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPee
     IExpandCollapseProvider,
     ISelectionProvider
 {
-    private readonly Dictionary<UIElement, AutomationPeer> _itemPeers = new();
+    private readonly ConditionalWeakTable<UIElement, AutomationPeer> _itemPeers = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RibbonInRibbonGalleryAutomationPeer"/> class.
@@ -524,13 +519,7 @@ public partial class RibbonInRibbonGalleryAutomationPeer : SelectorAutomationPee
                    ?? new GalleryItemWrapperAutomationPeer(galleryItem);
         }
 
-        if (!_itemPeers.TryGetValue(item, out var peer))
-        {
-            peer = new GalleryItemAutomationPeer(item, this);
-            _itemPeers[item] = peer;
-        }
-
-        return peer;
+        return _itemPeers.GetValue(item, key => new GalleryItemAutomationPeer(key, this));
     }
 
     internal void RaiseSelectionChanged(UIElement? oldItem, UIElement? newItem)

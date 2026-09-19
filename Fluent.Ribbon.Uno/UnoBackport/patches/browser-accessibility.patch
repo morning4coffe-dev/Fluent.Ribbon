@@ -1,0 +1,1586 @@
+diff --git a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/VirtualizedSemanticRegion.cs b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/VirtualizedSemanticRegion.cs
+index 1b4c9b5e..84f1fef5 100644
+--- a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/VirtualizedSemanticRegion.cs
++++ b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/VirtualizedSemanticRegion.cs
+@@ -19,6 +19,7 @@ internal sealed partial class VirtualizedSemanticRegion : IDisposable
+ {
+ 	private readonly IntPtr _containerHandle;
+ 	private readonly Dictionary<int, IntPtr> _realizedHandles = new();
++	private readonly Dictionary<IntPtr, int> _realizedIndices = new();
+ 	private int _totalItemCount;
+ 	private bool _isFocusPinned;
+ 	private int? _pinnedIndex;
+@@ -55,12 +56,25 @@ internal sealed partial class VirtualizedSemanticRegion : IDisposable
+ 	/// </summary>
+ 	internal void OnItemRealized(IntPtr itemHandle, int index, int totalCount, float x, float y, float width, float height, string role, string label)
+ 	{
++		if (_disposed)
++		{
++			return;
++		}
+ 		if (this.Log().IsEnabled(LogLevel.Debug))
+ 		{
+ 			this.Log().Debug($"ItemRealized container={_containerHandle} item={itemHandle} index={index} total={totalCount} role='{role}' label='{label}' pos=({x},{y}) size={width}x{height}");
+ 		}
+-		_totalItemCount = totalCount;
++		UpdateItemCount(totalCount);
++		if (_realizedIndices.TryGetValue(itemHandle, out var previousIndex) && previousIndex != index)
++		{
++			_realizedHandles.Remove(previousIndex);
++		}
++		if (_realizedHandles.TryGetValue(index, out var previousHandle) && previousHandle != itemHandle)
++		{
++			_realizedIndices.Remove(previousHandle);
++		}
+ 		_realizedHandles[index] = itemHandle;
++		_realizedIndices[itemHandle] = index;
+ 		NativeMethods.AddVirtualizedItem(_containerHandle, itemHandle, index, totalCount, x, y, width, height, role, label);
+ 	}
+ 
+@@ -69,6 +83,10 @@ internal sealed partial class VirtualizedSemanticRegion : IDisposable
+ 	/// </summary>
+ 	internal void OnItemUnrealized(IntPtr itemHandle, int index)
+ 	{
++		if (_disposed)
++		{
++			return;
++		}
+ 		// Don't remove if focus-pinned
+ 		if (_isFocusPinned && _pinnedIndex == index)
+ 		{
+@@ -83,7 +101,14 @@ internal sealed partial class VirtualizedSemanticRegion : IDisposable
+ 		{
+ 			this.Log().Debug($"ItemUnrealized container={_containerHandle} item={itemHandle} index={index}");
+ 		}
+-		_realizedHandles.Remove(index);
++		if (_realizedHandles.TryGetValue(index, out var current) && current == itemHandle)
++		{
++			_realizedHandles.Remove(index);
++		}
++		if (_realizedIndices.TryGetValue(itemHandle, out var currentIndex) && currentIndex == index)
++		{
++			_realizedIndices.Remove(itemHandle);
++		}
+ 		NativeMethods.RemoveVirtualizedItem(itemHandle);
+ 	}
+ 
+@@ -92,6 +117,10 @@ internal sealed partial class VirtualizedSemanticRegion : IDisposable
+ 	/// </summary>
+ 	internal void UpdateItemCount(int totalCount)
+ 	{
++		if (_disposed || _totalItemCount == totalCount)
++		{
++			return;
++		}
+ 		if (this.Log().IsEnabled(LogLevel.Debug))
+ 		{
+ 			this.Log().Debug($"UpdateItemCount container={_containerHandle} oldCount={_totalItemCount} newCount={totalCount}");
+@@ -136,6 +165,7 @@ internal sealed partial class VirtualizedSemanticRegion : IDisposable
+ 			}
+ 			_disposed = true;
+ 			_realizedHandles.Clear();
++			_realizedIndices.Clear();
+ 			NativeMethods.UnregisterVirtualizedContainer(_containerHandle);
+ 		}
+ 	}
+diff --git a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.Containers.cs b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.Containers.cs
+new file mode 100644
+index 00000000..e3eb21b0
+--- /dev/null
++++ b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.Containers.cs
+@@ -0,0 +1,376 @@
++#nullable enable
++
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using Microsoft.UI.Xaml;
++using Microsoft.UI.Xaml.Automation;
++using Microsoft.UI.Xaml.Automation.Peers;
++using Microsoft.UI.Xaml.Automation.Provider;
++using Microsoft.UI.Xaml.Controls;
++using Microsoft.UI.Xaml.Controls.Primitives;
++using Uno.Extensions;
++
++namespace Uno.UI.Runtime.Skia;
++
++internal partial class WebAssemblyAccessibility
++{
++	private sealed class SemanticContainerSubscription(
++		UIElement container,
++		VirtualizedSemanticRegion region)
++	{
++		internal UIElement Container { get; } = container;
++		internal VirtualizedSemanticRegion Region { get; } = region;
++		internal Dictionary<IntPtr, (UIElement Element, int Index, AutomationPeer Peer)> Items { get; } = new();
++		internal HashSet<IntPtr> DeferredRemovals { get; } = new();
++		internal Action Unsubscribe { get; set; } = () => { };
++		internal bool Refreshing { get; set; }
++		internal bool RefreshPending { get; set; }
++		internal bool UsesLogicalPeers { get; init; }
++	}
++
++	private bool TryRegisterVirtualizedContainer(UIElement element)
++	{
++		var peer = element.GetOrCreateAutomationPeer();
++		var usesLogicalPeers = element is Selector and not (ListViewBase or ComboBox)
++			&& peer is not null && peer.GetAutomationControlType() == AutomationControlType.List
++			&& peer.GetPattern(PatternInterface.Selection) is ISelectionProvider;
++		if ((element is not (ListViewBase or ItemsRepeater) && !usesLogicalPeers) || !IsSemanticElement(element))
++		{
++			return false;
++		}
++		if (_semanticContainers.ContainsKey(element))
++		{
++			return true;
++		}
++
++		// The container DOM must exist before its items are emitted. Activation must
++		// also register containers that were loaded before accessibility was enabled.
++		if (!_semanticParentMap.ContainsKey(element.Visual.Handle))
++		{
++			return false;
++		}
++
++		var list = element as ListViewBase;
++		var role = element is TabViewListView ? "tablist" : element is GridView ? "grid" : "listbox";
++		var region = new VirtualizedSemanticRegion(
++			element.Visual.Handle,
++			role,
++			peer?.GetName(),
++			peer?.GetPattern(PatternInterface.Selection) is ISelectionProvider selection && selection.CanSelectMultiple);
++		var subscription = new SemanticContainerSubscription(element, region) { UsesLogicalPeers = usesLogicalPeers };
++		_semanticContainers.Add(element, subscription);
++		_virtualizedRegions.Add(region);
++
++		var frameworkElement = (FrameworkElement)element;
++		void Loaded(object sender, RoutedEventArgs args) => RefreshSemanticContainer(subscription);
++		frameworkElement.Loaded += Loaded;
++		if (list is not null)
++		{
++			void Changed(ListViewBase sender, ContainerContentChangingEventArgs args)
++			{
++				if (args.ItemContainer is not { } item)
++				{
++					return;
++				}
++				if (args.InRecycleQueue)
++				{
++					RemoveSemanticItem(subscription, item.Visual.Handle, args.ItemIndex);
++				}
++				else
++				{
++					RefreshSemanticItem(subscription, item, args.ItemIndex, list.Items.Count);
++				}
++			}
++			void Selected(object sender, SelectionChangedEventArgs args) => RefreshSemanticContainer(subscription);
++			list.ContainerContentChanging += Changed;
++			list.SelectionChanged += Selected;
++			subscription.Unsubscribe = () =>
++			{
++				frameworkElement.Loaded -= Loaded;
++				list.ContainerContentChanging -= Changed;
++				list.SelectionChanged -= Selected;
++			};
++		}
++		else if (element is ItemsRepeater repeater)
++		{
++			void Prepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args) =>
++				RefreshSemanticItem(subscription, args.Element, args.Index, repeater.ItemsSourceView?.Count ?? 0);
++			void Clearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args) =>
++				RemoveSemanticItem(subscription, args.Element.Visual.Handle);
++			void Reindexed(ItemsRepeater sender, ItemsRepeaterElementIndexChangedEventArgs args) =>
++				RefreshSemanticItem(subscription, args.Element, args.NewIndex, repeater.ItemsSourceView?.Count ?? 0);
++			repeater.ElementPrepared += Prepared;
++			repeater.ElementClearing += Clearing;
++			repeater.ElementIndexChanged += Reindexed;
++			subscription.Unsubscribe = () =>
++			{
++				frameworkElement.Loaded -= Loaded;
++				repeater.ElementPrepared -= Prepared;
++				repeater.ElementClearing -= Clearing;
++				repeater.ElementIndexChanged -= Reindexed;
++			};
++		}
++		else if (element is Selector selector)
++		{
++			void Selected(object sender, SelectionChangedEventArgs args) => RefreshSemanticContainer(subscription);
++			selector.SelectionChanged += Selected;
++			subscription.Unsubscribe = () =>
++			{
++				frameworkElement.Loaded -= Loaded;
++				selector.SelectionChanged -= Selected;
++			};
++		}
++
++		RefreshSemanticContainer(subscription);
++		return true;
++	}
++
++	private void ScheduleSemanticContainerRefresh(SemanticContainerSubscription subscription)
++	{
++		if (subscription.Refreshing || subscription.RefreshPending
++			|| !_semanticContainers.TryGetValue(subscription.Container, out var current)
++			|| !ReferenceEquals(current, subscription))
++		{
++			return;
++		}
++		subscription.RefreshPending = true;
++		if (!subscription.Container.DispatcherQueue.TryEnqueue(() =>
++			{
++				subscription.RefreshPending = false;
++				if (_semanticContainers.TryGetValue(subscription.Container, out var live)
++					&& ReferenceEquals(live, subscription))
++				{
++					RefreshSemanticContainer(subscription);
++				}
++			}))
++		{
++			subscription.RefreshPending = false;
++			throw new InvalidOperationException("Could not enqueue realized accessibility container refresh.");
++		}
++	}
++
++	private void RefreshSemanticContainer(SemanticContainerSubscription subscription)
++	{
++		if (subscription.Refreshing
++			|| !_semanticContainers.TryGetValue(subscription.Container, out var current)
++			|| !ReferenceEquals(current, subscription))
++		{
++			return;
++		}
++		subscription.Refreshing = true;
++		try
++		{
++			var seen = new HashSet<IntPtr>();
++			// Enumerate materialized UI children, never the data source: a million-item
++			// list must not generate a million peers or force offscreen realization.
++			if (subscription.Container is ListViewBase list && list.ItemsPanelRoot is { } panel)
++			{
++				foreach (var item in panel.Children.ToArray())
++				{
++					var index = list.IndexFromContainer(item);
++					if (index >= 0 && ReferenceEquals(list.ContainerFromIndex(index), item) && IsEffectivelyVisible(item))
++					{
++						seen.Add(item.Visual.Handle);
++						RefreshSemanticItem(subscription, item, index, list.Items.Count);
++					}
++				}
++				subscription.Region.UpdateItemCount(list.Items.Count);
++			}
++			else if (subscription.Container is ItemsRepeater repeater)
++			{
++				foreach (var item in repeater.Children.ToArray())
++				{
++					var index = repeater.GetElementIndex(item);
++					if (index >= 0 && ReferenceEquals(repeater.TryGetElement(index), item) && IsEffectivelyVisible(item))
++					{
++						seen.Add(item.Visual.Handle);
++						RefreshSemanticItem(subscription, item, index, repeater.ItemsSourceView?.Count ?? 0);
++					}
++				}
++				subscription.Region.UpdateItemCount(repeater.ItemsSourceView?.Count ?? 0);
++			}
++			else if (subscription.UsesLogicalPeers)
++			{
++				// The peer tree, not a visual's default peer, owns a custom selector's
++				// selection contract. GetChildren returns realized peers; no ItemsSource walk.
++				var peers = subscription.Container.GetOrCreateAutomationPeer()?.GetChildren();
++				var realized = new List<(UIElement Element, AutomationPeer Peer)>();
++				if (peers is not null)
++				{
++					foreach (var peer in peers)
++					{
++						var item = peer switch
++						{
++							ItemAutomationPeer itemPeer => itemPeer.GetContainer(),
++							FrameworkElementAutomationPeer frameworkPeer => frameworkPeer.Owner,
++							_ => null
++						};
++						if (item is not null && IsEffectivelyVisible(item)
++							&& peer.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider
++							&& seen.Add(item.Visual.Handle))
++						{
++							realized.Add((item, peer));
++						}
++					}
++				}
++				for (var index = 0; index < realized.Count; index++)
++				{
++					var item = realized[index];
++					RefreshSemanticItem(subscription, item.Element, index, realized.Count, item.Peer);
++				}
++				subscription.Region.UpdateItemCount(realized.Count);
++
++				// Keep actual template actions exposed, but outside the atomic listbox
++				// contract. Owned option visuals are exported once through their peers.
++				var parentHandle = _semanticParentMap[subscription.Container.Visual.Handle];
++				foreach (var child in subscription.Container.GetChildren())
++				{
++					BuildSemanticsTreeRecursive(parentHandle, child);
++				}
++			}
++			foreach (var handle in subscription.Items.Keys.Where(handle => !seen.Contains(handle)).ToArray())
++			{
++				RemoveSemanticItem(subscription, handle);
++			}
++		}
++		finally
++		{
++			subscription.Refreshing = false;
++		}
++	}
++
++	private void RefreshSemanticItem(
++		SemanticContainerSubscription subscription,
++		UIElement item,
++		int index,
++		int totalCount,
++		AutomationPeer? itemPeer = null)
++	{
++		if (!_semanticContainers.TryGetValue(subscription.Container, out var current)
++			|| !ReferenceEquals(current, subscription) || index < 0)
++		{
++			return;
++		}
++		if (!IsEffectivelyVisible(item))
++		{
++			RemoveSemanticItem(subscription, item.Visual.Handle);
++			return;
++		}
++		var handle = item.Visual.Handle;
++		var parentHandle = subscription.Container.Visual.Handle;
++		var peer = itemPeer ?? item.GetOrCreateAutomationPeer();
++		if (peer is null)
++		{
++			return;
++		}
++		if (_semanticItemOwners.TryGetValue(handle, out var previous)
++			&& !ReferenceEquals(previous, subscription))
++		{
++			RemoveSemanticItem(previous, handle);
++		}
++		if (itemPeer is not null && _semanticParentMap.TryGetValue(handle, out var oldParent)
++			&& (!subscription.Items.TryGetValue(handle, out var oldItem) || !ReferenceEquals(oldItem.Peer, peer)))
++		{
++			RemoveSemanticElement(oldParent, handle);
++			_semanticParentMap.Remove(handle);
++		}
++		if (!_semanticParentMap.ContainsKey(handle))
++		{
++			// Use the real peer factory for role, keyboard handlers and initial state.
++			// In particular a TabViewItem is a tab, not a listbox option.
++			if (!AddSemanticElement(parentHandle, item, index, peer))
++			{
++				return;
++			}
++			_semanticParentMap[handle] = parentHandle;
++		}
++		subscription.Items[handle] = (item, index, peer);
++		subscription.DeferredRemovals.Remove(handle);
++		_semanticItemOwners[handle] = subscription;
++		var attributes = AriaMapper.GetAriaAttributes(peer);
++		var role = AriaMapper.GetAriaRole(peer.GetAutomationControlType())
++			?? (subscription.Container is GridView ? "row" : "option");
++		var bounds = GetSemanticBounds(item, subscription.Container);
++		subscription.Region.OnItemRealized(handle, index, totalCount,
++			(float)bounds.X, (float)bounds.Y, (float)bounds.Width, (float)bounds.Height, role, attributes.Label ?? string.Empty);
++		NativeMethods.UpdateAriaLabel(handle, attributes.Label ?? string.Empty);
++		if (attributes.Selected is { } selected)
++		{
++			NativeMethods.UpdateSelectionState(handle, selected);
++			if (selected && !attributes.Disabled && subscription.Container is TabViewListView)
++			{
++				NativeMethods.UpdateRovingTabindex(parentHandle, handle);
++			}
++		}
++		NativeMethods.UpdateDisabledState(handle, attributes.Disabled);
++	}
++
++	private void RemoveSemanticItem(
++		SemanticContainerSubscription subscription,
++		IntPtr handle,
++		int? expectedIndex = null)
++	{
++		if (!subscription.Items.TryGetValue(handle, out var item)
++			|| (expectedIndex.HasValue && item.Index != expectedIndex.Value))
++		{
++			return;
++		}
++		if (subscription.Region.IsFocusPinned && subscription.Region.PinnedIndex == item.Index)
++		{
++			subscription.DeferredRemovals.Add(handle);
++			return;
++		}
++		subscription.Items.Remove(handle);
++		subscription.DeferredRemovals.Remove(handle);
++		_semanticItemOwners.Remove(handle);
++		if (_semanticParentMap.Remove(handle, out var parentHandle))
++		{
++			RemoveSemanticElement(parentHandle, handle);
++		}
++		subscription.Region.OnItemUnrealized(handle, item.Index);
++	}
++
++	private AutomationPeer? GetSemanticItemPeer(UIElement element)
++		=> _semanticItemOwners.TryGetValue(element.Visual.Handle, out var subscription)
++			&& subscription.Items.TryGetValue(element.Visual.Handle, out var item)
++				? item.Peer
++				: element.GetOrCreateAutomationPeer();
++
++	private bool TryFindSemanticContainer(UIElement? element, out SemanticContainerSubscription subscription)
++	{
++		for (var current = element; current is not null; current = current.GetParent() as UIElement)
++		{
++			if (_semanticContainers.TryGetValue(current, out subscription!))
++			{
++				return true;
++			}
++		}
++		subscription = null!;
++		return false;
++	}
++
++	private static bool IsEffectivelyVisible(UIElement element)
++	{
++		for (var current = element; current is not null; current = current.GetParent() as UIElement)
++		{
++			if (!current.Visual.IsVisible)
++			{
++				return false;
++			}
++		}
++		return true;
++	}
++
++	private bool IsInAccessibilityRoot(UIElement element)
++	{
++		for (var current = element; current is not null; current = current.GetParent() as UIElement)
++		{
++			if (current.Visual.Handle == _rootElementHandle)
++			{
++				return true;
++			}
++		}
++		return false;
++	}
++}
+diff --git a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs
+index 2dbf6441..c4ca3afd 100644
+--- a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs
++++ b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs
+@@ -65,6 +65,8 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 	private FocusSynchronizer? _focusSynchronizer;
+ 	internal ModalFocusScope? ActiveModalScope { get; set; }
+ 	private readonly List<VirtualizedSemanticRegion> _virtualizedRegions = new();
++	private readonly Dictionary<UIElement, SemanticContainerSubscription> _semanticContainers = new();
++	private readonly Dictionary<IntPtr, SemanticContainerSubscription> _semanticItemOwners = new();
+ 	private const int PreserveTextSelectionSentinel = -1;
+ 
+ 	/// <summary>
+@@ -249,23 +251,13 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 	}
+ 
+ 	/// <summary>
+-	/// Calculates the cumulative visual offset from a UIElement up to (but not including)
+-	/// the element whose Visual.Handle matches <paramref name="semanticParentHandle"/>.
+-	/// This accounts for intermediate non-semantic elements that were pruned from the
+-	/// accessibility tree, whose offsets would otherwise be lost.
++	/// Transforms the whole local rectangle into its semantic parent's coordinate
++	/// space, including skipped visual ancestors and transformed dimensions.
+ 	/// </summary>
+-	private static Vector3 GetOffsetRelativeToSemanticParent(UIElement element, IntPtr semanticParentHandle)
++	private static Windows.Foundation.Rect GetSemanticBounds(UIElement element, UIElement? semanticParent)
+ 	{
+-		var offset = element.Visual.GetTotalOffset();
+-
+-		var parent = element.GetParent() as UIElement;
+-		while (parent is not null && parent.Visual.Handle != semanticParentHandle)
+-		{
+-			offset += parent.Visual.GetTotalOffset();
+-			parent = parent.GetParent() as UIElement;
+-		}
+-
+-		return offset;
++		var localRect = new Windows.Foundation.Rect(0, 0, element.Visual.Size.X, element.Visual.Size.Y);
++		return UIElement.GetTransform(from: element, to: semanticParent).Transform(localRect);
+ 	}
+ 
+ 	/// <summary>
+@@ -295,6 +287,17 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 		try
+ 		{
++			if (TryFindSemanticContainer(parent, out var itemOwner))
++			{
++				ScheduleSemanticContainerRefresh(itemOwner);
++				return;
++			}
++
++			if (!IsEffectivelyVisible(child))
++			{
++				return;
++			}
++
+ 			var isChildSemantic = IsSemanticElement(child);
+ 
+ 			if (this.Log().IsEnabled(LogLevel.Debug))
+@@ -302,8 +305,6 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 				this.Log().Debug($"[A11y] OnChildAdded: parent={parent.GetType().Name} handle={parent.Visual.Handle} child={child.GetType().Name} handle={child.Visual.Handle} index={index?.ToString(CultureInfo.InvariantCulture) ?? "append"}");
+ 			}
+ 
+-			// Detect virtualized containers for accessibility tracking
+-			TryRegisterVirtualizedContainer(child);
+ 			// Detect ContentDialog for focus trapping
+ 			TryRegisterModalDialog(child);
+ 
+@@ -337,7 +338,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 			// Don't recurse into virtualized containers — their items are managed
+ 			// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.
+-			if (child is not (ListViewBase or ItemsRepeater))
++			if (!TryRegisterVirtualizedContainer(child))
+ 			{
+ 				// Recurse into children — if this element was skipped,
+ 				// its children will be parented to the nearest semantic ancestor.
+@@ -368,12 +369,17 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 		try
+ 		{
++			TryFindSemanticContainer(parent, out var containingItems);
+ 			if (this.Log().IsEnabled(LogLevel.Debug))
+ 			{
+ 				this.Log().Debug($"[A11y] OnChildRemoved: parent={parent.GetType().Name} handle={parent.Visual.Handle} child={child.GetType().Name} handle={child.Visual.Handle}");
+ 			}
+ 
+ 			TryUnregisterVirtualizedContainer(child);
++			if (_semanticItemOwners.TryGetValue(child.Visual.Handle, out var itemOwner))
++			{
++				RemoveSemanticItem(itemOwner, child.Visual.Handle);
++			}
+ 
+ 			// Remove any children of this element first (they may be semantic even if parent isn't)
+ 			foreach (var childChild in child.GetChildren())
+@@ -392,6 +398,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 				RemoveSemanticElement(semanticParent, childHandle);
+ 				_semanticParentMap.Remove(childHandle);
+ 			}
++			if (containingItems is not null)
++			{
++				ScheduleSemanticContainerRefresh(containingItems);
++			}
+ 		}
+ 		catch (Exception ex)
+ 		{
+@@ -402,102 +412,21 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 		}
+ 	}
+ 
+-	private void TryRegisterVirtualizedContainer(UIElement element)
+-	{
+-		if (element is ItemsRepeater repeater)
+-		{
+-			var region = new VirtualizedSemanticRegion(
+-				repeater.Visual.Handle,
+-				"listbox",
+-				repeater.GetOrCreateAutomationPeer()?.GetName(),
+-				false);
+-			_virtualizedRegions.Add(region);
+-
+-			repeater.ElementPrepared += (s, e) =>
+-			{
+-				var itemElement = e.Element;
+-				var itemIndex = e.Index;
+-				var peer = itemElement.GetOrCreateAutomationPeer();
+-				var label = peer?.GetName() ?? string.Empty;
+-				var totalCount = repeater.ItemsSourceView?.Count ?? 0;
+-				var offset = GetOffsetRelativeToSemanticParent(itemElement, repeater.Visual.Handle);
+-				region.OnItemRealized(
+-					itemElement.Visual.Handle,
+-					itemIndex,
+-					totalCount,
+-					offset.X, offset.Y,
+-					itemElement.Visual.Size.X, itemElement.Visual.Size.Y,
+-					"option", label);
+-			};
+-
+-			repeater.ElementClearing += (s, e) =>
+-			{
+-				var itemElement = e.Element;
+-				var info = ItemsRepeater.GetVirtualizationInfo(itemElement);
+-				if (info is not null)
+-				{
+-					region.OnItemUnrealized(itemElement.Visual.Handle, info.Index);
+-				}
+-			};
+-		}
+-		else if (element is ListViewBase listView)
+-		{
+-			var isGrid = element is GridView;
+-			var region = new VirtualizedSemanticRegion(
+-				listView.Visual.Handle,
+-				isGrid ? "grid" : "listbox",
+-				listView.GetOrCreateAutomationPeer()?.GetName(),
+-				listView.SelectionMode == ListViewSelectionMode.Multiple ||
+-				listView.SelectionMode == ListViewSelectionMode.Extended);
+-			_virtualizedRegions.Add(region);
+-
+-			// ListViewBase uses ContainerContentChanging for virtualization lifecycle
+-			listView.ContainerContentChanging += (s, e) =>
+-			{
+-				if (!e.InRecycleQueue)
+-				{
+-					var itemElement = e.ItemContainer;
+-					if (itemElement is not null)
+-					{
+-						var peer = itemElement.GetOrCreateAutomationPeer();
+-						var label = peer?.GetName() ?? string.Empty;
+-						var totalCount = listView.Items?.Count ?? 0;
+-						var offset = GetOffsetRelativeToSemanticParent(itemElement, listView.Visual.Handle);
+-						region.OnItemRealized(
+-							itemElement.Visual.Handle,
+-							e.ItemIndex,
+-							totalCount,
+-							offset.X, offset.Y,
+-							itemElement.Visual.Size.X, itemElement.Visual.Size.Y,
+-							isGrid ? "row" : "option", label);
+-					}
+-				}
+-				else
+-				{
+-					var itemElement = e.ItemContainer;
+-					if (itemElement is not null)
+-					{
+-						region.OnItemUnrealized(itemElement.Visual.Handle, e.ItemIndex);
+-					}
+-				}
+-			};
+-		}
+-	}
+-
+ 	private void TryUnregisterVirtualizedContainer(UIElement element)
+ 	{
+-		if (element is ItemsRepeater or ListViewBase)
++		if (_semanticContainers.Remove(element, out var subscription))
+ 		{
+-			var handle = element.Visual.Handle;
+-			for (int i = _virtualizedRegions.Count - 1; i >= 0; i--)
++			subscription.Unsubscribe();
++			foreach (var handle in subscription.Items.Keys.ToArray())
+ 			{
+-				if (_virtualizedRegions[i].ContainerHandle == handle)
+-				{
+-					_virtualizedRegions[i].Dispose();
+-					_virtualizedRegions.RemoveAt(i);
+-					break;
+-				}
++				_semanticItemOwners.Remove(handle);
++				_semanticParentMap.Remove(handle);
+ 			}
++			subscription.Items.Clear();
++			subscription.DeferredRemovals.Clear();
++			_virtualizedRegions.Remove(subscription.Region);
++			subscription.Region.Dispose();
++			_semanticParentMap.Remove(element.Visual.Handle);
+ 		}
+ 	}
+ 
+@@ -566,6 +495,42 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 	{
+ 		if (IsAccessibilityEnabled && visual is ContainerVisual containerVisual)
+ 		{
++			if (containerVisual.Owner?.Target is UIElement changedElement)
++			{
++				if (_semanticItemOwners.TryGetValue(containerVisual.Handle, out var itemOwner))
++				{
++					var item = itemOwner.Items[containerVisual.Handle];
++					RefreshSemanticItem(itemOwner, item.Element, item.Index, itemOwner.Region.TotalItemCount, item.Peer);
++					return;
++				}
++				if (TryFindSemanticContainer(changedElement.GetParent() as UIElement, out itemOwner))
++				{
++					// Template-descendant changes do not trigger a data-source walk.
++					// Batch a single bounded realized-container refresh after layout.
++					ScheduleSemanticContainerRefresh(itemOwner);
++					if (!itemOwner.UsesLogicalPeers)
++					{
++						return;
++					}
++				}
++
++				if (!IsEffectivelyVisible(changedElement))
++				{
++					if (changedElement.GetParent() is UIElement parent)
++					{
++						OnChildRemoved(parent, changedElement);
++					}
++					return;
++				}
++
++				if (!_semanticParentMap.ContainsKey(containerVisual.Handle)
++					&& changedElement.GetParent() is UIElement liveParent
++					&& IsInAccessibilityRoot(changedElement))
++				{
++					BuildSemanticsTreeRecursive(FindSemanticParent(liveParent), changedElement);
++				}
++			}
++
+ 			// Only use Visual.IsVisible (maps to Visibility.Collapsed) for hidden detection.
+ 			// We intentionally do NOT call peer.IsOffscreen() here because
+ 			// UIElement.GetGlobalBoundsWithOptions is currently an unimplemented stub
+@@ -585,22 +550,8 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 				if (_semanticParentMap.TryGetValue(handle, out var semanticParentHandle)
+ 					&& containerVisual.Owner?.Target is UIElement element)
+ 				{
+-					// Use the full element-to-semantic-parent transform so that
+-					// RenderTransform, Scale, etc. are reflected in the position.
+-					var semanticParentElement = FindUIElementByHandle(element, semanticParentHandle);
+-					var localRect = new Windows.Foundation.Rect(0, 0, visual.Size.X, visual.Size.Y);
+-					if (semanticParentElement is not null)
+-					{
+-						var transform = UIElement.GetTransform(from: element, to: semanticParentElement);
+-						var transformedRect = transform.Transform(localRect);
+-						NativeMethods.UpdateSemanticElementPositioning(handle, (float)transformedRect.Width, (float)transformedRect.Height, (float)transformedRect.X, (float)transformedRect.Y);
+-					}
+-					else
+-					{
+-						var transform = UIElement.GetTransform(from: element, to: null);
+-						var transformedRect = transform.Transform(localRect);
+-						NativeMethods.UpdateSemanticElementPositioning(handle, (float)transformedRect.Width, (float)transformedRect.Height, (float)transformedRect.X, (float)transformedRect.Y);
+-					}
++					var bounds = GetSemanticBounds(element, FindUIElementByHandle(element, semanticParentHandle));
++					NativeMethods.UpdateSemanticElementPositioning(handle, (float)bounds.Width, (float)bounds.Height, (float)bounds.X, (float)bounds.Y);
+ 				}
+ 				else
+ 				{
+@@ -895,7 +846,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 		if (GCHandle.FromIntPtr(handle).Target is ContainerVisual { Owner.Target: UIElement owner })
+ 		{
+-			var peer = owner.GetOrCreateAutomationPeer();
++			var peer = @this.GetSemanticItemPeer(owner);
+ 			if (peer?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider)
+ 			{
+ 				selectionItemProvider.Select();
+@@ -1111,6 +1062,12 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 	{
+ 		var handle = visualParent.Visual.Handle;
+ 
++		if (_semanticContainers.TryGetValue(visualParent, out var subscription) && subscription.UsesLogicalPeers
++			&& _semanticParentMap.TryGetValue(handle, out var outerParent))
++		{
++			return outerParent;
++		}
++
+ 		// If the visual parent is itself in the semantic tree, use it
+ 		if (_semanticParentMap.ContainsKey(handle))
+ 		{
+@@ -1123,6 +1080,11 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 		while (parent is not null)
+ 		{
+ 			var parentHandle = parent.Visual.Handle;
++			if (_semanticContainers.TryGetValue(parent, out subscription) && subscription.UsesLogicalPeers
++				&& _semanticParentMap.TryGetValue(parentHandle, out outerParent))
++			{
++				return outerParent;
++			}
+ 			if (_semanticParentMap.ContainsKey(parentHandle) || parentHandle == _rootElementHandle)
+ 			{
+ 				return parentHandle;
+@@ -1138,7 +1100,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 	{
+ 		Debug.Assert(IsAccessibilityEnabled);
+ 
++		if (!IsEffectivelyVisible(child))
++		{
++			return;
++		}
++
+ 		var handle = child.Visual.Handle;
++		if (_semanticItemOwners.ContainsKey(handle))
++		{
++			return;
++		}
+ 		var isSemantic = IsSemanticElement(child);
+ 
+ 		if (this.Log().IsEnabled(LogLevel.Trace))
+@@ -1150,6 +1121,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 		// Determine the effective parent for children of this element
+ 		var effectiveParent = parentHandle;
++		if (_semanticParentMap.ContainsKey(handle))
++		{
++			effectiveParent = handle;
++		}
+ 
+ 		if (isSemantic && !_semanticParentMap.ContainsKey(handle))
+ 		{
+@@ -1167,7 +1142,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 		// Don't recurse into virtualized containers — their items are managed
+ 		// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.
+-		if (child is ListViewBase or ItemsRepeater)
++		if (TryRegisterVirtualizedContainer(child))
+ 		{
+ 			return;
+ 		}
+@@ -1179,34 +1154,15 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 		}
+ 	}
+ 
+-	private bool AddSemanticElement(IntPtr parentHandle, UIElement child, int? index)
++	private bool AddSemanticElement(IntPtr parentHandle, UIElement child, int? index, AutomationPeer? projectedPeer = null)
+ 	{
+-		// Use UIElement.GetTransform for position calculation — this accounts for
+-		// RenderTransform, Scale, etc. and matches the update path in OnSizeOrOffsetChanged.
+-		// Falling back to manual offset accumulation only when the semantic parent element
+-		// is not found (e.g., root element).
+-		float x, y, width, height;
+-		var localRect = new Windows.Foundation.Rect(0, 0, child.Visual.Size.X, child.Visual.Size.Y);
+-		var semanticParentElement = FindUIElementByHandle(child, parentHandle);
+-		if (semanticParentElement is not null)
+-		{
+-			var transform = UIElement.GetTransform(from: child, to: semanticParentElement);
+-			var transformedRect = transform.Transform(localRect);
+-			x = (float)transformedRect.X;
+-			y = (float)transformedRect.Y;
+-			width = (float)transformedRect.Width;
+-			height = (float)transformedRect.Height;
+-		}
+-		else
+-		{
+-			var totalOffset = GetOffsetRelativeToSemanticParent(child, parentHandle);
+-			x = totalOffset.X;
+-			y = totalOffset.Y;
+-			width = child.Visual.Size.X;
+-			height = child.Visual.Size.Y;
+-		}
++		var bounds = GetSemanticBounds(child, FindUIElementByHandle(child, parentHandle));
++		var x = (float)bounds.X;
++		var y = (float)bounds.Y;
++		var width = (float)bounds.Width;
++		var height = (float)bounds.Height;
+ 
+-		var automationPeer = child.GetOrCreateAutomationPeer();
++		var automationPeer = projectedPeer ?? child.GetOrCreateAutomationPeer();
+ 
+ 		// Try to create type-specific semantic elements (button, slider, checkbox, etc.)
+ 		// This provides better keyboard support and screen reader compatibility
+@@ -1242,7 +1198,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 
+ 		// Fall back to generic semantic element for unsupported control types.
+ 		// Prefer AriaMapper role (covers Image, Group, etc.) over FindHtmlRole.
+-		var role = (automationPeer is not null
++		var role = child is TabView ? "group" : (automationPeer is not null
+ 			? AriaMapper.GetAriaRole(automationPeer.GetAutomationControlType())
+ 			: null)
+ 			?? AutomationProperties.FindHtmlRole(child);
+@@ -1412,6 +1368,13 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
+ 					region.UnpinFocusedItem();
+ 				}
+ 			}
++			foreach (var subscription in _semanticContainers.Values.ToArray())
++			{
++				foreach (var handle in subscription.DeferredRemovals.ToArray())
++				{
++					RemoveSemanticItem(subscription, handle);
++				}
++			}
+ 		}
+ 
+ 		base.NotifyAutomationEvent(peer, eventId);
+diff --git a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts
+index f2870153..204eb9dc 100644
+--- a/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts
++++ b/src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts
+@@ -103,11 +103,7 @@ namespace Uno.UI.Runtime.Skia {
+ 			height: number,
+ 			handle: number
+ 		): void {
+-			element.style.position = 'absolute';
+-			element.style.left = `${x}px`;
+-			element.style.top = `${y}px`;
+-			element.style.width = `${width}px`;
+-			element.style.height = `${height}px`;
++			this.updateBounds(element, x, y, width, height);
+ 			element.id = `uno-semantics-${handle}`;
+ 
+ 			const callbacks = this.getCallbacks();
+@@ -132,6 +128,20 @@ namespace Uno.UI.Runtime.Skia {
+ 			}
+ 		}
+ 
++		private static updateBounds(
++			element: HTMLElement,
++			x: number,
++			y: number,
++			width: number,
++			height: number
++		): void {
++			element.style.position = 'absolute';
++			element.style.left = `${x}px`;
++			element.style.top = `${y}px`;
++			element.style.width = `${width}px`;
++			element.style.height = `${height}px`;
++		}
++
+ 		/**
+ 		 * Creates a button semantic element and appends it to the semantics root.
+ 		 * Called from C# via JSImport.
+@@ -1316,6 +1326,10 @@ namespace Uno.UI.Runtime.Skia {
+ 		 */
+ 		private static virtualizedMutationQueue: (() => void)[] = [];
+ 		private static virtualizedRafId: number = 0;
++		private static virtualizedContainerGenerations = new Map<number, number>();
++		private static virtualizedContainerItemCounts = new Map<number, number>();
++		private static nextVirtualizedGeneration: number = 1;
++		private static virtualizedItemMutations = new Map<number, object>();
+ 
+ 		/**
+ 		 * Schedules a virtualized mutation to be flushed in the next animation frame.
+@@ -1341,6 +1355,18 @@ namespace Uno.UI.Runtime.Skia {
+ 			}
+ 		}
+ 
++		private static placeVirtualizedItem(container: HTMLElement, item: HTMLElement, index: number): void {
++			const next = Array.from(container.children).find(
++				element => element !== item && Number(element.getAttribute('aria-posinset')) > index + 1);
++			if (item.parentElement !== container || item.nextElementSibling !== (next ?? null)) {
++				if (next) {
++					container.insertBefore(item, next);
++				} else {
++					container.appendChild(item);
++				}
++			}
++		}
++
+ 		/**
+ 		 * Registers a virtualized container (creates listbox/grid element).
+ 		 */
+@@ -1350,15 +1376,23 @@ namespace Uno.UI.Runtime.Skia {
+ 			label: string,
+ 			multiselectable: boolean
+ 		): void {
++			if (!this.virtualizedContainerGenerations.has(containerHandle)) {
++				this.virtualizedContainerGenerations.set(containerHandle, this.nextVirtualizedGeneration++);
++			}
+ 			// If an element for this container already exists (created by CreateListBoxElement),
+ 			// just update its attributes instead of creating a duplicate.
+ 			const existing = document.getElementById(`uno-semantics-${containerHandle}`);
+ 			if (existing) {
++				existing.setAttribute('role', role);
+ 				if (label) {
+ 					existing.setAttribute('aria-label', label);
++				} else {
++					existing.removeAttribute('aria-label');
+ 				}
+ 				if (multiselectable) {
+ 					existing.setAttribute('aria-multiselectable', 'true');
++				} else {
++					existing.removeAttribute('aria-multiselectable');
+ 				}
+ 				return;
+ 			}
+@@ -1399,25 +1433,40 @@ namespace Uno.UI.Runtime.Skia {
+ 			role: string,
+ 			label: string
+ 		): void {
++			const generation = this.virtualizedContainerGenerations.get(containerHandle);
++			if (generation !== undefined) {
++				this.virtualizedContainerItemCounts.set(containerHandle, totalCount);
++			}
++			const mutation = {};
++			this.virtualizedItemMutations.set(itemHandle, mutation);
+ 			SemanticElements.scheduleVirtualizedMutation(() => {
++				if (this.virtualizedItemMutations.get(itemHandle) !== mutation) {
++					return;
++				}
++				this.virtualizedItemMutations.delete(itemHandle);
++				if (generation === undefined || this.virtualizedContainerGenerations.get(containerHandle) !== generation) {
++					return;
++				}
+ 				const container = document.getElementById(`uno-semantics-${containerHandle}`);
+ 				if (!container) {
+ 					return;
+ 				}
++				const currentCount = this.virtualizedContainerItemCounts.get(containerHandle) ?? totalCount;
+ 
+ 				// If an element for this item already exists (created by OnChildAdded→CreateListItemElement),
+ 				// just update it instead of creating a duplicate.
+ 				const existingItem = document.getElementById(`uno-semantics-${itemHandle}`);
+ 				if (existingItem) {
++					this.updateBounds(existingItem, x, y, width, height);
++					existingItem.setAttribute('role', role);
+ 					existingItem.setAttribute('aria-posinset', String(index + 1));
+-					existingItem.setAttribute('aria-setsize', String(totalCount));
++					existingItem.setAttribute('aria-setsize', String(currentCount));
+ 					if (label) {
+ 						existingItem.setAttribute('aria-label', label);
++					} else {
++						existingItem.removeAttribute('aria-label');
+ 					}
+-					// Ensure item is inside the correct container
+-					if (existingItem.parentElement !== container) {
+-						container.appendChild(existingItem);
+-					}
++					this.placeVirtualizedItem(container, existingItem, index);
+ 					return;
+ 				}
+ 
+@@ -1426,7 +1475,7 @@ namespace Uno.UI.Runtime.Skia {
+ 				element.setAttribute('role', role);
+ 				// aria-posinset is 1-based, index is 0-based
+ 				element.setAttribute('aria-posinset', String(index + 1));
+-				element.setAttribute('aria-setsize', String(totalCount));
++				element.setAttribute('aria-setsize', String(currentCount));
+ 				element.tabIndex = -1;
+ 				element.style.pointerEvents = 'none';
+ 
+@@ -1442,7 +1491,7 @@ namespace Uno.UI.Runtime.Skia {
+ 					}
+ 				});
+ 
+-				container.appendChild(element);
++				this.placeVirtualizedItem(container, element, index);
+ 			});
+ 		}
+ 
+@@ -1451,9 +1500,16 @@ namespace Uno.UI.Runtime.Skia {
+ 		 * Batched via requestAnimationFrame.
+ 		 */
+ 		public static removeVirtualizedItem(itemHandle: number): void {
++			const removedElement = document.getElementById(`uno-semantics-${itemHandle}`);
++			const mutation = {};
++			this.virtualizedItemMutations.set(itemHandle, mutation);
+ 			SemanticElements.scheduleVirtualizedMutation(() => {
++				if (this.virtualizedItemMutations.get(itemHandle) !== mutation) {
++					return;
++				}
++				this.virtualizedItemMutations.delete(itemHandle);
+ 				const element = document.getElementById(`uno-semantics-${itemHandle}`);
+-				if (element && element.parentElement) {
++				if (element && element === removedElement && element.parentElement) {
+ 					element.parentElement.removeChild(element);
+ 				}
+ 			});
+@@ -1463,6 +1519,9 @@ namespace Uno.UI.Runtime.Skia {
+ 		 * Updates the total item count on all realized items in a container.
+ 		 */
+ 		public static updateVirtualizedItemCount(containerHandle: number, totalCount: number): void {
++			if (this.virtualizedContainerGenerations.has(containerHandle)) {
++				this.virtualizedContainerItemCounts.set(containerHandle, totalCount);
++			}
+ 			const container = document.getElementById(`uno-semantics-${containerHandle}`);
+ 			if (!container) {
+ 				return;
+@@ -1477,6 +1536,8 @@ namespace Uno.UI.Runtime.Skia {
+ 		 * Unregisters a virtualized container and removes all its semantic elements.
+ 		 */
+ 		public static unregisterVirtualizedContainer(containerHandle: number): void {
++			this.virtualizedContainerGenerations.delete(containerHandle);
++			this.virtualizedContainerItemCounts.delete(containerHandle);
+ 			const element = document.getElementById(`uno-semantics-${containerHandle}`);
+ 			if (element && element.parentElement) {
+ 				element.parentElement.removeChild(element);
+diff --git a/src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_WebAssemblySemanticContainers.cs b/src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_WebAssemblySemanticContainers.cs
+new file mode 100644
+index 00000000..fd921baa
+--- /dev/null
++++ b/src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_WebAssemblySemanticContainers.cs
+@@ -0,0 +1,432 @@
++#if __SKIA__
++#nullable enable
++
++using System;
++using System.Collections;
++using System.Collections.Generic;
++using System.Linq;
++using System.Reflection;
++using System.Runtime.CompilerServices;
++using System.Runtime.ExceptionServices;
++using System.Text.Json;
++using System.Threading.Tasks;
++using Microsoft.UI.Xaml;
++using Microsoft.UI.Xaml.Automation;
++using Microsoft.UI.Xaml.Automation.Peers;
++using Microsoft.UI.Xaml.Automation.Provider;
++using Microsoft.UI.Xaml.Controls;
++using Microsoft.UI.Xaml.Controls.Primitives;
++using Microsoft.UI.Xaml.Markup;
++using Microsoft.UI.Xaml.Media;
++using Microsoft.VisualStudio.TestTools.UnitTesting;
++using Private.Infrastructure;
++using Uno.UI.RuntimeTests.Helpers;
++
++namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation;
++
++[TestClass]
++[RunsOnUIThread]
++[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
++public partial class Given_WebAssemblySemanticContainers
++{
++	[TestMethod]
++	public async Task When_Logical_Selection_Items_Have_No_Visual_Peer_Then_Options_Use_Their_Real_Providers()
++	{
++		var name = "logical-" + Guid.NewGuid().ToString("N");
++		var gallery = new LogicalSelectionControl { Width = 320, Height = 100 };
++		var first = new Border { Width = 60, Height = 24, Child = new TextBlock { Text = name + "-first" } };
++		var second = new Border { Width = 60, Height = 24, Child = new TextBlock { Text = name + "-second" } };
++		gallery.ItemsHost.Children.Add(first);
++		gallery.ItemsHost.Children.Add(second);
++		gallery.Action.Content = name + "-action";
++		AutomationProperties.SetName(gallery, name);
++		try
++		{
++			await UITestHelper.Load(gallery);
++			var exporter = EnableExporter();
++			var peer = (LogicalSelectionPeer)FrameworkElementAutomationPeer.CreatePeerForElement(gallery);
++			Assert.AreEqual(0, gallery.Items.Count, "The custom selector must not use the default generator.");
++			Assert.IsNull(FrameworkElementAutomationPeer.FromElement(first), "The visual itself deliberately has no peer.");
++			Assert.AreSame(first, peer.ItemPeer(first).GetContainer());
++			var selector = NamedSelector(name);
++			await WaitForDom($"document.querySelector({Quote(selector)})?.querySelectorAll('[role=\"option\"]').length === 2");
++			AssertDom($"document.querySelector({Quote(selector)})?.querySelectorAll('button').length === 0");
++			AssertDom($"document.querySelectorAll({Quote(NamedSelector(name + "-action"))}).length === 1");
++
++			var firstSelector = NamedSelector(name + "-first");
++			ExecuteJs($"document.querySelector({Quote(firstSelector)}).dispatchEvent(new KeyboardEvent('keydown', {{ key: ' ', bubbles: true, cancelable: true }}))");
++			await TestServices.WindowHelper.WaitFor(() => ReferenceEquals(gallery.SelectedVisual, first));
++			await WaitForDom($"document.querySelector({Quote(firstSelector)})?.getAttribute('aria-selected') === 'true'");
++
++			peer.Select(second);
++			await WaitForDom($"document.querySelector({Quote(firstSelector)})?.getAttribute('aria-selected') === 'false'");
++			await WaitForDom($"document.querySelector({Quote(NamedSelector(name + "-second"))})?.getAttribute('aria-selected') === 'true'");
++			first.Visibility = Visibility.Collapsed;
++			await WaitForDom($"document.querySelectorAll({Quote(firstSelector)}).length === 0");
++			gallery.ItemsHost.Children.Remove(second);
++			await WaitForDom($"document.querySelector({Quote(selector)})?.querySelectorAll('[role=\"option\"]').length === 0");
++			await UITestHelper.Load(new Grid());
++			AssertRegistration(exporter, gallery, expected: false);
++		}
++		finally
++		{
++			await UITestHelper.Load(new Grid());
++		}
++	}
++
++	public sealed partial class LogicalSelectionControl : Selector
++	{
++		internal StackPanel ItemsHost { get; } = new() { Orientation = Orientation.Horizontal };
++		internal Button Action { get; } = new();
++		internal UIElement? SelectedVisual { get; set; }
++
++		public LogicalSelectionControl()
++		{
++			Template = new ControlTemplate(() => new StackPanel { Children = { ItemsHost, Action } });
++		}
++
++		protected override AutomationPeer OnCreateAutomationPeer() => new LogicalSelectionPeer(this);
++	}
++
++	private sealed class LogicalSelectionPeer(LogicalSelectionControl owner) : SelectorAutomationPeer(owner), ISelectionProvider
++	{
++		private readonly ConditionalWeakTable<UIElement, LogicalItemPeer> _peers = new();
++		internal LogicalItemPeer ItemPeer(UIElement item) => _peers.GetValue(item, key => new LogicalItemPeer(key, this));
++		protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.List;
++		protected override object GetPatternCore(PatternInterface patternInterface)
++			=> patternInterface == PatternInterface.Selection ? this : base.GetPatternCore(patternInterface);
++		protected override IList<AutomationPeer> GetChildrenCore()
++			=> owner.ItemsHost.Children.Select(item => (AutomationPeer)ItemPeer(item)).ToList();
++		bool ISelectionProvider.CanSelectMultiple => false;
++		bool ISelectionProvider.IsSelectionRequired => false;
++		IRawElementProviderSimple[] ISelectionProvider.GetSelection()
++			=> owner.SelectedVisual is { } selected ? new[] { ProviderFromPeer(ItemPeer(selected)) } : Array.Empty<IRawElementProviderSimple>();
++
++		internal void Select(UIElement item)
++		{
++			var old = owner.SelectedVisual;
++			owner.SelectedVisual = item;
++			if (old is not null)
++			{
++				ItemPeer(old).Changed(true, false);
++			}
++			ItemPeer(item).Changed(false, true);
++		}
++
++		internal bool IsSelected(UIElement item) => ReferenceEquals(owner.SelectedVisual, item);
++	}
++
++	private sealed class LogicalItemPeer(UIElement item, LogicalSelectionPeer parent) :
++		ItemAutomationPeer(item, parent), ISelectionItemProvider
++	{
++		protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
++		protected override string GetNameCore() => ((TextBlock)((Border)item).Child).Text;
++		protected override object GetPatternCore(PatternInterface patternInterface)
++			=> patternInterface == PatternInterface.SelectionItem ? this : base.GetPatternCore(patternInterface);
++		public bool IsSelected => parent.IsSelected(item);
++		public IRawElementProviderSimple SelectionContainer => ProviderFromPeer(parent);
++		public void Select() => parent.Select(item);
++		public void AddToSelection() => Select();
++		public void RemoveFromSelection() => throw new NotSupportedException();
++		internal void Changed(bool oldValue, bool newValue)
++			=> RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, oldValue, newValue);
++	}
++
++	[TestMethod]
++	[DataRow(0.0, 160.0, 48.0)]
++	[DataRow(90.0, 48.0, 160.0)]
++	public async Task When_Realized_Tab_Refreshes_Then_Transformed_Semantic_Parent_Bounds_Are_Preserved(
++		double angle, double expectedWidth, double expectedHeight)
++	{
++		var name = "geometry-" + Guid.NewGuid().ToString("N");
++		var first = new TabViewItem
++		{
++			Header = name,
++			Width = 80,
++			MinWidth = 80,
++			MaxWidth = 80,
++			Height = 24,
++			MinHeight = 24,
++			MaxHeight = 24,
++			RenderTransform = new TransformGroup
++			{
++				Children =
++				{
++					new ScaleTransform { ScaleX = 2, ScaleY = 2 },
++					new RotateTransform { Angle = angle }
++				}
++			}
++		};
++		var second = new TabViewItem { Header = "Other" };
++		var tabs = new TabView { Width = 640, Height = 260, IsAddTabButtonVisible = false };
++		tabs.TabItems.Add(first);
++		tabs.TabItems.Add(second);
++		tabs.SelectedItem = first;
++		try
++		{
++			await UITestHelper.Load(tabs);
++			var strip = Descendant<TabViewListView>(tabs)
++				?? throw new InvalidOperationException("Missing real semantic tab-list parent.");
++			strip.ItemsPanel = (ItemsPanelTemplate)XamlReader.Load(
++				"<ItemsPanelTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><StackPanel Orientation=\"Horizontal\" /></ItemsPanelTemplate>");
++			await TestServices.WindowHelper.WaitForIdle();
++			var panel = strip.ItemsPanelRoot ?? throw new InvalidOperationException("Missing realized items panel.");
++			panel.RenderTransform = new TranslateTransform { X = 19, Y = 11 };
++			strip.RenderTransform = new ScaleTransform { ScaleX = 1.25, ScaleY = 1.5 };
++			await TestServices.WindowHelper.WaitForIdle();
++
++			Assert.AreEqual(80.0, first.ActualWidth, 0.01);
++			Assert.AreEqual(24.0, first.ActualHeight, 0.01);
++			var expected = first.TransformToVisual(strip).TransformBounds(
++				new Windows.Foundation.Rect(0, 0, first.ActualWidth, first.ActualHeight));
++			Assert.AreEqual(expectedWidth, expected.Width, 0.01);
++			Assert.AreEqual(expectedHeight, expected.Height, 0.01);
++
++			var exporter = EnableExporter();
++			ExportExistingSubtree(exporter, tabs);
++			var selector = TabSelector(first);
++			await WaitForDom($"document.querySelector({Quote(selector)}) !== null");
++			ExecuteJs($"globalThis.__unoGeometryTab = document.querySelector({Quote(selector)})");
++
++			// Selection changes exercise RefreshSemanticContainer/RefreshSemanticItem,
++			// after the factory has already emitted the correctly transformed bounds.
++			tabs.SelectedItem = second;
++			await TestServices.WindowHelper.WaitForIdle();
++			tabs.SelectedItem = first;
++			await TestServices.WindowHelper.WaitForIdle();
++			var rectangle = JsonSerializer.Serialize(new[] { expected.X, expected.Y, expected.Width, expected.Height });
++			await WaitForDom($"(() => {{ const e = document.querySelector({Quote(selector)}); if (!e) return false; const a = [e.style.left, e.style.top, e.style.width, e.style.height].map(Number.parseFloat); const b = {rectangle}; return a.every((v, i) => Math.abs(v - b[i]) < 0.05); }})()");
++			AssertDom($"document.querySelector({Quote(selector)}) === globalThis.__unoGeometryTab");
++			AssertDom($"document.querySelector({Quote(selector)}).parentElement.id === {Quote("uno-semantics-" + strip.Visual.Handle)}");
++		}
++		finally
++		{
++			ExecuteJs("delete globalThis.__unoGeometryTab");
++			await UITestHelper.Load(new Grid());
++		}
++	}
++
++	[TestMethod]
++	[DataRow(false)]
++	[DataRow(true)]
++	public async Task When_Realized_TabView_Is_Exported_Then_Headers_Have_Tablist_Parent(bool nonVirtualizing)
++	{
++		var prefix = "tabs-" + Guid.NewGuid().ToString("N");
++		var first = new TabViewItem { Header = prefix + "-first", Content = new TextBlock { Text = "First content" } };
++		var second = new TabViewItem { Header = prefix + "-second", Content = new TextBlock { Text = "Second content" } };
++		var headerAction = new Button { Content = prefix + "-header-action" };
++		var footerAction = new Button { Content = prefix + "-footer-action" };
++		var tabs = new TabView
++		{
++			Width = 640,
++			Height = 240,
++			IsAddTabButtonVisible = false,
++			TabStripHeader = headerAction,
++			TabStripFooter = footerAction,
++		};
++		tabs.TabItems.Add(first);
++		tabs.TabItems.Add(second);
++		tabs.SelectedItem = first;
++		try
++		{
++			await UITestHelper.Load(tabs);
++			await TestServices.WindowHelper.WaitForIdle();
++			var strip = Descendant<TabViewListView>(tabs)
++				?? throw new InvalidOperationException("TabView did not create its real TabViewListView.");
++			if (nonVirtualizing)
++			{
++				strip.ItemsPanel = (ItemsPanelTemplate)XamlReader.Load(
++					"<ItemsPanelTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><StackPanel Orientation=\"Horizontal\" /></ItemsPanelTemplate>");
++				await TestServices.WindowHelper.WaitForIdle();
++			}
++			Assert.IsNotNull(strip.ContainerFromItem(first), "The test must realize the header before initial export.");
++
++			var exporter = EnableExporter();
++			ExportExistingSubtree(exporter, tabs);
++			await WaitForDom($"document.querySelector({Quote(TabSelector(first))})?.parentElement?.getAttribute('role') === 'tablist'");
++			AssertDom($"document.querySelector({Quote(TabSelector(first))})?.getAttribute('aria-selected') === 'true'");
++			AssertDom($"document.querySelector({Quote(TabSelector(second))})?.getAttribute('aria-selected') === 'false'");
++			AssertDom($"document.querySelectorAll({Quote(TabSelector(first))}).length === 1");
++			AssertDom($"!document.querySelector({Quote(NamedSelector(prefix + "-header-action"))})?.parentElement?.closest('[role=\"tablist\"]')");
++			AssertDom($"!document.querySelector({Quote(NamedSelector(prefix + "-footer-action"))})?.parentElement?.closest('[role=\"tablist\"]')");
++
++			// Re-enter the same production traversal: it must not attach another set of callbacks.
++			ExportExistingSubtree(exporter, tabs);
++			ExportExistingSubtree(exporter, tabs);
++			AssertRegistration(exporter, strip, expected: true);
++			AssertDom($"document.querySelectorAll({Quote(TabSelector(first))}).length === 1");
++
++			ExecuteJs($"document.querySelector({Quote(TabSelector(second))}).dispatchEvent(new KeyboardEvent('keydown', {{ key: ' ', bubbles: true, cancelable: true }}))");
++			await TestServices.WindowHelper.WaitFor(() => ReferenceEquals(tabs.SelectedItem, second));
++			await WaitForDom($"document.querySelector({Quote(TabSelector(second))})?.getAttribute('aria-selected') === 'true'");
++			AssertDom($"document.querySelector({Quote(TabSelector(first))})?.getAttribute('aria-selected') === 'false'");
++
++			tabs.SelectedItem = first;
++			await WaitForDom($"document.querySelector({Quote(TabSelector(first))})?.getAttribute('aria-selected') === 'true'");
++		}
++		finally
++		{
++			await UITestHelper.Load(new Grid());
++		}
++	}
++
++	[TestMethod]
++	public async Task When_Tab_Visibility_Changes_Then_Semantics_Are_Removed_And_Recreated()
++	{
++		var prefix = "context-" + Guid.NewGuid().ToString("N");
++		var first = new TabViewItem { Header = prefix + "-first" };
++		var contextual = new TabViewItem { Header = prefix + "-context", Visibility = Visibility.Collapsed };
++		var tabs = new TabView { Width = 640, Height = 220, IsAddTabButtonVisible = false };
++		tabs.TabItems.Add(first);
++		tabs.TabItems.Add(contextual);
++		tabs.SelectedItem = first;
++		try
++		{
++			await UITestHelper.Load(tabs);
++			var strip = Descendant<TabViewListView>(tabs)
++				?? throw new InvalidOperationException("Missing TabView header strip.");
++			strip.ItemsPanel = (ItemsPanelTemplate)XamlReader.Load(
++				"<ItemsPanelTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><StackPanel Orientation=\"Horizontal\" /></ItemsPanelTemplate>");
++			await TestServices.WindowHelper.WaitForIdle();
++			var exporter = EnableExporter();
++			ExportExistingSubtree(exporter, tabs);
++			AssertDom($"document.querySelectorAll({Quote(TabSelector(contextual))}).length === 0");
++
++			contextual.Visibility = Visibility.Visible;
++			await WaitForDom($"document.querySelectorAll({Quote(TabSelector(contextual))}).length === 1");
++			AssertDom($"document.querySelector({Quote(TabSelector(contextual))})?.parentElement?.getAttribute('role') === 'tablist'");
++			contextual.Visibility = Visibility.Collapsed;
++			await WaitForDom($"document.querySelectorAll({Quote(TabSelector(contextual))}).length === 0");
++			contextual.Visibility = Visibility.Visible;
++			await WaitForDom($"document.querySelectorAll({Quote(TabSelector(contextual))}).length === 1");
++			Assert.AreSame(first, tabs.SelectedItem, "Visibility changes must not invent another selection.");
++		}
++		finally
++		{
++			await UITestHelper.Load(new Grid());
++		}
++	}
++
++	[TestMethod]
++	public async Task When_Large_List_Is_Exported_Then_Only_Realized_Items_Are_Tracked()
++	{
++		var prefix = "list-" + Guid.NewGuid().ToString("N");
++		var values = Enumerable.Range(0, 10000).Select(index => prefix + "-" + index).ToArray();
++		var list = new ListView { Width = 320, Height = 160, ItemsSource = values };
++		AutomationProperties.SetName(list, prefix);
++		try
++		{
++			await UITestHelper.Load(list);
++			await TestServices.WindowHelper.WaitForIdle();
++			var exporter = EnableExporter();
++			ExportExistingSubtree(exporter, list);
++			var selector = NamedSelector(prefix);
++			await WaitForDom($"document.querySelector({Quote(selector)})?.querySelectorAll('[role=\"option\"]').length > 0");
++			AssertDom($"document.querySelector({Quote(selector)}).querySelectorAll('[role=\"option\"]').length < 10000");
++			Assert.IsNull(list.ContainerFromIndex(9999), "Export must not realize the data source's last item.");
++			AssertDom($"Array.from(document.querySelector({Quote(selector)}).querySelectorAll('[role=\"option\"]')).every(e => e.getAttribute('aria-setsize') === '10000')");
++
++			list.ScrollIntoView(values[9999]);
++			await TestServices.WindowHelper.WaitFor(() => list.ContainerFromIndex(9999) is not null);
++			await WaitForDom($"document.querySelectorAll({Quote(NamedSelector(values[9999]))}).length === 1");
++			list.SelectedIndex = 9999;
++			await WaitForDom($"document.querySelector({Quote(NamedSelector(values[9999]))})?.getAttribute('aria-selected') === 'true'");
++			AssertDom($"document.querySelector({Quote(NamedSelector(values[9999]))})?.getAttribute('aria-posinset') === '10000'");
++
++			await UITestHelper.Load(new Grid());
++			AssertRegistration(exporter, list, expected: false);
++			await WaitForDom($"document.querySelectorAll({Quote(selector)}).length === 0");
++			list.SelectedIndex = 0;
++			AssertDom($"document.querySelectorAll({Quote(selector)}).length === 0");
++
++			await UITestHelper.Load(list);
++			await WaitForDom($"document.querySelectorAll({Quote(selector)}).length === 1");
++			AssertRegistration(exporter, list, expected: true);
++			ExportExistingSubtree(exporter, list);
++			AssertDom($"document.querySelectorAll({Quote(selector)}).length === 1");
++		}
++		finally
++		{
++			await UITestHelper.Load(new Grid());
++		}
++	}
++
++	// As in Given_MultiWindowAccessibility, the runtime host is inspected through
++	// reflection because RuntimeTests does not reference the platform host assembly.
++	private static object EnableExporter()
++	{
++		var assembly = AppDomain.CurrentDomain.GetAssemblies().Single(
++			item => item.GetName().Name == "Uno.UI.Runtime.Skia.WebAssembly.Browser");
++		var type = assembly.GetType("Uno.UI.Runtime.Skia.WebAssemblyAccessibility", throwOnError: true)!;
++		Invoke(type.GetMethod("EnableAccessibility", BindingFlags.Static | BindingFlags.Public)
++			?? throw new MissingMethodException(type.FullName, "EnableAccessibility"), null);
++		return type.GetProperty("Instance", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
++			?? throw new InvalidOperationException("The WASM exporter instance was not initialized.");
++	}
++
++	private static void ExportExistingSubtree(object exporter, UIElement element)
++	{
++		var parent = VisualTreeHelper.GetParent(element) as UIElement
++			?? throw new InvalidOperationException("The regression fixture must already be in the real visual tree.");
++		var type = exporter.GetType();
++		var findParent = type.GetMethod("FindSemanticParent", BindingFlags.Instance | BindingFlags.NonPublic)
++			?? throw new MissingMethodException(type.FullName, "FindSemanticParent");
++		var parentHandle = Invoke(findParent, exporter, parent);
++		var build = type.GetMethod("BuildSemanticsTreeRecursive", BindingFlags.Instance | BindingFlags.NonPublic)
++			?? throw new MissingMethodException(type.FullName, "BuildSemanticsTreeRecursive");
++		Invoke(build, exporter, parentHandle, element, 0);
++	}
++
++	private static void AssertRegistration(object exporter, UIElement container, bool expected)
++	{
++		var registrations = exporter.GetType().GetField("_semanticContainers", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(exporter) as IDictionary
++			?? throw new InvalidOperationException("Missing realized-container subscription registry.");
++		Assert.AreEqual(expected, registrations.Contains(container), "Container event subscriptions must follow real attachment.");
++	}
++
++	private static T? Descendant<T>(DependencyObject root) where T : class, DependencyObject
++	{
++		if (root is T match)
++		{
++			return match;
++		}
++		for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
++		{
++			if (Descendant<T>(VisualTreeHelper.GetChild(root, index)) is { } child)
++			{
++				return child;
++			}
++		}
++		return null;
++	}
++
++	private static string NamedSelector(string name) => $"#uno-semantics-root [aria-label={Quote(name)}]";
++	private static string TabSelector(TabViewItem item) => NamedSelector(item.Header.ToString()!) + "[role=\"tab\"]";
++	private static string Quote(string value) => JsonSerializer.Serialize(value);
++	private static void AssertDom(string expression) => Assert.AreEqual("true", ExecuteJs($"String(Boolean({expression}))"), expression);
++	private static Task WaitForDom(string expression) =>
++		TestServices.WindowHelper.WaitFor(() => ExecuteJs($"String(Boolean({expression}))") == "true");
++
++	private static string ExecuteJs(string expression)
++	{
++		var type = Type.GetType("Uno.Foundation.WebAssemblyRuntime, Uno.Foundation", throwOnError: true)!;
++		var method = type.GetMethod("InvokeJS", BindingFlags.Static | BindingFlags.Public, null, new[] { typeof(string) }, null)
++			?? throw new MissingMethodException(type.FullName, "InvokeJS");
++		return Invoke(method, null, expression) as string
++			?? throw new InvalidOperationException("The browser JS bridge did not return a string.");
++	}
++
++	private static object? Invoke(MethodInfo method, object? target, params object?[] args)
++	{
++		try
++		{
++			return method.Invoke(target, args);
++		}
++		catch (TargetInvocationException exception) when (exception.InnerException is not null)
++		{
++			ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
++			throw;
++		}
++	}
++}
++#endif
+diff --git a/src/Uno.UI/Accessibility/AriaMapper.cs b/src/Uno.UI/Accessibility/AriaMapper.cs
+index 1ffc2f6f..87f628e5 100644
+--- a/src/Uno.UI/Accessibility/AriaMapper.cs
++++ b/src/Uno.UI/Accessibility/AriaMapper.cs
+@@ -22,6 +22,7 @@ public static class AriaMapper
+ 	private static readonly Dictionary<AutomationControlType, string> ControlTypeToRoleMap = new()
+ 	{
+ 		{ AutomationControlType.Button, "button" },
++		{ AutomationControlType.SplitButton, "button" },
+ 		{ AutomationControlType.CheckBox, "checkbox" },
+ 		{ AutomationControlType.RadioButton, "radio" },
+ 		{ AutomationControlType.Slider, "slider" },
+@@ -75,6 +76,18 @@ public static class AriaMapper
+ 	/// <returns>The semantic element type to create.</returns>
+ 	public static SemanticElementType GetSemanticElementType(AutomationPeer peer, UIElement? owner = null)
+ 	{
++		owner ??= (peer as FrameworkElementAutomationPeer)?.Owner;
++		if (owner is TabView)
++		{
++			// The TabView also owns its header/footer actions and selected content.
++			// Only its inner TabViewListView is the ARIA tablist.
++			return SemanticElementType.Generic;
++		}
++		if (owner is TabViewListView)
++		{
++			return SemanticElementType.TabList;
++		}
++
+ 		if (peer.GetHeadingLevel() != AutomationHeadingLevel.None)
+ 		{
+ 			return SemanticElementType.Heading;
+@@ -85,6 +98,7 @@ public static class AriaMapper
+ 		return controlType switch
+ 		{
+ 			AutomationControlType.Button => GetButtonType(peer),
++			AutomationControlType.SplitButton => GetButtonType(peer),
+ 			AutomationControlType.CheckBox => SemanticElementType.Checkbox,
+ 			AutomationControlType.RadioButton => SemanticElementType.RadioButton,
+ 			AutomationControlType.Slider => SemanticElementType.Slider,
+diff --git a/src/Uno.UI/UI/Xaml/Automation/Peers/ItemAutomationPeer.cs b/src/Uno.UI/UI/Xaml/Automation/Peers/ItemAutomationPeer.cs
+index cd0b26da..dd86fd58 100644
+--- a/src/Uno.UI/UI/Xaml/Automation/Peers/ItemAutomationPeer.cs
++++ b/src/Uno.UI/UI/Xaml/Automation/Peers/ItemAutomationPeer.cs
+@@ -43,7 +43,19 @@ public partial class ItemAutomationPeer : AutomationPeer, IVirtualizedItemProvid
+ 	{
+ 		if (_itemsControlAutomationPeer?.Owner is ItemsControl itemsControl)
+ 		{
+-			return itemsControl.ContainerFromItem(_item) as UIElement;
++			if (itemsControl.ContainerFromItem(_item) is UIElement container)
++			{
++				return container;
++			}
++
++			// Custom selectors can expose authored visuals through their peer tree
++			// without using ItemsControl's generator. Resolve only a live own-container.
++			if (_item is FrameworkElement { IsLoaded: true } itemElement
++				&& itemsControl.IsItemItsOwnContainer(_item)
++				&& ReferenceEquals(itemElement.XamlRoot, itemsControl.XamlRoot))
++			{
++				return itemElement;
++			}
+ 		}
+ 
+ 		return null;

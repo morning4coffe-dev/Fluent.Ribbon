@@ -169,7 +169,9 @@ internal static class PortPopupContractTests
                 await NativePopupInputContract.WaitForExternalClickAsync(outside);
                 await settle();
                 Require(clicks == 1 && dropDown.IsDropDownOpen && resize.IsLoaded,
-                    "Real outside input did not pass through or incorrectly dismissed the persistent popup.");
+                    "Real outside input did not pass through or incorrectly dismissed the persistent popup. "
+                    + $"clicks={clicks}, requestedOpen={dropDown.IsDropDownOpen}, contentLoaded={resize.IsLoaded}.");
+                await NativePopupInputContract.WaitForLightDismissArmAsync(outside);
                 dropDown.DismissOnClickOutside = true;
                 Require(flyout.IsLightDismissEnabled && flyout.IsOpen,
                     "The live dismissal option did not reach the actual native Popup.");

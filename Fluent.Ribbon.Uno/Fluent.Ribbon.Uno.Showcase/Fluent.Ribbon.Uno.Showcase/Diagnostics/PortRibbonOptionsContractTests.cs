@@ -24,8 +24,12 @@ internal static class PortRibbonOptionsContractTests
     {
         await VerifyRibbonChromeAsync(host, settle);
         await VerifyStandaloneTabChromeAsync(host, settle);
+#if WINDOWS
+        await VerifyAuthoredTabLifetimesAsync(host, settle);
+#else
         await VerifyAuthoredTabOptionsAsync(host, settle, bound: false);
         await VerifyAuthoredTabOptionsAsync(host, settle, bound: true);
+#endif
         await VerifyQuickAccessContextAsync(host, settle);
         await VerifyCompatibilityContextAsync(host, settle);
         await VerifyQuickAccessMenuAsync(host, settle);
@@ -292,7 +296,31 @@ internal static class PortRibbonOptionsContractTests
         }
     }
 
-    private static async Task VerifyAuthoredTabOptionsAsync(Panel host, Func<Task> settle, bool bound)
+#if WINDOWS
+    private static async Task VerifyAuthoredTabLifetimesAsync(Panel host, Func<Task> settle)
+    {
+        var retired = await ExerciseAuthoredTabsAsync(host, settle);
+        await PortNativeGalleryContractTests.CollectRetiredObjectsAsync(host, settle);
+        Require(retired.All(item => !item.Reference.TryGetTarget(out _)),
+            "Retired native authored tab objects remained rooted: "
+            + string.Join(", ", retired.Select((item, index) =>
+                $"{index}:{item.Name}={item.Reference.TryGetTarget(out _)}")));
+        App.LogAutoTestStartup("NATIVE AUTHORED TAB LIFETIME COMPLETE fixtures=2 reloads=6");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static async Task<(string Name, WeakReference<object> Reference)[]> ExerciseAuthoredTabsAsync(
+        Panel host, Func<Task> settle)
+    {
+        var literal = await VerifyAuthoredTabOptionsAsync(host, settle, bound: false);
+        var bound = await VerifyAuthoredTabOptionsAsync(host, settle, bound: true);
+        return [.. literal, .. bound];
+    }
+#endif
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static async Task<(string Name, WeakReference<object> Reference)[]> VerifyAuthoredTabOptionsAsync(
+        Panel host, Func<Task> settle, bool bound)
     {
         var ribbon = CreateRibbon();
         var expected = CaptureTabPresentation(ribbon.Tabs);
@@ -361,6 +389,39 @@ internal static class PortRibbonOptionsContractTests
                     && ReferenceEquals(tabs.GetBindingExpression(RibbonTabControl.IsDisplayOptionsButtonVisibleProperty)?.ParentBinding, optionsBinding),
                 "Root updates replaced authored option binding identities.");
             AssertPresented(tabs, ribbon.Tabs[0], ribbon, expected[ribbon.Tabs[0]]);
+
+            for (var cycle = 0; cycle < 3; cycle++)
+            {
+                host.Children.Remove(ribbon);
+                if (cycle != 0)
+                {
+                    await settle();
+                }
+                host.Children.Add(ribbon);
+                await settle();
+                Require(ReferenceEquals(ribbon.TabControl, tabs),
+                    "Reloading an authored ribbon replaced its original tab control.");
+                AssertPresented(tabs, ribbon.Tabs[0], ribbon, expected[ribbon.Tabs[0]]);
+                Require(ReferenceEquals(tabs.GetBindingExpression(RibbonTabControl.AreTabHeadersVisibleProperty)?.ParentBinding, headerBinding)
+                        && ReferenceEquals(tabs.GetBindingExpression(RibbonTabControl.IsDisplayOptionsButtonVisibleProperty)?.ParentBinding, optionsBinding),
+                    "Reloading an authored ribbon replaced its option bindings.");
+            }
+#if WINDOWS
+            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(tabs)
+                       ?? throw new InvalidOperationException("The native authored tab control has no real peer.");
+            return
+            [
+                ("ribbon", new(ribbon)),
+                ("tabs", new(tabs)),
+                ("peer", new(peer)),
+                ("presenter", new(Part(tabs, "PART_ContentPresenter"))),
+                .. ribbon.Tabs.Select(tab => ("tab", new WeakReference<object>(tab))),
+                .. expected.Values.Where(value => value.Content is not null)
+                    .Select(value => ("content", new WeakReference<object>(value.Content!))),
+            ];
+#else
+            return [];
+#endif
         }
         finally
         {

@@ -1,0 +1,6 @@
+# Preserve diff context prefixes and upstream notice formatting verbatim.
+*.patch text eol=lf whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
+THIRD-PARTY-NOTICES.uno whitespace=-blank-at-eol
+backport.json text eol=lf
+sdk-manifest.json text eol=lf
+released-sdk-packages.json -text

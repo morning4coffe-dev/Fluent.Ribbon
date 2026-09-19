@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using NUnit.Framework;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 [TestFixture]
 public class AutomationPeerTests
@@ -62,6 +63,16 @@ public class AutomationPeerTests
             Assert.That(type, Is.Not.Null, typeName);
             Assert.That(type!.IsPublic || type.IsNestedPublic, Is.True, typeName);
         }
+    }
+
+    [TestCase(typeof(RibbonGalleryAutomationPeer))]
+    [TestCase(typeof(RibbonInRibbonGalleryAutomationPeer))]
+    public void GalleryItemCachesDoNotOwnRemovedItems(System.Type peerType)
+    {
+        var cache = peerType.GetField("_itemPeers", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.That(cache, Is.Not.Null);
+        Assert.That(cache!.FieldType, Is.EqualTo(typeof(ConditionalWeakTable<UIElement, AutomationPeer>)));
     }
 
     [Test]

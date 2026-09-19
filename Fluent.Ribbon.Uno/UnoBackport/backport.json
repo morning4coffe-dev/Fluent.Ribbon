@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/unoplatform/uno.git",
+  "commit": "c29204c9b2cb5798dbdc023b23a25b3f6d87c600",
+  "release": "6.6.184",
+  "unoSdk": "6.6.42",
+  "dotnetSdk": "10.0.102",
+  "packageVersionPrefix": "6.6.185-fluent-a11y.7",
+  "defaultEnabled": false,
+  "runtimeQualified": false,
+  "patches": [
+    {
+      "path": "patches/own-container-datacontext.patch",
+      "sha256": "d3873c622ef37c6def93cc708def70afb00856da58ae41ec4b22d20e75cb1b8c",
+      "files": [
+        {
+          "path": "src/Uno.UI.RuntimeTests/Tests/Microsoft_UI_Xaml_Controls/Given_TabView.cs",
+          "sha256": "6bbc7ca50d0a9e3825c9952093499799676f7773934c463cbae583d16160bfb1"
+        },
+        {
+          "path": "src/Uno.UI.Tests/Windows_UI_XAML_Controls/ItemsControlTests/Given_ItemsControl.cs",
+          "sha256": "2f2e7107178c27bc6ec69b4ae2975900e69ebbfac80486824c897da76e3c2a0b"
+        },
+        {
+          "path": "src/Uno.UI/UI/Xaml/Controls/ItemsControl/ItemsControl.cs",
+          "sha256": "0ea55508606884ac2e5d811607063b7ec4344514f569896024cd159925b501f9"
+        }
+      ]
+    },
+    {
+      "path": "patches/browser-accessibility.patch",
+      "sha256": "38b1ae08959fc59dfff95fec018ffef0c6b839436a66fecc2ad86598d03c0569",
+      "files": [
+        {
+          "path": "src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/VirtualizedSemanticRegion.cs",
+          "sha256": "1cd58b33ba922055c361f19e67ef2a92359fca98ce323c9c76d4437b03685386"
+        },
+        {
+          "path": "src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.Containers.cs",
+          "sha256": "ef77b23d404b365a3fb74bf7270524dd6aa36924380429b76f488b5b10fe3b36"
+        },
+        {
+          "path": "src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs",
+          "sha256": "67a3df30e0795edc4f43d32682c7709c1433cac0cbc23190f3b5e5db9bca043c"
+        },
+        {
+          "path": "src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts",
+          "sha256": "3868fabc14ffa4b59752e93794fa10c907caa67b4cde9a9296ed7ff2288bc6aa"
+        },
+        {
+          "path": "src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_WebAssemblySemanticContainers.cs",
+          "sha256": "218d5a9efa55469c2037e38bd6fac675ce86c5ff4d1cf81351c12b6ff748a101"
+        },
+        {
+          "path": "src/Uno.UI/Accessibility/AriaMapper.cs",
+          "sha256": "6aca385dc31d33ad200519089be506d93142c8f8817f086e53e943e15a6318b8"
+        },
+        {
+          "path": "src/Uno.UI/UI/Xaml/Automation/Peers/ItemAutomationPeer.cs",
+          "sha256": "f1f88ffa47ed28494a886e827cbeb6116545a0aa6eea63f2d3a129271cabea35"
+        }
+      ]
+    },
+    {
+      "path": "patches/native-accessibility.patch",
+      "sha256": "943487dc5f3ad70542e774c7b4e3b12f173a04a482a30feb160c318684599df8",
+      "files": [
+        {
+          "path": "src/SourceGenerators/Uno.UI.SourceGenerators.Internal/Mixins/FrameworkElementUIKitMixinGenerator.cs",
+          "sha256": "10480b6658c00ebd14695e56408a20bb07910c236da945a70b1f66935b68b742"
+        },
+        {
+          "path": "src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_NativeAutomationBridge.cs",
+          "sha256": "61e9bb00571f814b5baa158ef84fc0a4a2866f0ecefb358693e1b3fd003a4d71"
+        },
+        {
+          "path": "src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.UIKit.cs",
+          "sha256": "05cc4431e4a8943d3a3f55da17debae271016b7a995d6f6c14b1db30ccc8a45d"
+        },
+        {
+          "path": "src/Uno.UI/UI/Xaml/Automation/Peers/AutomationPeer.cs",
+          "sha256": "4d075042092a5f652e16bc359d3575fa77f2ba8ed07de677814c739f0391589c"
+        },
+        {
+          "path": "src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.Android.cs",
+          "sha256": "5bf2547d943e73be225d4a31fcda5589f0f12075b11bbf8032e4d571d3dafb3a"
+        },
+        {
+          "path": "src/Uno.UI/UI/Xaml/Automation/Peers/FrameworkElementAutomationPeer.UIKit.cs",
+          "sha256": "be7e4bf84e458a2902e25dc8da2eab2b3fce9afccdf0534b062a75ceb5e0df43"
+        }
+      ]
+    }
+  ],
+  "platforms": {
+    "desktop": {
+      "sourceFramework": "net10.0",
+      "consumerFramework": "net10.0-desktop",
+      "packageFramework": "net10.0",
+      "packages": [
+        "Uno.WinUI"
+      ],
+      "projects": [
+        "src/Uno.UI.Toolkit/Uno.UI.Toolkit.Reference.csproj",
+        "src/Uno.UI.FluentTheme/Uno.UI.FluentTheme.Reference.csproj",
+        "src/Uno.UI.Toolkit/Uno.UI.Toolkit.Skia.csproj",
+        "src/Uno.UI.FluentTheme/Uno.UI.FluentTheme.Skia.csproj",
+        "src/Uno.Analyzers/Uno.Analyzers.csproj"
+      ]
+    },
+    "browserwasm": {
+      "sourceFramework": "net10.0",
+      "consumerFramework": "net10.0-browserwasm",
+      "packageFramework": "net10.0",
+      "packages": [
+        "Uno.WinUI",
+        "Uno.WinUI.Runtime.Skia.WebAssembly.Browser"
+      ],
+      "projects": [
+        "src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Uno.UI.Runtime.Skia.WebAssembly.Browser.csproj",
+        "src/Uno.UI.Toolkit/Uno.UI.Toolkit.Reference.csproj",
+        "src/Uno.UI.FluentTheme/Uno.UI.FluentTheme.Reference.csproj",
+        "src/Uno.UI.Toolkit/Uno.UI.Toolkit.Skia.csproj",
+        "src/Uno.UI.FluentTheme/Uno.UI.FluentTheme.Skia.csproj",
+        "src/Uno.Analyzers/Uno.Analyzers.csproj"
+      ]
+    },
+    "android": {
+      "sourceFramework": "net10.0-android",
+      "consumerFramework": "net10.0-android",
+      "packageFramework": "net10.0-android36.0",
+      "packages": [
+        "Uno.WinUI"
+      ],
+      "projects": [
+        "src/Uno.UI.Toolkit/Uno.UI.Toolkit.netcoremobile.csproj",
+        "src/Uno.UI.FluentTheme/Uno.UI.FluentTheme.netcoremobile.csproj",
+        "src/Uno.Analyzers/Uno.Analyzers.csproj"
+      ]
+    },
+    "ios": {
+      "sourceFramework": "net10.0-ios",
+      "consumerFramework": "net10.0-ios",
+      "packageFramework": "net10.0-ios26.0",
+      "packages": [
+        "Uno.WinUI"
+      ],
+      "projects": [
+        "src/Uno.UI.Toolkit/Uno.UI.Toolkit.netcoremobile.csproj",
+        "src/Uno.UI.FluentTheme/Uno.UI.FluentTheme.netcoremobile.csproj",
+        "src/Uno.Analyzers/Uno.Analyzers.csproj"
+      ]
+    }
+  }
+}

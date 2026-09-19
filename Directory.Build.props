@@ -86,4 +86,7 @@
     <PackageReference Include="StyleCop.Analyzers" PrivateAssets="all" IncludeAssets="build;analyzers" />
     <PackageReference Include="WpfAnalyzers" PrivateAssets="all" IncludeAssets="build;analyzers" />
   </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)Fluent.Ribbon.Uno\UnoBackport\UnoBackport.props"
+          Condition="'$(UsingUnoSdk)' == 'true' And '$(FluentUnoBackport)' != ''" />
 </Project>

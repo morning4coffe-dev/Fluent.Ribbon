@@ -1,0 +1,21 @@
+diff --git a/src/Uno.Sdk/Uno.Sdk.csproj b/src/Uno.Sdk/Uno.Sdk.csproj
+index 851de0aa..c4b01892 100644
+--- a/src/Uno.Sdk/Uno.Sdk.csproj
++++ b/src/Uno.Sdk/Uno.Sdk.csproj
+@@ -12,6 +12,7 @@
+ 		<SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+ 		<Description>Do not use this package directly. It is intended for Uno Platform code contributors during development.</Description>
+ 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
++		<UnoSdkPackageManifest Condition="'$(UnoSdkPackageManifest)' == ''">$(MSBuildProjectDirectory)\packages.json</UnoSdkPackageManifest>
+ 
+ 		<!-- Generate the nupkg only for WinUI, we do not support Uno.SDK for UWP -->
+ 		<GeneratePackageOnBuild Condition=" '$(UNO_UWP_BUILD)' != 'true' ">true</GeneratePackageOnBuild>
+@@ -44,7 +45,7 @@
+ 			<_ExistingSdkFile Include="$(IntermediateOutputPath)targets\**;$(IntermediateOutputPath)Sdk\**" />
+ 			<_ExistingCodeFile Include="@(Compile)" TemporaryCode="$(IntermediateOutputPath)code\%(RecursiveDir)%(Filename)%(Extension)" Exclude="$(IntermediateOutputPath)**" />
+ 			<Compile Remove="@(_ExistingCodeFile)" />
+-			<_PackageManifestSource Include="packages.json" BuildOutput="$(IntermediateOutputPath)packages\packages.json" />
++			<_PackageManifestSource Include="$(UnoSdkPackageManifest)" BuildOutput="$(IntermediateOutputPath)packages\packages.json" />
+ 		</ItemGroup>
+ 		<Delete Files="@(_ExistingSdkFile);$(IntermediateOutputPath)code\**\*;$(IntermediateOutputPath)packages\packages.json" />
+ 		<Copy SourceFiles="@(SdkFile)" DestinationFolder="$(IntermediateOutputPath)Sdk" SkipUnchangedFiles="true" />

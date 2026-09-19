@@ -1,0 +1,16 @@
+<Project>
+  <Import Project="Sdk.targets" Sdk="Uno.Sdk" Condition="'$(FluentUnoBackport)' == ''" />
+  <Import Project="$(_FluentUnoBackportSdkDirectory)\Sdk\Sdk.targets" Condition="'$(FluentUnoBackport)' != ''" />
+  <PropertyGroup Condition="'$(FluentUnoBackport)' != ''">
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(FluentUnoBackport)' != ''">
+    <Compile Remove="obj\**;bin\**" />
+    <Page Remove="obj\**;bin\**" />
+    <Content Remove="obj\**;bin\**" />
+    <None Remove="obj\**;bin\**" />
+    <EmbeddedResource Remove="obj\**;bin\**" />
+    <Resource Remove="obj\**;bin\**" />
+    <PRIResource Remove="obj\**;bin\**" />
+  </ItemGroup>
+</Project>

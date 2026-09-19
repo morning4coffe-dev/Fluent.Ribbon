@@ -1,0 +1,205 @@
+diff --git a/src/Uno.UI.RuntimeTests/Tests/Microsoft_UI_Xaml_Controls/Given_TabView.cs b/src/Uno.UI.RuntimeTests/Tests/Microsoft_UI_Xaml_Controls/Given_TabView.cs
+index 96208bc7..53af329e 100644
+--- a/src/Uno.UI.RuntimeTests/Tests/Microsoft_UI_Xaml_Controls/Given_TabView.cs
++++ b/src/Uno.UI.RuntimeTests/Tests/Microsoft_UI_Xaml_Controls/Given_TabView.cs
+@@ -4,8 +4,10 @@ using System.Linq;
+ using System.Threading.Tasks;
+ 
+ using Windows.UI.Input.Preview.Injection;
++using Microsoft.UI.Xaml;
+ using Microsoft.UI.Xaml.Automation.Peers;
+ using Microsoft.UI.Xaml.Controls;
++using Microsoft.UI.Xaml.Data;
+ 
+ using Private.Infrastructure;
+ using Uno.Extensions;
+@@ -28,6 +30,81 @@ namespace Uno.UI.RuntimeTests.Tests.Microsoft_UI_Xaml_Controls;
+ [RunsOnUIThread]
+ public class Given_TabView
+ {
++	[TestMethod]
++	[DataRow(false)]
++	[DataRow(true)]
++	public async Task When_Authored_Tab_Reloaded_DataContext_Is_Preserved(bool bound)
++	{
++		var model = new object();
++		var bindingSource = new ContentControl { Content = model };
++		var content = new TextBlock { Text = "Authored tab content" };
++		var authored = new TabViewItem { Header = "Authored", Content = content };
++		if (bound)
++		{
++			authored.SetBinding(FrameworkElement.DataContextProperty, new Binding
++			{
++				Source = bindingSource,
++				Path = new PropertyPath(nameof(ContentControl.Content)),
++				Mode = BindingMode.OneWay
++			});
++		}
++		else
++		{
++			authored.DataContext = model;
++		}
++		var tabs = new TabView { Width = 640, Height = 240, IsAddTabButtonVisible = false };
++		var other = new TabViewItem { Header = "Other", Content = new TextBlock { Text = "Other content" } };
++		tabs.TabItems.Add(other);
++		tabs.TabItems.Add(authored);
++		tabs.SelectedItem = authored;
++		var host = new Grid { Width = 640, Height = 300 };
++		host.Children.Add(tabs);
++		try
++		{
++			await UITestHelper.Load(host);
++			await WindowHelper.WaitForLoaded(authored);
++			Assert.AreSame(model, authored.DataContext);
++			var expression = authored.GetBindingExpression(FrameworkElement.DataContextProperty);
++			if (bound)
++			{
++				Assert.IsNotNull(expression);
++			}
++			var items = tabs.TabItems;
++
++			for (var cycle = 0; cycle < 3; cycle++)
++			{
++				host.Children.Remove(tabs);
++				await WindowHelper.WaitFor(() => !tabs.IsLoaded && !authored.IsLoaded);
++				await WindowHelper.WaitForIdle();
++				Assert.AreSame(model, authored.DataContext, $"Authored context after unload {cycle}.");
++
++				host.Children.Add(tabs);
++				await WindowHelper.WaitForLoaded(authored);
++				await WindowHelper.WaitForIdle();
++				Assert.AreSame(items, tabs.TabItems);
++				Assert.AreSame(other, tabs.TabItems[0]);
++				Assert.AreSame(authored, tabs.TabItems[1]);
++				Assert.AreSame(authored, tabs.SelectedItem);
++				Assert.AreEqual(1, tabs.SelectedIndex);
++				Assert.AreSame(content, authored.Content);
++				Assert.AreSame(model, authored.DataContext, $"Authored context after reload {cycle}.");
++				Assert.AreSame(expression, authored.GetBindingExpression(FrameworkElement.DataContextProperty));
++			}
++
++			if (bound)
++			{
++				var replacement = new object();
++				bindingSource.Content = replacement;
++				await WindowHelper.WaitFor(() => ReferenceEquals(replacement, authored.DataContext));
++				Assert.AreSame(expression, authored.GetBindingExpression(FrameworkElement.DataContextProperty));
++			}
++		}
++		finally
++		{
++			await UITestHelper.Load(new Grid());
++		}
++	}
++
+ #if HAS_UNO
+ 	[TestMethod]
+ #if !HAS_INPUT_INJECTOR
+diff --git a/src/Uno.UI.Tests/Windows_UI_XAML_Controls/ItemsControlTests/Given_ItemsControl.cs b/src/Uno.UI.Tests/Windows_UI_XAML_Controls/ItemsControlTests/Given_ItemsControl.cs
+index 7e296853..5a1b9bdc 100644
+--- a/src/Uno.UI.Tests/Windows_UI_XAML_Controls/ItemsControlTests/Given_ItemsControl.cs
++++ b/src/Uno.UI.Tests/Windows_UI_XAML_Controls/ItemsControlTests/Given_ItemsControl.cs
+@@ -23,6 +23,79 @@ namespace Uno.UI.Tests.ItemsControlTests
+ 	[TestClass]
+ 	public class Given_ItemsControl
+ 	{
++#if HAS_UNO || IS_UNIT_TESTS
++		[TestMethod]
++		[DataRow(false)]
++		[DataRow(true)]
++		public void When_Cleanup_Own_Container_Preserves_DataContext(bool bound)
++		{
++			var model = new object();
++			var bindingSource = new ContentControl { Content = model };
++			var container = new ContentControl { Content = "Authored content" };
++			if (bound)
++			{
++				container.SetBinding(FrameworkElement.DataContextProperty, new Binding
++				{
++					Source = bindingSource,
++					Path = new PropertyPath(nameof(ContentControl.Content)),
++					Mode = BindingMode.OneWay
++				});
++			}
++			else
++			{
++				container.DataContext = model;
++			}
++
++			var control = new ItemsControl();
++			control.Items.Add(container);
++			control.PrepareContainerForIndex(container, 0);
++			Assert.IsTrue(container.IsOwnContainer);
++			Assert.AreSame(model, container.DataContext);
++			var expression = container.GetBindingExpression(FrameworkElement.DataContextProperty);
++			if (bound)
++			{
++				Assert.IsNotNull(expression);
++			}
++
++			control.CleanUpContainer(container);
++
++			Assert.AreSame(model, container.DataContext);
++			Assert.AreEqual("Authored content", container.Content);
++			Assert.AreSame(expression, container.GetBindingExpression(FrameworkElement.DataContextProperty));
++			if (bound)
++			{
++				var replacement = new object();
++				bindingSource.Content = replacement;
++				Assert.AreSame(replacement, container.DataContext, "Cleanup must preserve the live binding, not just its last value.");
++			}
++		}
++
++		[TestMethod]
++		public void When_Cleanup_Generated_Container_Still_Blocks_Inherited_DataContext()
++		{
++			var inherited = new object();
++			var panel = new StackPanel { DataContext = inherited };
++			var container = new ContentControl();
++			panel.Children.Add(container);
++			Assert.AreSame(inherited, container.DataContext);
++
++			var item = new object();
++			var control = new ItemsControl();
++			control.Items.Add(item);
++			control.PrepareContainerForIndex(container, 0);
++			Assert.IsFalse(container.IsOwnContainer);
++			Assert.AreSame(item, container.DataContext);
++
++			control.CleanUpContainer(container);
++
++			Assert.IsNull(container.DataContext);
++			Assert.IsNull(container.ReadLocalValue(FrameworkElement.DataContextProperty),
++				"Generated-container cleanup must explicitly set null, not clear the local value and inherit the parent context.");
++			panel.DataContext = new object();
++			Assert.IsNull(container.DataContext);
++		}
++#endif
++
+ #if __CROSSRUNTIME__
+ 		[TestMethod]
+ 		public async Task When_EarlyItems()
+diff --git a/src/Uno.UI/UI/Xaml/Controls/ItemsControl/ItemsControl.cs b/src/Uno.UI/UI/Xaml/Controls/ItemsControl/ItemsControl.cs
+index 2693b94b..09c78e0e 100644
+--- a/src/Uno.UI/UI/Xaml/Controls/ItemsControl/ItemsControl.cs
++++ b/src/Uno.UI/UI/Xaml/Controls/ItemsControl/ItemsControl.cs
+@@ -1237,13 +1237,13 @@ namespace Microsoft.UI.Xaml.Controls
+ 						// Clears value set in PrepareContainerForItemOverride
+ 						ClearPropertyWhenNoExpression(contentControl, ContentControl.ContentProperty);
+ 					}
+-				}
+ 
+-				// We are changing the DataContext last. Because if there is a binding set on any of the above properties, Content(Template(Selector)?)?,
+-				// changing the DC can cause the data-bound property to be unnecessarily re-evaluated with an inherited DC from the visual parent.
+-				// We also need to set value to null explicitly, because just unsetting would cause the DataContext to be inherited from the visual parent,
+-				// which then causes issues like #12845.
+-				contentControl.SetValue(DataContextProperty, null);
++					// We are changing the DataContext last. Because if there is a binding set on any of the above properties, Content(Template(Selector)?)?,
++					// changing the DC can cause the data-bound property to be unnecessarily re-evaluated with an inherited DC from the visual parent.
++					// We also need to set value to null explicitly, because just unsetting would cause the DataContext to be inherited from the visual parent,
++					// which then causes issues like #12845.
++					contentControl.SetValue(DataContextProperty, null);
++				}
+ 			}
+ 		}
+ 

@@ -8,4 +8,7 @@
       <Analyzer Include="@(FilteredAnalyzer)" />
     </ItemGroup>
   </Target>
+
+  <Import Project="$(MSBuildThisFileDirectory)Fluent.Ribbon.Uno\UnoBackport\UnoBackport.targets"
+          Condition="'$(UsingUnoSdk)' == 'true' And '$(FluentUnoBackport)' != ''" />
 </Project>

@@ -1,2 +1,4 @@
 ﻿<Project>
+  <Import Project="$(MSBuildThisFileDirectory)..\UnoBackport\UnoBackport.targets"
+          Condition="'$(UsingUnoSdk)' == 'true' And '$(FluentUnoBackport)' != ''" />
 </Project>

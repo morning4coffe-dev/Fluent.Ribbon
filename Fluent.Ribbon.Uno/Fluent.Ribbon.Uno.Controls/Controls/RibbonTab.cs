@@ -11,6 +11,7 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
     private bool _isUpdatingLayout;
     private bool _rerunGroupSizing;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _groupSizingDebounceTimer;
+    private int _groupSizingGeneration;
     private const double GroupSizingDebounceMilliseconds = 64;
     private double _lastGroupSizingWidth = double.NaN;
     private bool _lastGroupSizingSimplified;
@@ -269,6 +270,7 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
         _scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
         _scrollViewer.Loaded += OnGroupsContentLoaded;
+        _scrollViewer.Unloaded += OnGroupsContentUnloaded;
 
         Content = _scrollViewer;
         InitializeCompatibility();
@@ -309,10 +311,16 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
     /// </summary>
     private void ScheduleUpdateGroupSizes()
     {
+        if (!_scrollViewer.IsLoaded)
+        {
+            CancelGroupSizingPass();
+            return;
+        }
+
         var dispatcher = DispatcherQueue;
         if (dispatcher is null)
         {
-            // No dispatcher (e.g. design-time / not yet attached): run inline.
+            // A loaded design-time host may not provide a dispatcher.
             UpdateGroupSizes();
             return;
         }
@@ -325,7 +333,14 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         // inside a live measure pass) but lands before the frame is painted.
         if (double.IsNaN(_lastGroupSizingWidth))
         {
-            if (dispatcher.TryEnqueue(UpdateGroupSizes))
+            var generation = _groupSizingGeneration;
+            if (dispatcher.TryEnqueue(() =>
+                {
+                    if (generation == _groupSizingGeneration && _scrollViewer.IsLoaded)
+                    {
+                        UpdateGroupSizes();
+                    }
+                }))
             {
                 return;
             }
@@ -348,6 +363,16 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
     private void OnGroupSizingDebounceTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
+        if (!ReferenceEquals(sender, _groupSizingDebounceTimer))
+        {
+            return;
+        }
+        if (!_scrollViewer.IsLoaded)
+        {
+            CancelGroupSizingPass();
+            return;
+        }
+
         sender.Stop();
         UpdateGroupSizes();
     }
@@ -486,7 +511,13 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
 
     private void CancelGroupSizingPass()
     {
-        _groupSizingDebounceTimer?.Stop();
+        ++_groupSizingGeneration;
+        if (_groupSizingDebounceTimer is { } timer)
+        {
+            _groupSizingDebounceTimer = null;
+            timer.Stop();
+            timer.Tick -= OnGroupSizingDebounceTick;
+        }
 
         if (_isUpdatingLayout)
         {
@@ -832,7 +863,19 @@ public partial class RibbonTabItem : TabViewItem, IHeaderedControl, IKeyTipedCon
         _scrollViewer.InvalidateMeasure();
     }
 
-    private void OnGroupsContentLoaded(object sender, RoutedEventArgs args) => PrepareGroupsContent();
+    private void OnGroupsContentLoaded(object sender, RoutedEventArgs args)
+    {
+        PrepareGroupsContent();
+        ScheduleUpdateGroupSizes();
+    }
+
+    private void OnGroupsContentUnloaded(object sender, RoutedEventArgs args)
+    {
+        if (!_scrollViewer.IsLoaded)
+        {
+            CancelGroupSizingPass();
+        }
+    }
 
     private void OnGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

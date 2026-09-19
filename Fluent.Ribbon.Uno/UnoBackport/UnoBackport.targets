@@ -1,0 +1,54 @@
+<Project>
+  <PropertyGroup>
+    <_FluentUnoBackportHelper>$(MSBuildThisFileDirectory)backport.py</_FluentUnoBackportHelper>
+  </PropertyGroup>
+
+  <!-- Uno.Sdk resolves its own packages in a target, after project evaluation. -->
+  <Target Name="ApplyFluentUnoBackport"
+          AfterTargets="UnoImplicitPackages"
+          Condition="'$(FluentUnoBackport)' != '' And '$(TargetFramework)' != ''">
+    <Error Condition="'$(FluentUnoBackport)' != 'desktop' And '$(FluentUnoBackport)' != 'browserwasm' And '$(FluentUnoBackport)' != 'android' And '$(FluentUnoBackport)' != 'ios'"
+           Text="FluentUnoBackport must be desktop, browserwasm, android, or ios; an empty value uses the released runtime." />
+    <Error Condition="'$(TargetFramework)' != '$(_FluentUnoBackportFramework)'"
+           Text="This backport feed supports only $(_FluentUnoBackportFramework). Build a single matching TargetFrameworks value; native WinUI is not supported by this feed." />
+    <Error Condition="'$(UnoSdkVersion)' != '$(FluentUnoBackportVersion)-Private'"
+           Text="The accessibility candidate requires its matching source-built Uno.Sdk.Private; do not disable UnoSdkVersionCheck." />
+    <Error Condition="'$(FluentUnoBackportVersion)' != '$(_FluentUnoBackportVersionPrefix).$(FluentUnoBackport)'"
+           Text="The backport package identity cannot be overridden independently of the checked-in pin." />
+    <ItemGroup>
+      <PackageReference Condition="'%(PackageReference.Identity)' == 'Uno.WinUI' Or ('$(FluentUnoBackport)' == 'browserwasm' And '%(PackageReference.Identity)' == 'Uno.WinUI.Runtime.Skia.WebAssembly.Browser')">
+        <Version>[$(FluentUnoBackportVersion)]</Version>
+        <VersionOverride>[$(FluentUnoBackportVersion)]</VersionOverride>
+      </PackageReference>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="VerifyFluentUnoBackportSdk"
+          BeforeTargets="UnoImplicitPackages;PrepareForBuild"
+          Condition="'$(FluentUnoBackport)' != '' And '$(TargetFramework)' != ''">
+    <Exec Command="python &quot;$(_FluentUnoBackportHelper)&quot; verify-sdk --root &quot;$(FluentUnoBackportRoot)&quot; --platform &quot;$(FluentUnoBackport)&quot;" />
+  </Target>
+
+  <Target Name="VerifyFluentUnoBackportFeed"
+          BeforeTargets="CollectPackageReferences;PrepareForBuild"
+          Condition="'$(FluentUnoBackport)' != '' And '$(TargetFramework)' != ''">
+    <Error Condition="!Exists('$(RestoreConfigFile)')"
+           Text="The pinned backport feed has not been built. Run UnoBackport\Build.ps1 for this platform; released packages are not a fallback." />
+    <Exec Command="python &quot;$(_FluentUnoBackportHelper)&quot; verify-feed --root &quot;$(FluentUnoBackportRoot)&quot; --platform &quot;$(FluentUnoBackport)&quot;" />
+  </Target>
+
+  <Target Name="VerifyFluentUnoBackportAssets"
+          AfterTargets="ResolvePackageAssets"
+          Condition="'$(FluentUnoBackport)' != '' And '$(TargetFramework)' != ''">
+    <PropertyGroup>
+      <_FluentUnoBackportBrowserArgument Condition="'$(FluentUnoBackport)' == 'browserwasm' And '$(OutputType)' != 'Library'">--require-browser-runtime</_FluentUnoBackportBrowserArgument>
+    </PropertyGroup>
+    <Exec Command="python &quot;$(_FluentUnoBackportHelper)&quot; verify-assets --root &quot;$(FluentUnoBackportRoot)&quot; --platform &quot;$(FluentUnoBackport)&quot; --assets &quot;$(ProjectAssetsFile)&quot; $(_FluentUnoBackportBrowserArgument)" />
+  </Target>
+
+  <Target Name="RejectUnqualifiedFluentUnoBackportPack"
+          BeforeTargets="GenerateNuspec;Pack"
+          Condition="'$(FluentUnoBackport)' != ''">
+    <Error Text="Do not ship Fluent.Ribbon packages with this unqualified opt-in runtime. Passing source/build checks is not platform runtime qualification." />
+  </Target>
+</Project>
